@@ -1,0 +1,7 @@
+[user]
+	email = kaihnakamura@gmail.com
+	name = KaiNakamura
+[credentials]
+	helper = store
+[core]
+	excludesFile = C:\\Users\\Kai\\.gitignore
