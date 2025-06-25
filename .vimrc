@@ -1,40 +1,4 @@
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-" Plugins
-""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-if empty(glob('~/.vim/autoload/plug.vim'))
-	silent !curl -fLo ~/.vim/autoload/plug.vim --create-dirs
-	\ https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
-	autocmd VimEnter * PlugInstall --sync | source $MYVIMRC
-endif
-call plug#begin('~/.vim/plugged')
-Plug 'scrooloose/nerdcommenter'
-Plug 'tpope/vim-surround'
-Plug 'tpope/vim-repeat'
-Plug 'airblade/vim-gitgutter'
-call plug#end()
-
-""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-" NERDCommenter
-""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-" Toggle comments with CTRL-/
-noremap <C-/> :call NERDComment(0, "toggle")<C-m>
-
-" Add spaces after comment delimiters by default
-let g:NERDSpaceDelims = 1
-
-" Align line-wise comment delimiters flush left instead of following code indentation
-let g:NERDDefaultAlign = 'left'
-
-" Allow commenting and inverting empty lines (useful when commenting a region)
-let g:NERDCommentEmptyLines = 1
-
-" Enable trimming of trailing whitespace when uncommenting
-let g:NERDTrimTrailingWhitespace = 1
-
-" Enable NERDCommenterToggle to check all selected lines is commented or not 
-let g:NERDToggleCheckAllLines = 1
-
-""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " File Exploration
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Hide .swp files
@@ -134,16 +98,12 @@ noh
 " Highlight trailing whitespace
 set listchars=tab:\ \ ,trail:·,nbsp:_
 set list
-" autocmd VimEnter,WinEnter * match Error /\v^\t* +\t*[^\s]/
 
 " Get rid of 'Hit ENTER to continue'
 set shortmess+=a
 
 " Show line numbers
 set nu
-
-" Highlight line overflow
-autocmd VimEnter,WinEnter * call matchadd('ColorColumn', '\%81v', 100)
 
 " Backspace deletes lines
 set backspace=indent,eol,start
