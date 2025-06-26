@@ -19,7 +19,7 @@ sudo apt install -y \
 Then clone and install:
 
 ```bash
-git clone https://github.com/KaiNakamura/dotfiles.git ~/repos/dotfiles && cd ~/repos/dotfiles && bash install.sh
+git clone git@github.com:KaiNakamura/dotfiles.git ~/repos/dotfiles && cd ~/repos/dotfiles && bash install.sh
 ```
 
 Or if already cloned, just the install:
