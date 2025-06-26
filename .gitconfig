@@ -1,0 +1,5 @@
+[user]
+	name = Kai Nakamura
+	email = kaihnakamura@gmail.com
+[core]
+	excludesFile = ~/.gitignore
