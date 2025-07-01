@@ -29,3 +29,7 @@ bash install.sh
 ```
 
 Existing dotfiles are backed up with timestamps (e.g., `<file>.backup.YYYYMMDD_HHMMSS`)
+
+## TODO
+
+- [ ] Figure out a way to upload quickly to the dotfiles (e.g., If I edit my .vimrc locally, I want a way to quickly update my ~/repos/dotfiles/.vimrc)
