@@ -51,6 +51,7 @@ dotfiles=(
     ".gitconfig:$HOME/.gitconfig:Git configuration"
     ".vimrc:$HOME/.vimrc:Vim configuration"
     ".gitignore:$HOME/.gitignore:Global gitignore"
+	".config/kitty/kitty.conf:$HOME/.config/kitty/kitty.conf:Kitty config"
 )
 
 echo -e "${BLUE}Starting dotfiles installation...${NC}"
