@@ -11,40 +11,40 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Get the directory where this script is located
-DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Function to print colored output
 print_info() {
-  echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "${BLUE}[INFO]${NC} $1"
 }
 
 print_success() {
-  echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
 print_warning() {
-  echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
 print_error() {
-  echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} $1"
 }
 
 # Function to get all available modules
 get_modules() {
-  find "$DOTFILES_DIR" -maxdepth 1 -type d -name "*" | while read -r dir; do
-    module_name=$(basename "$dir")
-    # Skip hidden directories, current directory, and directories without install.sh
-    if [[ "$module_name" != .* ]] && [[ "$module_name" != "$(basename "$DOTFILES_DIR")" ]] && [[ -f "$dir/install.sh" ]]; then
-      echo "$module_name"
-    fi
-  done | sort
+    find "$WORKDIR" -maxdepth 1 -type d -name "*" | while read -r dir; do
+        module_name=$(basename "$dir")
+        # Skip hidden directories, current directory, and directories without install.sh
+        if [[ "$module_name" != .* ]] && [[ "$module_name" != "$(basename "$WORKDIR")" ]] && [[ -f "$dir/install.sh" ]]; then
+        echo "$module_name"
+        fi
+    done | sort
 }
 
 # Function to install a single module
 install_module() {
     local module="$1"
-    local module_dir="$DOTFILES_DIR/$module"
+    local module_dir="$WORKDIR/$module"
     
     if [[ ! -d "$module_dir" ]]; then
         print_error "Module '$module' does not exist"
@@ -125,7 +125,7 @@ main() {
     
     # Validate all modules exist before starting installation
     for module in "${modules[@]}"; do
-        if [[ ! -d "$DOTFILES_DIR/$module" ]]; then
+        if [[ ! -d "$WORKDIR/$module" ]]; then
             print_error "Module '$module' does not exist"
             echo ""
             echo "Available modules:"
