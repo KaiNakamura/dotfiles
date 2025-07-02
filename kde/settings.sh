@@ -24,7 +24,7 @@ kwriteconfig6 --file ksmserverrc --group General --key loginMode emptySession
 kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage org.kde.breezedark.desktop
 
 # Number of Virtual Desktops
-kwriteconfig6 --file kwinrc --group Desktops --key Number 1
+kwriteconfig6 --file kwinrc --group Desktops --key Number 4
 
 # Resolution Scale
 kwriteconfig6 --file kwinrc --group Xwayland --key Scale 1.75
