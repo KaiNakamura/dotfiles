@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Function to print colored output
-print_status() {
+print_info() {
   echo -e "${BLUE}[INFO]${NC} $1"
 }
 
@@ -56,7 +56,7 @@ install_module() {
         return 1
     fi
     
-    print_status "Installing $module..."
+    print_info "Installing $module..."
     
     # Make the install script executable
     chmod +x "$module_dir/install.sh"
@@ -108,7 +108,7 @@ main() {
             ;;
         --all|-a)
             sudo -v
-            print_status "Installing all modules..."
+            print_info "Installing all modules..."
             modules=($(get_modules))
             if [[ ${#modules[@]} -eq 0 ]]; then
                 print_warning "No modules found"
@@ -161,6 +161,8 @@ main() {
     else
         print_success "All modules installed successfully!"
     fi
+
+    print_info "You may need to restart your computer for some changes to take effect."
 }
 
 # Run main function with all arguments
