@@ -4,6 +4,17 @@ My personal config for quick and easy setup
 
 ## Installation
 
+WARNING: Installation will overwrite existing configuration files, make backups if needed before proceeding
+
+For a quick install
+
+```bash
+git clone git@github.com:KaiNakamura/dotfiles.git && cd dotfiles
+./install.sh --all
+```
+
+Or if installing from a completely fresh OS
+
 ```bash
 # Install some dependencies
 sudo apt install -y \
@@ -18,11 +29,11 @@ sudo apt install -y \
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
 # Add Homebrew to path
-echo >> /home/kai/.bashrc
-echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> /home/kai/.bashrc
+echo >> ~/.bashrc
+echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 
-# Install gcc
+# Homebrew recommends installing gcc
 brew install gcc
 
 # Install GitHub CLI
@@ -38,9 +49,10 @@ mkdir -p ~/repos && cd ~/repos
 git clone git@github.com:KaiNakamura/dotfiles.git && cd dotfiles
 
 # Run the installer
-./install.sh
+./install.sh --all
 ```
 
 ## TODO
 
 - [ ] Figure out a way to upload quickly to the dotfiles (e.g., If I edit my .vimrc locally, I want a way to quickly update my ~/repos/dotfiles/.vimrc)
+- [ ] Figure out a way to handle dependencies and installing certain modules before others

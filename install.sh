@@ -130,6 +130,15 @@ main() {
         fi
     done
     
+    # Run init script
+    print_status "Running initialization script..."
+    if "$DOTFILES_DIR/init.sh"; then
+        print_success "Initialization completed successfully"
+    else
+        print_error "Initialization failed"
+        exit 1
+    fi
+    
     # Install modules
     failed_modules=()
     successful_modules=()
