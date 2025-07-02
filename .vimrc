@@ -9,8 +9,8 @@ let netrw_banner = 0
 " Open vimrc
 command V exec ":e $MYVIMRC"
 
-" Change current working directory
-command CD exec ":cd %:p:h"
+" Refresh vimrc
+command RV exec ":source $MYVIMRC"
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Copy and Paste
@@ -30,26 +30,28 @@ xnoremap p "_dP
 set splitbelow
 set splitright
 
-" Quick way to move between windows
+" Open splits
+nnoremap <C-CR> :vsplit<CR>
+nnoremap <C-b> :split<CR>
+
+" Close window
+nnoremap <C-q> :close<CR>
+
+" Move between windows
+nnoremap <C-h> <C-w>h
 nnoremap <C-j> <C-w>j
 nnoremap <C-k> <C-w>k
-nnoremap <C-h> <C-w>h
 nnoremap <C-l> <C-w>l
+tnoremap <C-h> <C-w>h
+tnoremap <C-j> <C-w>j
+tnoremap <C-k> <C-w>k
+tnoremap <C-l> <C-w>l
 
-" Quick way to resize windows
-nnoremap <C-_> <C-w>-
-nnoremap <C-=> <C-w>+
-nnoremap <C-+> 100<C-w>+
-
-" Quick way to switch tabs
-nnoremap <M-n> :tabnew<Space>
+" Switch tabs
+nnoremap <M-n> :tabnew<CR>
+nnoremap <M-q> :tabclose<CR>
 nnoremap <M-l> :tabnext<CR>
 nnoremap <M-h> :tabprev<CR>
-nnoremap <M-k> :tabfirst<CR>
-nnoremap <M-j> :tablast<CR>
-nnoremap <M-c> :tabclose<CR>
-nnoremap <M-q> :tabclose<CR>
-nnoremap <M-m> :tabmove<Space>
 nnoremap <M-1> 1gt
 nnoremap <M-2> 2gt
 nnoremap <M-3> 3gt
@@ -59,32 +61,12 @@ nnoremap <M-6> 6gt
 nnoremap <M-7> 7gt
 nnoremap <M-8> 8gt
 nnoremap <M-9> 9gt
-nnoremap <M-0> :tablast<CR>
-
-" Quick way to move between windows in terminal
-tnoremap <C-j> <C-w>j
-tnoremap <C-k> <C-w>k
-tnoremap <C-h> <C-w>h
-tnoremap <C-l> <C-w>l
-
-" Quick way to resize windows
-tnoremap <C-_> <C-w>-
-tnoremap <C-=> <C-w>+
-tnoremap <C-+> <C-w>_
-
-" Open terminal
-command T call OpenTerminal()
-func! OpenTerminal()
-	exec ":terminal"
-	exec "normal 5\<C-w>_"
-endfunc
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Indentation
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 set tabstop=4
 set shiftwidth=4
-
 set smartindent
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
@@ -94,13 +76,6 @@ set smartindent
 filetype plugin on
 syntax on
 noh
-
-" Highlight trailing whitespace
-set listchars=tab:\ \ ,trail:·,nbsp:_
-set list
-
-" Get rid of 'Hit ENTER to continue'
-set shortmess+=a
 
 " Show line numbers
 set nu
@@ -131,3 +106,4 @@ inoremap <Up> <C-o>gk
 " These create newlines like o and O but stay in normal mode
 nnoremap zj o<Esc>k
 nnoremap zk O<Esc>j
+
