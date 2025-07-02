@@ -1,9 +1,7 @@
 #!/bin/bash
 
-# Dotfiles Installation Script
-# This script copies important configuration files to your home directory
-
-set -e  # Exit on any error
+# Exit on any error
+set -e
 
 # Colors for output
 RED='\033[0;31m'
@@ -13,62 +11,153 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo -e "${BLUE}Dotfiles Installation Script${NC}"
-echo -e "${BLUE}=============================${NC}"
-echo ""
-
-# Function to backup existing files
-backup_file() {
-    local file="$1"
-    if [[ -f "$file" ]]; then
-        local backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
-        echo -e "${YELLOW}Backing up existing $file to $backup${NC}"
-        cp "$file" "$backup"
-    fi
+# Function to print colored output
+print_status() {
+  echo -e "${BLUE}[INFO]${NC} $1"
 }
 
-# Function to copy a dotfile
-copy_dotfile() {
-    local source="$1"
-    local dest="$2"
-    local file_desc="$3"
+print_success() {
+  echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+  echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+  echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Function to get all available modules
+get_modules() {
+  find "$DOTFILES_DIR" -maxdepth 1 -type d -name "*" | while read -r dir; do
+    module_name=$(basename "$dir")
+    # Skip hidden directories, current directory, and directories without install.sh
+    if [[ "$module_name" != .* ]] && [[ "$module_name" != "$(basename "$DOTFILES_DIR")" ]] && [[ -f "$dir/install.sh" ]]; then
+      echo "$module_name"
+    fi
+  done | sort
+}
+
+# Function to install a single module
+install_module() {
+    local module="$1"
+    local module_dir="$DOTFILES_DIR/$module"
     
-    if [[ -f "$source" ]]; then
-        echo -e "${BLUE}Installing $file_desc...${NC}"
-        backup_file "$dest"
-        cp "$source" "$dest"
-        echo -e "${GREEN}✓ Copied $source to $dest${NC}"
+    if [[ ! -d "$module_dir" ]]; then
+        print_error "Module '$module' does not exist"
+        return 1
+    fi
+    
+    if [[ ! -f "$module_dir/install.sh" ]]; then
+        print_error "Module '$module' does not have an install.sh script"
+        return 1
+    fi
+    
+    print_status "Installing $module..."
+    
+    # Make the install script executable
+    chmod +x "$module_dir/install.sh"
+    
+    # Change to the module directory and run the install script
+    (cd "$module_dir" && ./install.sh)
+    
+    if [[ $? -eq 0 ]]; then
+        print_success "Successfully installed $module"
+        return 0
     else
-        echo -e "${RED}✗ Warning: $source not found${NC}"
+        print_error "Failed to install $module"
+        return 1
     fi
 }
 
-# List of dotfiles to copy
-# Format: "source_file:destination_file:description"
-dotfiles=(
-    ".gitconfig:$HOME/.gitconfig:Git configuration"
-    ".vimrc:$HOME/.vimrc:Vim configuration"
-    ".gitignore:$HOME/.gitignore:Global gitignore"
-	".config/kitty/kitty.conf:$HOME/.config/kitty/kitty.conf:Kitty config"
-)
-
-echo -e "${BLUE}Starting dotfiles installation...${NC}"
-echo ""
-
-# Copy each dotfile
-for dotfile in "${dotfiles[@]}"; do
-    IFS=':' read -r source dest desc <<< "$dotfile"
-    source="$SCRIPT_DIR/$source"
-    copy_dotfile "$source" "$dest" "$desc"
+# Function to show usage
+show_usage() {
+    echo "Usage: $0 [modules...] | --all | --list | --help"
     echo ""
-done
+    echo "Examples:"
+    echo "  $0 git vim              # Install git and vim modules"
+    echo "  $0 --all                # Install all available modules"
+    echo "  $0 --list               # List all available modules"
+    echo "  $0 --help               # Show this help message"
+    echo ""
+    echo "Available modules:"
+    get_modules | sed 's/^/  /'
+}
 
-echo -e "${GREEN}Dotfiles installation complete!${NC}"
-echo ""
-echo -e "${YELLOW}Note: If you had existing dotfiles, they have been backed up with timestamps.${NC}"
-echo -e "${YELLOW}You can find them in your home directory with .backup.YYYYMMDD_HHMMSS extensions.${NC}"
-echo ""
+# Main script logic
+main() {
+    # Check if no arguments provided
+    if [[ $# -eq 0 ]]; then
+        show_usage
+        exit 1
+    fi
+    
+    # Handle special flags
+    case "$1" in
+        --help|-h)
+            show_usage
+            exit 0
+            ;;
+        --list|-l)
+            echo "Available modules:"
+            get_modules | sed 's/^/  /'
+            exit 0
+            ;;
+        --all|-a)
+            print_status "Installing all modules..."
+            modules=($(get_modules))
+            if [[ ${#modules[@]} -eq 0 ]]; then
+                print_warning "No modules found"
+                exit 0
+            fi
+            ;;
+        *)
+            modules=("$@")
+            ;;
+    esac
+    
+    # Validate all modules exist before starting installation
+    for module in "${modules[@]}"; do
+        if [[ ! -d "$DOTFILES_DIR/$module" ]]; then
+            print_error "Module '$module' does not exist"
+            echo ""
+            echo "Available modules:"
+            get_modules | sed 's/^/  /'
+            exit 1
+        fi
+    done
+    
+    # Install modules
+    failed_modules=()
+    successful_modules=()
+    
+    for module in "${modules[@]}"; do
+        echo ""
+        if install_module "$module"; then
+            successful_modules+=("$module")
+        else
+            failed_modules+=("$module")
+        fi
+    done
+    
+    # Summary
+    echo ""
+    echo "================== INSTALLATION SUMMARY =================="
+    
+    if [[ ${#successful_modules[@]} -gt 0 ]]; then
+        print_success "Successfully installed: ${successful_modules[*]}"
+    fi
+    
+    if [[ ${#failed_modules[@]} -gt 0 ]]; then
+        print_error "Failed to install: ${failed_modules[*]}"
+        exit 1
+    else
+        print_success "All modules installed successfully!"
+    fi
+}
 
-echo -e "${GREEN}All done! Your dotfiles have been installed.${NC}"
+# Run main function with all arguments
+main "$@"

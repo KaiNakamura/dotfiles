@@ -4,31 +4,42 @@ My personal config for quick and easy setup
 
 ## Installation
 
-First, some core utilities:
-
 ```bash
+# Install some dependencies
 sudo apt install -y \
     git \
     curl \
     wget \
     tmux \
     cmake \
-    vim-gtk3
+    build-essential
+
+# Install Homebrew
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Add Homebrew to path
+echo >> /home/kai/.bashrc
+echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> /home/kai/.bashrc
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
+# Install gcc
+brew install gcc
+
+# Install GitHub CLI
+brew install gh
+
+# Authenticate GitHub
+gh auth login -p ssh -w
+
+# Set up repos
+mkdir -p ~/repos && cd ~/repos
+
+# Clone dotfiles
+git clone git@github.com:KaiNakamura/dotfiles.git && cd dotfiles
+
+# Run the installer
+./install.sh
 ```
-
-Then clone and install:
-
-```bash
-git clone git@github.com:KaiNakamura/dotfiles.git ~/repos/dotfiles && cd ~/repos/dotfiles && bash install.sh
-```
-
-Or if already cloned, just the install:
-
-```bash
-bash install.sh
-```
-
-Existing dotfiles are backed up with timestamps (e.g., `<file>.backup.YYYYMMDD_HHMMSS`)
 
 ## TODO
 
