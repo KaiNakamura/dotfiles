@@ -107,6 +107,7 @@ main() {
             exit 0
             ;;
         --all|-a)
+            sudo -v
             print_status "Installing all modules..."
             modules=($(get_modules))
             if [[ ${#modules[@]} -eq 0 ]]; then
@@ -118,6 +119,9 @@ main() {
             modules=("$@")
             ;;
     esac
+
+    # Ensure sudo is available
+    sudo -v
     
     # Validate all modules exist before starting installation
     for module in "${modules[@]}"; do
@@ -129,15 +133,6 @@ main() {
             exit 1
         fi
     done
-    
-    # Run init script
-    print_status "Running initialization script..."
-    if "$DOTFILES_DIR/init.sh"; then
-        print_success "Initialization completed successfully"
-    else
-        print_error "Initialization failed"
-        exit 1
-    fi
     
     # Install modules
     failed_modules=()
