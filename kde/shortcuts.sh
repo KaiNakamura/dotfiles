@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# ===== KWin Shortcuts =====
+
+# `kwriteconfig6 --file kglobalshortcutsrc --group kwin --key "KEY_NAME" "BIND,DEFAULT,DESCRIPTION"`
+
 # Switch to Desktop 1-4: Meta + F1/F2/F3/F4
 kwriteconfig6 --file kglobalshortcutsrc --group kwin --key "Switch to Desktop 1" "Meta+F1,Ctrl+F1,Switch to Desktop 1"
 kwriteconfig6 --file kglobalshortcutsrc --group kwin --key "Switch to Desktop 2" "Meta+F2,Ctrl+F2,Switch to Desktop 2"
@@ -29,3 +33,14 @@ kwriteconfig6 --file kglobalshortcutsrc --group kwin --key "Window Maximize" "Me
 
 # Minimize Window: Meta + Alt + Down
 kwriteconfig6 --file kglobalshortcutsrc --group kwin --key "Window Minimize" "Meta+Alt+Down,Meta+PgDown,Minimize Window"
+
+# ===== Application Shortcuts =====
+
+# Launch Kitty: Ctrl+Alt+T and Meta+K
+kwriteconfig6 --file kglobalshortcutsrc --group "services/kitty.desktop" --key "_launch" "Ctrl+Alt+T"$'\t'"Meta+K"
+
+# Disable Konsole shortcut
+kwriteconfig6 --file kglobalshortcutsrc --group "services/org.kde.konsole.desktop" --key "_launch" "none"
+
+# Launch Firefox: Meta+F
+kwriteconfig6 --file kglobalshortcutsrc --group "services/firefox_firefox.desktop" --key "_launch" "Meta+F"

@@ -9,27 +9,6 @@ fi
 
 echo "KDE detected. Proceeding with configuration..."
 
-# Config settings
-# - TURN OFF RESTORE SESSION!!!
-# 	- Had a crash actually brick my shit and be unable to restart
-# 	- Desktop Session $\to$ Session Restore $\to$ Start with an empty session
-# - Pointer speed: -0.40
-# - Theme: Breeze Dark
-# - Wallpaper: Mountain
-# - Login screen, also set to Mountain (open containing folder in wallpaper settings `/usr/share/wallpapers/Mountain/contents/images_dark/`)
-# - Splash Screen:
-# 	- Originally I had this on "none" but maybe this is causing issues with the graphics loading
-# 	- Keeping it on default for now
-# - Resolution scale: 175%
-# - Taskbar
-# 	- Konsole
-# 	- VS Code
-# 	- Chrome (or Firefox, depends on personal vs. work)
-# 	- Slack
-
-# NOTE: Use `kcmshell6 --list` to see available modules
-# Also useful is `kreadconfig6`
-
 # Get the directory where this script is located
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -40,4 +19,13 @@ if [[ -f "$WORKDIR/shortcuts.sh" ]]; then
     "$WORKDIR/shortcuts.sh"
 else
     echo "shortcuts.sh not found in $WORKDIR"
+fi
+
+# Configure settings
+if [[ -f "$WORKDIR/settings.sh" ]]; then
+    echo "Configuring settings..."
+    chmod +x "$WORKDIR/settings.sh"
+    "$WORKDIR/settings.sh"
+else
+    echo "settings.sh not found in $WORKDIR"
 fi

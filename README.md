@@ -52,6 +52,10 @@ git clone git@github.com:KaiNakamura/dotfiles.git && cd dotfiles
 ./install.sh --all
 ```
 
+Some other settings you may want to configure:
+
+- System Settings -> Mouse -> Pointer Speed = -0.4 (Depends on mouse though)
+
 ## TODO
 
 - [ ] Figure out a way to upload quickly to the dotfiles (e.g., If I edit my .vimrc locally, I want a way to quickly update my ~/repos/dotfiles/.vimrc)
