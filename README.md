@@ -62,6 +62,7 @@ Some other settings you may want to configure:
 
 - [ ] Neovim
 - [ ] Zsh
+- [ ] Fix starship prompt symbol (and finalize colors)
 - [ ] Maybe have some kind of "install" vs. "sync config" mode?
 - [ ] Figure out a way to upload quickly to the dotfiles (e.g., If I edit my .vimrc locally, I want a way to quickly update my ~/repos/dotfiles/.vimrc)
 - [ ] Figure out a way to handle dependencies and installing certain modules before others
