@@ -19,3 +19,4 @@ else
 fi
 
 # TODO: Update .zshrc but don't overwrite existing
+# (haven't figured out how not to do this yet)

@@ -8,5 +8,5 @@ curl -sS https://starship.rs/install.sh | sh
 echo >> ~/.zshrc
 echo 'eval "$(starship init zsh)"' >> ~/.zshrc
 
-# Copy starship.tomp
+# Copy starship.toml
 cp ./starship.toml ~/.config/starship.toml

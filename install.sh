@@ -107,7 +107,9 @@ main() {
             exit 0
             ;;
         --all|-a)
+			# TODO: Is this necessary?
             sudo -v
+
             print_info "Installing all modules..."
             modules=($(get_modules))
             if [[ ${#modules[@]} -eq 0 ]]; then
@@ -119,9 +121,6 @@ main() {
             modules=("$@")
             ;;
     esac
-
-    # Ensure sudo is available
-    sudo -v
     
     # Validate all modules exist before starting installation
     for module in "${modules[@]}"; do
