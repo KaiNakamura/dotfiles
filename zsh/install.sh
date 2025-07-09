@@ -9,3 +9,5 @@ chsh -s $(which zsh)
 # Install Oh My Zsh!
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 
+# TODO: Do stuff with .zshrc, haven't figured out how not to overwrite current yet
+
