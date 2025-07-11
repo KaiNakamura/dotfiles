@@ -20,7 +20,7 @@ rm -f nvim-linux-x86_64.tar.gz
 
 # Setup kai.nvim config
 REPO_DIR="$HOME/repos/kai.nvim"
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/nvim"
+CONFIG_DIR="$HOME/.config/nvim"
 
 # Ensure repos directory exists
 mkdir -p "$HOME/repos"
@@ -32,12 +32,12 @@ if [ ! -d "$REPO_DIR" ]; then
 else
     echo "Updating kai.nvim..."
     cd "$REPO_DIR"
-    git checkout main
-    git pull origin main
+    git checkout master
+    git pull origin master
     cd - > /dev/null
 fi
 
-# Copy config to nvim config directory
-echo "Installing nvim config..."
+# Create symlink for nvim config
+echo "Creating symlink for nvim config..."
 rm -rf "$CONFIG_DIR"
-cp -r "$REPO_DIR" "$CONFIG_DIR"
+ln -sf "$REPO_DIR" "$CONFIG_DIR"
