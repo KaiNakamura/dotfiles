@@ -4,6 +4,9 @@ plugins=(
 	git
 )
 
+# Starship
+eval "$(starship init zsh)"
+
 # zoxide
 eval "$(zoxide init zsh)"
 alias cd="z"
