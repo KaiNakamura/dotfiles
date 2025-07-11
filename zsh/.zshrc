@@ -7,3 +7,6 @@ plugins=(
 # zoxide
 eval "$(zoxide init zsh)"
 alias cd="z"
+
+# Neovim
+export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
