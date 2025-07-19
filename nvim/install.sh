@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# TODO: Add support for non-apt
 # Install some dependencies
 sudo apt install -y \
 	make \

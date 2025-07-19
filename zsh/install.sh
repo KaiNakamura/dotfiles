@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# TODO: Add support for non-apt
 # Install zsh
 sudo apt install -y zsh
 
