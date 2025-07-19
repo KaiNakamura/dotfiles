@@ -2,14 +2,17 @@
 
 # TODO: Add support for non-apt
 # Install some dependencies
-sudo apt install -y \
-	make \
-	unzip \
-	gcc \
-	fd-find \
-	fonts-noto-color-emoji \
-	xclip \
-	wl-clipboard
+# sudo apt install -y \
+# 	make \
+# 	unzip \
+# 	gcc \
+# 	fd-find \
+# 	fonts-noto-color-emoji \
+# 	xclip \
+# 	wl-clipboard
+
+# Arch
+# sudo pacman -S fd
 
 # Install ripgrep
 brew install ripgrep
