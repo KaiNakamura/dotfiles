@@ -31,8 +31,8 @@ set splitbelow
 set splitright
 
 " Open splits
-nnoremap <C-CR> :vsplit<CR>
-nnoremap <C-b> :split<CR>
+nnoremap <C-i> :vsplit<CR>
+nnoremap <C-o> :split<CR>
 
 " Close window
 nnoremap <C-q> :close<CR>

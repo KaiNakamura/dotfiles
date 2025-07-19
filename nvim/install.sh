@@ -8,7 +8,8 @@ sudo apt install -y \
 	gcc \
 	fd-find \
 	fonts-noto-color-emoji \
-	xclip
+	xclip \
+	wl-clipboard
 
 # Install ripgrep
 brew install ripgrep
