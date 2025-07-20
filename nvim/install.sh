@@ -12,7 +12,7 @@
 # 	wl-clipboard
 
 # Arch
-# sudo pacman -S fd
+# sudo pacman -S fd wl-clipboard
 
 # Install ripgrep
 brew install ripgrep
