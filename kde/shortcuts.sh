@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# TODO: Update (or abandon, I might move away from KDE, but Hyprland keybinds take precedence over these)
+
 # ===== KWin Shortcuts =====
 
 # `kwriteconfig6 --file kglobalshortcutsrc --group kwin --key "KEY_NAME" "BIND,DEFAULT,DESCRIPTION"`
@@ -45,8 +47,8 @@ kwriteconfig6 --file kglobalshortcutsrc --group kwin --key "Window Minimize" "Me
 
 # ===== Application Shortcuts =====
 
-# Launch Kitty: Ctrl+Alt+T and Meta+K
-kwriteconfig6 --file kglobalshortcutsrc --group "services/kitty.desktop" --key "_launch" "Ctrl+Alt+T"$'\t'"Meta+K"
+# Launch Kitty: Ctrl+Alt+T and Meta+N
+kwriteconfig6 --file kglobalshortcutsrc --group "services/kitty.desktop" --key "_launch" "Ctrl+Alt+T"$'\t'"Meta+N"
 
 # Disable Konsole shortcut
 kwriteconfig6 --file kglobalshortcutsrc --group "services/org.kde.konsole.desktop" --key "_launch" "none"
