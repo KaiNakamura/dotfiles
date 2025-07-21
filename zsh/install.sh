@@ -1,7 +1,11 @@
 #!/bin/bash
 
+# TODO: Add support for non-apt
 # Install zsh
-sudo apt install -y zsh
+# sudo apt install -y zsh
+
+# Arch
+# sudo pacman -S zsh
 
 # Make zsh default
 chsh -s $(which zsh)
@@ -20,3 +24,4 @@ fi
 
 # TODO: Update .zshrc but don't overwrite existing
 # (haven't figured out how not to do this yet)
+# Also this one may not be cd ing correctly?
