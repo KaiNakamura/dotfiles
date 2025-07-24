@@ -1,0 +1,12 @@
+themes:
+  - name: "monokai"
+    colors:
+      - "#272822" # Black
+      - "#f8f8f2" # White
+      - "#75715e" # Gray
+      - "#f92672" # Red
+      - "#e6db74" # Yellow
+      - "#a6e22e" # Green
+      - "#66d9ef" # Blue
+      - "#fd971f" # Magenta
+      - "#ae81ff" # Cyan
