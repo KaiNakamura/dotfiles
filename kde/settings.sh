@@ -70,7 +70,58 @@ if [[ -f "$WALLPAPER_SOURCE" ]]; then
     # Setting Theme name to empty ensures custom wallpaper is used
     kwriteconfig5 --file kscreenlockerrc --group Greeter --group Theme --key name ""
     
-    echo "Wallpaper configured for desktop and lock screen"
+    # Configure SDDM login screen wallpaper
+    # SDDM login screen requires the wallpaper to be configured in the theme's configuration file
+    # First, try to detect the active SDDM theme
+    SDDM_THEME=""
+    if [[ -f /etc/sddm.conf ]]; then
+        # Try to read theme from /etc/sddm.conf
+        SDDM_THEME=$(grep -E "^Current=" /etc/sddm.conf 2>/dev/null | cut -d'=' -f2 | tr -d ' ' || true)
+    fi
+    
+    # If not found, check user config
+    if [[ -z "$SDDM_THEME" ]] && [[ -f ~/.config/sddm/sddm.conf ]]; then
+        SDDM_THEME=$(grep -E "^Current=" ~/.config/sddm/sddm.conf 2>/dev/null | cut -d'=' -f2 | tr -d ' ' || true)
+    fi
+    
+    # Default to breeze if no theme found
+    if [[ -z "$SDDM_THEME" ]]; then
+        SDDM_THEME="breeze"
+    fi
+    
+    # Configure the SDDM theme's wallpaper
+    SDDM_THEME_DIR="/usr/share/sddm/themes/$SDDM_THEME"
+    SDDM_THEME_CONF_USER="$SDDM_THEME_DIR/theme.conf.user"
+    
+    if [[ -d "$SDDM_THEME_DIR" ]]; then
+        echo "Configuring SDDM login screen wallpaper for theme: $SDDM_THEME"
+        # Create theme.conf.user with the background setting
+        # This file overrides the default theme.conf settings
+        sudo tee "$SDDM_THEME_CONF_USER" > /dev/null <<EOF
+[General]
+background=$LOCKSCREEN_WALLPAPER_PATH
+EOF
+        sudo chmod 644 "$SDDM_THEME_CONF_USER"
+        echo "SDDM login screen wallpaper configured"
+    else
+        echo "Warning: SDDM theme directory not found: $SDDM_THEME_DIR"
+        echo "Trying common theme locations..."
+        # Try common themes
+        for theme in breeze breeze-dark; do
+            if [[ -d "/usr/share/sddm/themes/$theme" ]]; then
+                echo "Found theme: $theme, configuring..."
+                sudo tee "/usr/share/sddm/themes/$theme/theme.conf.user" > /dev/null <<EOF
+[General]
+background=$LOCKSCREEN_WALLPAPER_PATH
+EOF
+                sudo chmod 644 "/usr/share/sddm/themes/$theme/theme.conf.user"
+                echo "SDDM login screen wallpaper configured for theme: $theme"
+                break
+            fi
+        done
+    fi
+    
+    echo "Wallpaper configured for desktop, lock screen, and login screen"
 else
     echo "Warning: Wallpaper file not found at $WALLPAPER_SOURCE"
 fi
