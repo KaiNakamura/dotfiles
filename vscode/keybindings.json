@@ -95,6 +95,15 @@
     "command": "workbench.action.focusActiveEditorGroup",
     "when": "!editorTextFocus || sideBarFocus || panelFocus || auxiliaryBarFocus"
   },
+
+  // Vim leader keybindings - When nothing is selected (no editor focused or vim not active)
+  // These work when there's no editor open or vim isn't handling the keys
+  // Exclude all input contexts (command palette, search, etc.) so space works normally there
+  {
+    "key": "space e",
+    "command": "workbench.view.explorer",
+    "when": "!editorFocus && !quickInputVisible && !inQuickOpen && !inputFocus && !textInputFocus"
+  },
   
   // ============================================
   // EDITOR CONTEXT - When editor is focused
@@ -102,15 +111,38 @@
   
   // Split operations - Create editor splits
   {
-    "key": "ctrl+i",
+    "key": "ctrl+o",
     "command": "workbench.action.splitEditorDown",
     "when": "editorFocus"
   },
   {
-    "key": "ctrl+o",
+    "key": "ctrl+i",
     "command": "workbench.action.splitEditorRight",
     "when": "editorFocus"
   },
+
+  // Window navigation - Navigate between split windows
+  {
+    "key": "ctrl+h",
+    "command": "workbench.action.navigateLeft",
+    "when": "editorTextFocus && vim.active && !inDebugRepl"
+  },
+  {
+    "key": "ctrl+j",
+    "command": "workbench.action.navigateDown",
+    "when": "editorTextFocus && vim.active && !inDebugRepl"
+  },
+  {
+    "key": "ctrl+k",
+    "command": "workbench.action.navigateUp",
+    "when": "editorTextFocus && vim.active && !inDebugRepl"
+  },
+  {
+    "key": "ctrl+l",
+    "command": "workbench.action.navigateRight",
+    "when": "editorTextFocus && vim.active && !inDebugRepl"
+  },
+  
   
   // Tab navigation - Switch between editor tabs
   {
