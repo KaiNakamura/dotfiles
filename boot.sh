@@ -26,6 +26,27 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Sudo keep-alive function
+SUDO_PID=""
+keep_sudo_alive() {
+    # Keep sudo alive in background
+    while true; do
+        sudo -n true
+        sleep 60
+        kill -0 "$$" 2>/dev/null || exit
+    done
+}
+
+# Cleanup function
+cleanup() {
+    if [[ -n "$SUDO_PID" ]]; then
+        kill "$SUDO_PID" 2>/dev/null || true
+    fi
+}
+
+# Trap cleanup on exit
+trap cleanup EXIT
+
 # Check if running on Linux
 if [[ "$OSTYPE" != "linux-gnu"* ]]; then
     print_error "This script is designed for Linux (Kubuntu 24.04 LTS)"
@@ -33,6 +54,14 @@ if [[ "$OSTYPE" != "linux-gnu"* ]]; then
 fi
 
 print_info "Starting dotfiles bootstrap installation..."
+
+# Request sudo access and start keep-alive
+print_info "Requesting sudo access..."
+sudo -v
+
+# Start sudo keep-alive in background
+keep_sudo_alive &
+SUDO_PID=$!
 
 # Install essential packages
 sudo apt update && sudo apt install -y \
