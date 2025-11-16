@@ -154,6 +154,11 @@ if gh auth status &> /dev/null; then
     else
         # SSH test failed, upload the key
         print_info "SSH key not working with GitHub. Uploading key..."
+        
+        # Ensure we have the required scope for SSH key management
+        print_info "Refreshing GitHub authentication with admin:public_key scope..."
+        gh auth refresh -h github.com -s admin:public_key
+        
         KEY_TITLE="kai@$(hostname) ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
         gh ssh-key add "$SSH_KEY_PUB" --title "$KEY_TITLE"
         
