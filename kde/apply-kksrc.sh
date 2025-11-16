@@ -19,96 +19,118 @@ fi
 
 echo "Applying shortcuts from binds.kksrc..."
 
-# Track if we're in the kwin section
-in_kwin_section=false
-shortcuts_applied=0
+# Read binds.kksrc and collect all shortcuts we'll be setting
+declare -A shortcuts_to_set
+declare -a kwin_actions
+declare -a kwin_values
 
-# Parse binds.kksrc and apply using kwriteconfig5
+in_kwin_section=false
 while IFS= read -r line; do
-    # Skip empty lines and comments
     [[ -z "$line" ]] && continue
     [[ "$line" =~ ^[[:space:]]*# ]] && continue
     
-    # Check for section header
     if [[ "$line" =~ ^\[.*\] ]]; then
-        if [[ "$line" =~ \[kwin\] ]]; then
-            in_kwin_section=true
-        else
-            in_kwin_section=false
-        fi
+        [[ "$line" =~ \[kwin\] ]] && in_kwin_section=true || in_kwin_section=false
         continue
     fi
     
-    # Only process lines in kwin section
     [[ "$in_kwin_section" == false ]] && continue
     
-    # Parse action and keybindings
     if [[ "$line" =~ ^([^=]+)=(.*)$ ]]; then
         action="${BASH_REMATCH[1]}"
         keybindings="${BASH_REMATCH[2]}"
-        
-        # Trim whitespace
         action=$(echo "$action" | xargs)
         keybindings=$(echo "$keybindings" | xargs)
-        
-        # Skip actions with no bindings
         [[ -z "$keybindings" ]] && continue
         
-        # Convert semicolon-separated bindings to tab-separated
-        # Format for kwriteconfig5: "BIND1<TAB>BIND2,DEFAULT,DESCRIPTION"
-        # Use first binding as DEFAULT, action name as DESCRIPTION
+        # Process bindings
         IFS=';' read -ra BINDINGS <<< "$keybindings"
-        
-        # Build tab-separated bindings string (filter out empty/invalid entries)
         bindings_array=()
         for binding in "${BINDINGS[@]}"; do
             binding=$(echo "$binding" | xargs)
-            # Skip empty bindings or ones that look invalid (contain parentheses without valid key names)
-            if [[ -n "$binding" && ! "$binding" =~ ^Launch\ \( ]]; then
-                bindings_array+=("$binding")
-            fi
+            [[ -n "$binding" && ! "$binding" =~ ^Launch\ \( ]] && bindings_array+=("$binding")
         done
-        
-        # Skip if no valid bindings found
         [[ ${#bindings_array[@]} -eq 0 ]] && continue
         
-        # First binding is used as default
-        first_binding="${bindings_array[0]}"
-        
-        # Build tab-separated bindings string
-        bindings_str=""
+        # Store shortcuts for conflict detection
         for binding in "${bindings_array[@]}"; do
-            if [[ -n "$bindings_str" ]]; then
-                bindings_str+=$'\t'
-            fi
-            bindings_str+="$binding"
+            normalized=$(echo "$binding" | tr -d ' ' | tr '[:lower:]' '[:upper:]')
+            shortcuts_to_set["$normalized"]=1
         done
         
-        # Format: "BIND1<TAB>BIND2,DEFAULT,DESCRIPTION"
+        # Build value string
+        first_binding="${bindings_array[0]}"
+        bindings_str=""
+        for binding in "${bindings_array[@]}"; do
+            [[ -n "$bindings_str" ]] && bindings_str+=$'\t'
+            bindings_str+="$binding"
+        done
         value="${bindings_str},${first_binding},${action}"
         
-        # Apply using kwriteconfig5
-        if kwriteconfig5 --file kglobalshortcutsrc --group kwin --key "$action" "$value" 2>/dev/null; then
-            ((shortcuts_applied++))
-        else
-            echo "Warning: Failed to apply shortcut for '$action'" >&2
-        fi
+        kwin_actions+=("$action")
+        kwin_values+=("$value")
     fi
 done < "$BINDS_FILE"
 
+# Read kglobalshortcutsrc and find all conflicts
+declare -a conflicts_to_unbind
+
+if [[ -f "$TARGET_FILE" ]]; then
+    current_section=""
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^\[([^\]]+)\] ]]; then
+            current_section="${BASH_REMATCH[1]}"
+            continue
+        fi
+        
+        [[ -z "$current_section" ]] && continue
+        [[ "$current_section" == "kwin" ]] && continue
+        
+        if [[ "$line" =~ ^([^=]+)=([^,]+), ]]; then
+            action="${BASH_REMATCH[1]}"
+            existing_shortcut="${BASH_REMATCH[2]}"
+            normalized_existing=$(echo "$existing_shortcut" | tr -d ' ' | tr '[:lower:]' '[:upper:]')
+            
+            if [[ -n "${shortcuts_to_set[$normalized_existing]}" ]]; then
+                conflicts_to_unbind+=("$current_section|$action")
+                echo "Unbinding conflicting shortcut: [$current_section] $action = $existing_shortcut"
+            fi
+        fi
+    done < "$TARGET_FILE"
+fi
+
+# Unbind all conflicts
+unbinds_count=0
+for conflict in "${conflicts_to_unbind[@]}"; do
+    IFS='|' read -r section action <<< "$conflict"
+    if kwriteconfig5 --file kglobalshortcutsrc --group "$section" --key "$action" "none" 2>/dev/null; then
+        ((unbinds_count++))
+    fi
+done
+
+# Apply all KWin shortcuts
+shortcuts_applied=0
+for i in "${!kwin_actions[@]}"; do
+    if kwriteconfig5 --file kglobalshortcutsrc --group kwin --key "${kwin_actions[$i]}" "${kwin_values[$i]}" 2>/dev/null; then
+        ((shortcuts_applied++))
+    fi
+done
+
+echo "Unbound $unbinds_count conflicting shortcuts."
 echo "Applied $shortcuts_applied shortcuts."
 
-echo "Reloading KWin shortcuts..."
+# Reload shortcuts by restarting kglobalaccel service
+echo "Reloading kglobalaccel service..."
 
-# Reload shortcuts - try multiple methods for compatibility
-if qdbus org.kde.kglobalaccel /component/kwin reconfigure 2>/dev/null; then
+if systemctl --user restart plasma-kglobalaccel.service; then
+    sleep 1
     echo "Shortcuts reloaded successfully."
-elif qdbus org.kde.KWin /KWin reconfigure 2>/dev/null; then
-    echo "Shortcuts reloaded successfully."
+    echo "Note: You may need to log out and back in for all shortcuts to take full effect."
 else
-    echo "Note: Could not reload shortcuts automatically."
+    echo "Error: Failed to restart plasma-kglobalaccel.service"
+    echo "Changes have been saved to ~/.config/kglobalshortcutsrc"
     echo "Please log out and back in, or restart KDE for changes to take effect."
+    exit 1
 fi
 
 echo "Done! Shortcuts applied."
-
