@@ -1,0 +1,204 @@
+[
+  // ============================================
+  // DISABLES - All Default Conflicts
+  // Must come first as keybindings are processed in order
+  // ============================================
+  
+  // Ctrl+W disables
+  {
+    "key": "ctrl+w",
+    "command": "-workbench.action.closeWindow"
+  },
+  {
+    "key": "ctrl+w",
+    "command": "-workbench.action.closeEditorsInGroup"
+  },
+  {
+    "key": "ctrl+w",
+    "command": "-workbench.action.closeGroup"
+  },
+  {
+    "key": "ctrl+w",
+    "command": "-workbench.action.closeActiveEditor"
+  },
+  {
+    "key": "ctrl+w",
+    "command": "-workbench.action.closeEditor"
+  },
+  
+  // Ctrl+Q disables
+  {
+    "key": "ctrl+q",
+    "command": "-workbench.action.quit"
+  },
+  {
+    "key": "ctrl+q",
+    "command": "-workbench.action.closeWindow"
+  },
+  
+  // Alt+Q disables
+  {
+    "key": "alt+q",
+    "command": "-workbench.action.closeWindow"
+  },
+  
+  // Alt+H/L disables
+  {
+    "key": "alt+h",
+    "command": "-testing.toggleTestingPeekHistory",
+    "when": "testing.isPeekVisible"
+  },
+  {
+    "key": "alt+l",
+    "command": "-toggleSearchEditorContextLines",
+    "when": "inSearchEditor"
+  },
+  {
+    "key": "alt+l",
+    "command": "-toggleFindInSelection",
+    "when": "editorFocus"
+  },
+  
+  // Ctrl+O/I disables
+  {
+    "key": "ctrl+o",
+    "command": "-workbench.action.files.openFile"
+  },
+  {
+    "key": "ctrl+o",
+    "command": "-workbench.action.files.openFolderViaWorkspace",
+    "when": "!openFolderWorkspaceSupport && workbenchState == 'workspace'"
+  },
+  {
+    "key": "ctrl+o",
+    "command": "-workbench.action.files.openFileFolder",
+    "when": "isMacNative && openFolderWorkspaceSupport"
+  },
+  {
+    "key": "ctrl+o",
+    "command": "-extension.vim_ctrl+o",
+    "when": "editorTextFocus && vim.active && vim.use<C-o> && !inDebugRepl"
+  },
+  {
+    "key": "ctrl+i",
+    "command": "-extension.vim_ctrl+i",
+    "when": "editorTextFocus && vim.active && vim.use<C-i> && !inDebugRepl"
+  },
+
+  // ============================================
+  // GLOBAL NAVIGATION - Works from anywhere
+  // ============================================
+  
+  // Escape - Universal return to editor
+  {
+    "key": "escape",
+    "command": "workbench.action.focusActiveEditorGroup",
+    "when": "!editorTextFocus || sideBarFocus || panelFocus || auxiliaryBarFocus"
+  },
+  
+  // ============================================
+  // EDITOR CONTEXT - When editor is focused
+  // ============================================
+  
+  // Split operations - Create editor splits
+  {
+    "key": "ctrl+i",
+    "command": "workbench.action.splitEditorDown",
+    "when": "editorFocus"
+  },
+  {
+    "key": "ctrl+o",
+    "command": "workbench.action.splitEditorRight",
+    "when": "editorFocus"
+  },
+  
+  // Tab navigation - Switch between editor tabs
+  {
+    "key": "alt+h",
+    "command": "workbench.action.previousEditor"
+  },
+  {
+    "key": "alt+l",
+    "command": "workbench.action.nextEditor"
+  },
+  {
+    "key": "alt+q",
+    "command": "workbench.action.closeActiveEditor"
+  },
+  
+  // Font zoom - Adjust editor font size
+  {
+    "key": "ctrl+shift+=",
+    "command": "editor.action.fontZoomIn"
+  },
+  {
+    "key": "ctrl+shift+-",
+    "command": "editor.action.fontZoomOut"
+  },
+
+  // ============================================
+  // PANEL/SIDEBAR CONTEXT - When panels/sidebars are focused
+  // ============================================
+  
+  // Close operations - Context-dependent close (sidebar/panel/editor)
+  {
+    "key": "ctrl+q",
+    "command": "workbench.action.toggleSidebarVisibility",
+    "when": "sideBarFocus"
+  },
+  {
+    "key": "ctrl+q",
+    "command": "workbench.action.closePanel",
+    "when": "panelFocus"
+  },
+  {
+    "key": "ctrl+q",
+    "command": "workbench.action.closeAuxiliaryBar",
+    "when": "auxiliaryBarFocus"
+  },
+  {
+    "key": "ctrl+q",
+    "command": "workbench.action.closeActiveEditor",
+    "when": "editorFocus"
+  },
+  
+  // Resize operations - Adjust panel/sidebar size
+  {
+    "key": "ctrl+=",
+    "command": "workbench.action.increaseViewSize",
+    "when": "sideBarFocus || panelFocus || auxiliaryBarFocus"
+  },
+  {
+    "key": "ctrl+-",
+    "command": "workbench.action.decreaseViewSize",
+    "when": "sideBarFocus || panelFocus || auxiliaryBarFocus"
+  },
+
+  // ============================================
+  // EXPLORER CONTEXT - When file explorer is focused
+  // ============================================
+  
+  // File operations - Create, delete, rename files
+  {
+    "key": "ctrl+n",
+    "command": "explorer.newFile",
+    "when": "explorerViewletFocus"
+  },
+  {
+    "key": "shift+w",
+    "command": "list.collapseAll",
+    "when": "explorerViewletFocus && filesExplorerFocus"
+  },
+  {
+    "key": "d",
+    "command": "deleteFile",
+    "when": "explorerViewletVisible && filesExplorerFocus && !explorerResourceIsRoot && !explorerResourceReadonly && !inputFocus"
+  },
+  {
+    "key": "r",
+    "command": "renameFile",
+    "when": "explorerViewletVisible && filesExplorerFocus && !explorerResourceIsRoot && !explorerResourceReadonly && !inputFocus"
+  }
+]
+
+
