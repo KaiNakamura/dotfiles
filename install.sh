@@ -13,6 +13,21 @@ NC='\033[0m' # No Color
 # Get the directory where this script is located
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Explicit installation order based on dependencies
+INSTALL_ORDER=(
+    "git-config"
+    "nerd-font"
+    "zsh"
+    "starship"
+    "zoxide"
+    "kitty"
+    "nvim"
+    "vim"
+    "kde"
+    "hypr"
+    "gowall"
+)
+
 # Function to print colored output
 print_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -30,15 +45,60 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Function to get all available modules
-get_modules() {
-    find "$WORKDIR" -maxdepth 1 -type d -name "*" | while read -r dir; do
-        module_name=$(basename "$dir")
-        # Skip hidden directories, current directory, and directories without install.sh
-        if [[ "$module_name" != .* ]] && [[ "$module_name" != "$(basename "$WORKDIR")" ]] && [[ -f "$dir/install.sh" ]]; then
-        echo "$module_name"
-        fi
-    done | sort
+# Sudo keep-alive function
+SUDO_PID=""
+keep_sudo_alive() {
+    # Keep sudo alive in background
+    while true; do
+        sudo -n true
+        sleep 60
+        kill -0 "$$" 2>/dev/null || exit
+    done
+}
+
+# Cleanup function
+cleanup() {
+    if [[ -n "$SUDO_PID" ]]; then
+        kill "$SUDO_PID" 2>/dev/null || true
+    fi
+}
+
+# Trap cleanup on exit
+trap cleanup EXIT
+
+# Pre-install hook: Setup environment
+pre_install() {
+    print_info "Preparing installation environment..."
+    
+    # Ensure we're running in bash
+    if [[ -z "$BASH_VERSION" ]]; then
+        print_error "This script must be run with bash"
+        exit 1
+    fi
+    
+    # Refresh sudo timestamp (keep it alive for the duration)
+    if sudo -n true 2>/dev/null; then
+        print_info "Sudo credentials already available"
+    else
+        print_info "Requesting sudo access..."
+        sudo -v
+    fi
+    
+    # Start sudo keep-alive in background
+    keep_sudo_alive &
+    SUDO_PID=$!
+    
+    # Create necessary directories
+    mkdir -p ~/.config
+    mkdir -p ~/.local/bin
+    mkdir -p ~/.local/share/fonts
+    
+    # Export paths for other install steps
+    export PATH="$PATH:$HOME/.local/bin"
+    export XDG_CONFIG_HOME="$HOME/.config"
+    export XDG_DATA_HOME="$HOME/.local/share"
+    
+    print_success "Environment prepared"
 }
 
 # Function to install a single module
@@ -61,10 +121,12 @@ install_module() {
     # Make the install script executable
     chmod +x "$module_dir/install.sh"
     
-    # Change to the module directory and run the install script
-    (cd "$module_dir" && ./install.sh)
+    # Force bash execution, even if script has different shebang
+    (cd "$module_dir" && bash ./install.sh)
     
-    if [[ $? -eq 0 ]]; then
+    local exit_code=$?
+    
+    if [[ $exit_code -eq 0 ]]; then
         print_success "Successfully installed $module"
         return 0
     else
@@ -73,78 +135,62 @@ install_module() {
     fi
 }
 
-# Function to show usage
-show_usage() {
-    echo "Usage: $0 [modules...] | --all | --list | --help"
-    echo ""
-    echo "Examples:"
-    echo "  $0 git vim              # Install git and vim modules"
-    echo "  $0 --all                # Install all available modules"
-    echo "  $0 --list               # List all available modules"
-    echo "  $0 --help               # Show this help message"
-    echo ""
-    echo "Available modules:"
-    get_modules | sed 's/^/  /'
+# Post-install hook: Finalize installation
+post_install() {
+    print_info "Finalizing installation..."
+    
+    # Handle zsh switching (provide instructions, don't execute)
+    if command -v zsh &> /dev/null; then
+        ZSH_PATH=$(which zsh)
+        print_info "To make zsh your default shell, run:"
+        print_info "  sudo chsh -s $ZSH_PATH $USER"
+        print_info "Then log out and log back in, or run: exec zsh"
+    fi
+    
+    print_success "Installation finalized"
 }
 
 # Main script logic
 main() {
-    # Check if no arguments provided
-    if [[ $# -eq 0 ]]; then
-        show_usage
-        exit 1
-    fi
+    pre_install
     
-    # Handle special flags
-    case "$1" in
-        --help|-h)
-            show_usage
-            exit 0
-            ;;
-        --list|-l)
-            echo "Available modules:"
-            get_modules | sed 's/^/  /'
-            exit 0
-            ;;
-        --all|-a)
-			# TODO: Is this necessary?
-            sudo -v
-
-            print_info "Installing all modules..."
-            modules=($(get_modules))
-            if [[ ${#modules[@]} -eq 0 ]]; then
-                print_warning "No modules found"
-                exit 0
-            fi
-            ;;
-        *)
-            modules=("$@")
-            ;;
-    esac
+    print_info "Installing all modules in predefined order..."
+    
+    modules=("${INSTALL_ORDER[@]}")
+    failed_modules=()
+    successful_modules=()
     
     # Validate all modules exist before starting installation
     for module in "${modules[@]}"; do
         if [[ ! -d "$WORKDIR/$module" ]]; then
-            print_error "Module '$module' does not exist"
-            echo ""
-            echo "Available modules:"
-            get_modules | sed 's/^/  /'
+            print_warning "Module '$module' not found, skipping..."
+            continue
+        fi
+        
+        if [[ ! -f "$WORKDIR/$module/install.sh" ]]; then
+            print_error "Module '$module' is missing install.sh script"
             exit 1
         fi
     done
     
-    # Install modules
-    failed_modules=()
-    successful_modules=()
-    
+    # Install modules in order, stop on first failure
     for module in "${modules[@]}"; do
+        # Skip if module doesn't exist
+        if [[ ! -d "$WORKDIR/$module" ]]; then
+            continue
+        fi
+        
         echo ""
         if install_module "$module"; then
             successful_modules+=("$module")
         else
             failed_modules+=("$module")
+            print_error "Stopping installation due to failure"
+            break
         fi
     done
+    
+    post_install
     
     # Summary
     echo ""
@@ -160,9 +206,9 @@ main() {
     else
         print_success "All modules installed successfully!"
     fi
-
+    
     print_info "You may need to restart your computer for some changes to take effect."
 }
 
-# Run main function with all arguments
-main "$@"
+# Run main function
+main
