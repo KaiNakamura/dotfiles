@@ -37,3 +37,15 @@ else
     ln -sf "$zshrc_source" "$zshrc_target"
     echo ".zshrc symlinked to dotfiles"
 fi
+
+# Change default shell to zsh
+if command -v zsh &> /dev/null; then
+    ZSH_PATH=$(which zsh)
+    ACTUAL_USER="${SUDO_USER:-$USER}"
+    CURRENT_SHELL=$(getent passwd "$ACTUAL_USER" 2>/dev/null | cut -d: -f7)
+    
+    if [[ "$CURRENT_SHELL" != "$ZSH_PATH" ]]; then
+        echo "Changing default shell to zsh..."
+        sudo chsh -s "$ZSH_PATH" "$ACTUAL_USER"
+    fi
+fi

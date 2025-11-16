@@ -133,21 +133,6 @@ install_module() {
     fi
 }
 
-# Post-install hook: Finalize installation
-post_install() {
-    print_info "Finalizing installation..."
-    
-    # Handle zsh switching (provide instructions, don't execute)
-    if command -v zsh &> /dev/null; then
-        ZSH_PATH=$(which zsh)
-        print_info "To make zsh your default shell, run:"
-        print_info "  sudo chsh -s $ZSH_PATH $USER"
-        print_info "Then log out and log back in, or run: exec zsh"
-    fi
-    
-    print_success "Installation finalized"
-}
-
 # Main script logic
 main() {
     pre_install
@@ -190,8 +175,6 @@ main() {
             break
         fi
     done
-    
-    post_install
     
     # Summary
     echo ""

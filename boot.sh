@@ -122,7 +122,6 @@ else
     gh auth login -p ssh
 fi
 
-
 # Install additional dependencies
 sudo apt update && sudo apt install -y \
     cmake \
