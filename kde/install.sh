@@ -13,12 +13,12 @@ echo "KDE detected. Proceeding with configuration..."
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Configure shortcuts
-if [[ -f "$WORKDIR/shortcuts.sh" ]]; then
+if [[ -f "$WORKDIR/apply-kksrc.sh" ]]; then
     echo "Configuring keyboard shortcuts..."
-    chmod +x "$WORKDIR/shortcuts.sh"
-    "$WORKDIR/shortcuts.sh"
+    chmod +x "$WORKDIR/apply-kksrc.sh"
+    "$WORKDIR/apply-kksrc.sh"
 else
-    echo "shortcuts.sh not found in $WORKDIR"
+    echo "apply-kksrc.sh not found in $WORKDIR"
 fi
 
 # Configure settings

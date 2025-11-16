@@ -152,17 +152,25 @@ post_install() {
 main() {
     pre_install
     
-    print_info "Installing all modules in predefined order..."
+    # Determine which modules to install
+    if [[ $# -gt 0 ]]; then
+        # Use provided modules as arguments
+        modules=("$@")
+        print_info "Installing specified modules in provided order: ${modules[*]}"
+    else
+        # Use default installation order
+        modules=("${INSTALL_ORDER[@]}")
+        print_info "Installing all modules in predefined order..."
+    fi
     
-    modules=("${INSTALL_ORDER[@]}")
     failed_modules=()
     successful_modules=()
     
     # Validate all modules exist before starting installation
     for module in "${modules[@]}"; do
         if [[ ! -d "$WORKDIR/$module" ]]; then
-            print_warning "Module '$module' not found, skipping..."
-            continue
+            print_error "Module '$module' does not exist"
+            exit 1
         fi
         
         if [[ ! -f "$WORKDIR/$module/install.sh" ]]; then
@@ -173,11 +181,6 @@ main() {
     
     # Install modules in order, stop on first failure
     for module in "${modules[@]}"; do
-        # Skip if module doesn't exist
-        if [[ ! -d "$WORKDIR/$module" ]]; then
-            continue
-        fi
-        
         echo ""
         if install_module "$module"; then
             successful_modules+=("$module")
@@ -208,5 +211,5 @@ main() {
     print_info "You may need to restart your computer for some changes to take effect."
 }
 
-# Run main function
-main
+# Run main function with all arguments
+main "$@"
