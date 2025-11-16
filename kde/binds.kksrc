@@ -1,3 +1,9 @@
+[firefox.desktop][Global Shortcuts]
+_launch=Meta+F
+
+[kitty.desktop][Global Shortcuts]
+_launch=Meta+N
+
 [kwin][Global Shortcuts]
 Activate Window Demanding Attention=Meta+Ctrl+A
 Cycle Overview=
@@ -5,7 +11,7 @@ Cycle Overview Opposite=
 Decrease Opacity=
 Edit Tiles=Meta+T
 Expose=Ctrl+F9
-ExposeAll=Ctrl+F10; Launch (C)
+ExposeAll=Ctrl+F10
 ExposeClass=Ctrl+F7
 ExposeClassCurrentDesktop=
 Grid View=Meta+G
@@ -21,10 +27,12 @@ MoveZoomUp=
 Overview=Meta+W
 Setup Window Shortcut=
 Show Desktop=Meta+D
+ShowDesktopGrid=Meta+F8
+Suspend Compositing=Alt+Shift+F12
 Switch One Desktop Down=Meta+Ctrl+Down
 Switch One Desktop Up=Meta+Ctrl+Up
-Switch One Desktop to the Left=Meta+Ctrl+Left; Meta+Ctrl+H
-Switch One Desktop to the Right=Meta+Ctrl+Right; Meta+Ctrl+L
+Switch One Desktop to the Left=Meta+Ctrl+H
+Switch One Desktop to the Right=Meta+Ctrl+L
 Switch Window Down=Meta+J
 Switch Window Left=Meta+H
 Switch Window Right=Meta+L
@@ -67,6 +75,10 @@ Switch to Screen to the Left=
 Switch to Screen to the Right=
 Toggle Night Color=
 Toggle Window Raise/Lower=
+Walk Through Desktop List=
+Walk Through Desktop List (Reverse)=
+Walk Through Desktops=
+Walk Through Desktops (Reverse)=
 Walk Through Windows=Alt+Tab
 Walk Through Windows (Reverse)=Alt+Shift+Tab
 Walk Through Windows Alternative=
@@ -86,7 +98,7 @@ Window Fullscreen=
 Window Grow Horizontal=
 Window Grow Vertical=
 Window Lower=
-Window Maximize=Alt+Return; Meta+Return; Meta+Alt+Up
+Window Maximize=Meta+Return; Meta+Alt+Up; Alt+Return
 Window Maximize Horizontal=
 Window Maximize Vertical=
 Window Minimize=Meta+Alt+Down
@@ -154,5 +166,5 @@ Window to Screen 6=
 Window to Screen 7=
 disableInputCapture=Meta+Shift+Esc
 view_actual_size=
-view_zoom_in=Meta++; Meta+=
+view_zoom_in=Meta+=; Meta++
 view_zoom_out=Meta+-
