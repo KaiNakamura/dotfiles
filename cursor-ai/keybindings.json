@@ -1,0 +1,324 @@
+[
+  // ============================================
+  // DISABLES - All Default Conflicts
+  // Must come first as keybindings are processed in order
+  // ============================================
+  
+  // Ctrl+W disables
+  {
+    "key": "ctrl+w",
+    "command": "-workbench.action.closeWindow"
+  },
+  {
+    "key": "ctrl+w",
+    "command": "-workbench.action.closeEditorsInGroup"
+  },
+  {
+    "key": "ctrl+w",
+    "command": "-workbench.action.closeGroup"
+  },
+  {
+    "key": "ctrl+w",
+    "command": "-workbench.action.closeActiveEditor"
+  },
+  {
+    "key": "ctrl+w",
+    "command": "-workbench.action.closeEditor"
+  },
+  
+  // Ctrl+Q disables
+  {
+    "key": "ctrl+q",
+    "command": "-workbench.action.quit"
+  },
+  {
+    "key": "ctrl+q",
+    "command": "-workbench.action.closeWindow"
+  },
+  
+  // Alt+Q disables
+  {
+    "key": "alt+q",
+    "command": "-workbench.action.closeWindow"
+  },
+  
+  // Alt+H/L disables
+  {
+    "key": "alt+h",
+    "command": "-testing.toggleTestingPeekHistory",
+    "when": "testing.isPeekVisible"
+  },
+  {
+    "key": "alt+l",
+    "command": "-toggleSearchEditorContextLines",
+    "when": "inSearchEditor"
+  },
+  {
+    "key": "alt+l",
+    "command": "-toggleFindInSelection",
+    "when": "editorFocus"
+  },
+  
+  // Ctrl+O/I disables
+  {
+    "key": "ctrl+o",
+    "command": "-workbench.action.files.openFile"
+  },
+  {
+    "key": "ctrl+o",
+    "command": "-workbench.action.files.openFolderViaWorkspace",
+    "when": "!openFolderWorkspaceSupport && workbenchState == 'workspace'"
+  },
+  {
+    "key": "ctrl+o",
+    "command": "-workbench.action.files.openFileFolder",
+    "when": "isMacNative && openFolderWorkspaceSupport"
+  },
+  {
+    "key": "ctrl+o",
+    "command": "-extension.vim_ctrl+o",
+    "when": "editorTextFocus && vim.active && vim.use<C-o> && !inDebugRepl"
+  },
+  {
+    "key": "ctrl+i",
+    "command": "-extension.vim_ctrl+i",
+    "when": "editorTextFocus && vim.active && vim.use<C-i> && !inDebugRepl"
+  },
+  
+  // Ctrl+L disables - Composer/Chat panel
+  {
+    "key": "ctrl+l",
+    "command": "-composer.startComposerPrompt"
+  },
+  {
+    "key": "ctrl+l",
+    "command": "-workbench.action.chat.open"
+  },
+  {
+    "key": "ctrl+l",
+    "command": "-cursor.chat.open"
+  },
+  {
+    "key": "ctrl+l",
+    "command": "-workbench.action.chat.focus"
+  },
+  
+  // Ctrl+K disables - Quick edit
+  {
+    "key": "ctrl+k",
+    "command": "-composer.quickEdit"
+  },
+  {
+    "key": "ctrl+k",
+    "command": "-editor.action.quickCommand"
+  },
+
+  // ============================================
+  // GLOBAL CONTEXT - Works from anywhere
+  // ============================================
+  
+  // Escape - Universal return to editor
+  {
+    "key": "escape",
+    "command": "workbench.action.focusActiveEditorGroup",
+    "when": "!editorTextFocus || sideBarFocus || panelFocus || auxiliaryBarFocus"
+  },
+  
+  // Vim leader keybindings - When nothing is selected (no editor focused or vim not active)
+  // These work when there's no editor open or vim isn't handling the keys
+  // Exclude all input contexts (command palette, search, etc.) so space works normally there
+  {
+    "key": "space e",
+    "command": "workbench.view.explorer",
+    "when": "!editorFocus && !quickInputVisible && !inQuickOpen && !inputFocus && !textInputFocus"
+  },
+  {
+    "key": "space o",
+    "command": "composer.startComposerPrompt",
+    "when": "!editorFocus && !quickInputVisible && !inQuickOpen && !inputFocus && !textInputFocus"
+  },
+
+  // ============================================
+  // EDITOR CONTEXT - When editor is focused
+  // ============================================
+  
+  // Split operations - Create editor splits
+  {
+    "key": "ctrl+o",
+    "command": "workbench.action.splitEditorDown",
+    "when": "editorFocus"
+  },
+  {
+    "key": "ctrl+i",
+    "command": "workbench.action.splitEditorRight",
+    "when": "editorFocus"
+  },
+  
+  // Window navigation - Navigate between split windows
+  {
+    "key": "ctrl+h",
+    "command": "workbench.action.navigateLeft",
+    "when": "editorTextFocus && vim.active && !inDebugRepl"
+  },
+  {
+    "key": "ctrl+j",
+    "command": "workbench.action.navigateDown",
+    "when": "editorTextFocus && vim.active && !inDebugRepl"
+  },
+  {
+    "key": "ctrl+k",
+    "command": "workbench.action.navigateUp",
+    "when": "editorTextFocus && vim.active && !inDebugRepl"
+  },
+  {
+    "key": "ctrl+l",
+    "command": "workbench.action.navigateRight",
+    "when": "editorTextFocus && vim.active && !inDebugRepl"
+  },
+  
+  // Tab navigation - Switch between editor tabs
+  {
+    "key": "alt+h",
+    "command": "workbench.action.previousEditor",
+    "when": "!auxiliaryBarFocus"
+  },
+  {
+    "key": "alt+l",
+    "command": "workbench.action.nextEditor",
+    "when": "!auxiliaryBarFocus"
+  },
+  {
+    "key": "alt+q",
+    "command": "workbench.action.closeActiveEditor",
+    "when": "!auxiliaryBarFocus"
+  },
+  
+  // Font zoom - Adjust editor font size
+  {
+    "key": "ctrl+shift+=",
+    "command": "editor.action.fontZoomIn"
+  },
+  {
+    "key": "ctrl+shift+-",
+    "command": "editor.action.fontZoomOut"
+  },
+
+  // ============================================
+  // PANEL/SIDEBAR CONTEXT - When panels/sidebars are focused
+  // ============================================
+  
+  // Close operations - Context-dependent close (sidebar/panel/editor)
+  {
+    "key": "ctrl+q",
+    "command": "workbench.action.toggleSidebarVisibility",
+    "when": "sideBarFocus"
+  },
+  {
+    "key": "ctrl+q",
+    "command": "workbench.action.closePanel",
+    "when": "panelFocus"
+  },
+  {
+    "key": "ctrl+q",
+    "command": "workbench.action.closeAuxiliaryBar",
+    "when": "auxiliaryBarFocus"
+  },
+  {
+    "key": "ctrl+q",
+    "command": "workbench.action.closeActiveEditor",
+    "when": "editorFocus"
+  },
+  
+  // Resize operations - Adjust panel/sidebar size
+  {
+    "key": "ctrl+=",
+    "command": "workbench.action.increaseViewSize",
+    "when": "sideBarFocus || panelFocus || auxiliaryBarFocus"
+  },
+  {
+    "key": "ctrl+-",
+    "command": "workbench.action.decreaseViewSize",
+    "when": "sideBarFocus || panelFocus || auxiliaryBarFocus"
+  },
+
+  // ============================================
+  // COMPOSER CONTEXT - When composer is focused
+  // ============================================
+  
+  // Switch between AI modes
+  {
+    "key": "alt+a",
+    "command": "composerMode.agent"
+  },
+  {
+    "key": "alt+p",
+    "command": "composerMode.plan"
+  },
+  {
+    "key": "alt+s",
+    "command": "composerMode.chat"
+  },
+  
+  // Chat navigation and management - Only when composer is focused
+  // Disable any default Alt+N bindings that might close composer
+  {
+    "key": "alt+n",
+    "command": "-workbench.action.closeAuxiliaryBar",
+    "when": "auxiliaryBarFocus"
+  },
+  {
+    "key": "alt+n",
+    "command": "-workbench.action.toggleAuxiliaryBar",
+    "when": "auxiliaryBarFocus"
+  },
+  // New chat
+  {
+    "key": "alt+n",
+    "command": "composer.createNewComposerTab",
+    "when": "auxiliaryBarFocus"
+  },
+  // Close chat
+  {
+    "key": "alt+q",
+    "command": "composer.closeComposerTab",
+    "when": "auxiliaryBarFocus"
+  },
+  // Navigate between chats
+  {
+    "key": "alt+h",
+    "command": "composer.selectPreviousComposer",
+    "when": "auxiliaryBarFocus"
+  },
+  {
+    "key": "alt+l",
+    "command": "composer.selectNextComposer",
+    "when": "auxiliaryBarFocus"
+  },
+
+  // ============================================
+  // EXPLORER CONTEXT - When file explorer is focused
+  // ============================================
+  
+  // File operations - Create, delete, rename files
+  {
+    "key": "ctrl+n",
+    "command": "explorer.newFile",
+    "when": "explorerViewletFocus"
+  },
+  {
+    "key": "shift+w",
+    "command": "list.collapseAll",
+    "when": "explorerViewletFocus && filesExplorerFocus"
+  },
+  {
+    "key": "d",
+    "command": "deleteFile",
+    "when": "explorerViewletVisible && filesExplorerFocus && !explorerResourceIsRoot && !explorerResourceReadonly && !inputFocus"
+  },
+  {
+    "key": "r",
+    "command": "renameFile",
+    "when": "explorerViewletVisible && filesExplorerFocus && !explorerResourceIsRoot && !explorerResourceReadonly && !inputFocus"
+  },
+]
+

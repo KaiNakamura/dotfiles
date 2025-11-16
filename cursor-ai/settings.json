@@ -1,0 +1,117 @@
+{
+  // Editor
+  "editor.acceptSuggestionOnCommitCharacter": false,
+  "editor.acceptSuggestionOnEnter": "off",
+  "editor.codeLens": false,
+  "editor.fontSize": 18,
+  "editor.formatOnSave": true,
+  "editor.insertSpaces": true,
+  "editor.minimap.autohide": "mouseover",
+  "editor.suggestSelection": "first",
+  "editor.wordWrap": "on",
+
+  // Vim
+  "vim.useSystemClipboard": true,
+  "vim.vimrc.enable": true,
+  "vim.leader": " ",
+  "vim.timeout": 300,
+  "vim.disableExtension": false,
+  "vim.enabled": true,
+  "vim.handleKeys": {
+    // Window navigation
+    "<C-h>": false,
+    "<C-j>": false,
+    "<C-k>": false,
+    "<C-l>": false,
+    "<C-w>": false,
+
+    // Terminal/System operations
+    "<C-s>": false,
+    "<C-z>": false
+  },
+  "vim.digraphs": {},
+  "vim.normalModeKeyBindingsNonRecursive": [
+    {
+      "before": ["<leader>", "e"],
+      "commands": ["workbench.view.explorer"]
+    },
+    {
+      "before": ["<leader>", "s", "f"],
+      "commands": ["workbench.action.quickOpen"]
+    },
+    {
+      "before": ["<leader>", "s", "g"],
+      "commands": ["workbench.action.findInFiles"]
+    },
+    {
+      "before": ["<leader>", "o"],
+      "commands": ["composer.startComposerPrompt"]
+    }
+  ],
+  // Fallback keybindings for when vim is not active (e.g., no file open)
+  // These use single key sequences to avoid space key delays in input fields
+  "vim.insertModeKeyBindings": [],
+
+  // Workbench / Appearance
+  "workbench.colorTheme": "Monokai",
+  "workbench.iconTheme": "vscode-icons",
+  "workbench.startupEditor": "newUntitledFile",
+  "window.confirmSaveUntitledWorkspace": false,
+  "explorer.confirmDelete": false,
+  "vsicons.dontShowNewVersionMessage": true,
+
+  // Python
+  "python.languageServer": "Default",
+  "python.showStartPage": false,
+  "python.analysis.typeCheckingMode": "standard",
+
+  // CMake
+  "cmake.showOptionsMovedNotification": false,
+  "cmake.pinnedCommands": [
+    "workbench.action.tasks.configureTaskRunner",
+    "workbench.action.tasks.runTask"
+  ],
+
+  // Terminal
+  "terminal.integrated.enableMultiLinePasteWarning": "never",
+
+  // JavaScript/TypeScript
+  "typescript.updateImportsOnFileMove.enabled": "always",
+
+  // Prettier
+  "prettier.bracketSameLine": true,
+
+  // Red Hat
+  "redhat.telemetry.enabled": false,
+
+  // Language-specific settings
+  "[nix]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false
+  },
+
+  "[python]": {
+    "editor.formatOnType": true,
+    "editor.tabSize": 4
+  },
+
+  "[cpp]": {
+    "editor.defaultFormatter": "ms-vscode.cpptools"
+  },
+
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+
+  "[json]": {
+    "editor.quickSuggestions": {
+      "strings": true
+    },
+    "editor.suggest.insertMode": "replace"
+  }
+}
+
+
+
+
