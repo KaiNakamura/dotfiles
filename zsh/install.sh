@@ -1,14 +1,10 @@
 #!/bin/bash
 
-# TODO: Add support for non-apt
 # Install zsh
-# sudo apt install -y zsh
-
-# Arch
-# sudo pacman -S zsh
+sudo apt install -y zsh
 
 # Make zsh default
-chsh -s $(which zsh)
+sudo chsh -s $(which zsh)
 
 # Check if Oh My Zsh is already installed
 if [ -d "$HOME/.oh-my-zsh" ]; then
