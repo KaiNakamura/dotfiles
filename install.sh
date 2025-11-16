@@ -24,8 +24,6 @@ INSTALL_ORDER=(
     "nvim"
     "vim"
     "kde"
-    "hypr"
-    "gowall"
 )
 
 # Function to print colored output

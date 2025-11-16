@@ -17,11 +17,17 @@
 # Install ripgrep
 brew install ripgrep
 
-# Install nvim
-curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
-sudo rm -rf /opt/nvim
-sudo tar -C /opt -xzf nvim-linux-x86_64.tar.gz
-rm -f nvim-linux-x86_64.tar.gz
+# Check if nvim is already installed
+if command -v nvim &> /dev/null && nvim --version &> /dev/null; then
+    echo "Neovim is already installed, skipping installation..."
+else
+    # Install nvim
+    TMP_TAR=$(mktemp)
+    curl -L https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz -o "$TMP_TAR"
+    sudo rm -rf /opt/nvim
+    sudo tar -C /opt -xzf "$TMP_TAR"
+    rm -f "$TMP_TAR"
+fi
 
 # Setup kai.nvim config
 REPO_DIR="$HOME/repos/kai.nvim"

@@ -13,3 +13,11 @@ alias cd="z"
 
 # Neovim
 export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
+
+eval "$(starship init zsh)"
+
+eval "$(starship init zsh)"
+
+eval "$(starship init zsh)"
+
+eval "$(starship init zsh)"

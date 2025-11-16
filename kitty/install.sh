@@ -1,9 +1,12 @@
 #!/bin/bash
 
-# TODO: Don't reinstall kity, just
-
-# Install kitty
-curl -L https://sw.kovidgoyal.net/kitty/installer.sh | sh /dev/stdin launch=n
+# Check if kitty is already installed
+if [[ -d "$HOME/.local/kitty.app" ]] || command -v kitty &> /dev/null; then
+    echo "Kitty is already installed, skipping installation..."
+else
+    # Install kitty
+    curl -L https://sw.kovidgoyal.net/kitty/installer.sh | sh /dev/stdin launch=n
+fi
 
 # Create symbolic links to add kitty and kitten to PATH
 # (assuming ~/.local/bin is in system-wide PATH)
