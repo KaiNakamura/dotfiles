@@ -88,13 +88,28 @@ if [[ -f "$TARGET_FILE" ]]; then
         
         if [[ "$line" =~ ^([^=]+)=([^,]+), ]]; then
             action="${BASH_REMATCH[1]}"
-            existing_shortcut="${BASH_REMATCH[2]}"
-            normalized_existing=$(echo "$existing_shortcut" | tr -d ' ' | tr '[:lower:]' '[:upper:]')
+            existing_bindings="${BASH_REMATCH[2]}"
             
-            if [[ -n "${shortcuts_to_set[$normalized_existing]}" ]]; then
-                conflicts_to_unbind+=("$current_section|$action")
-                echo "Unbinding conflicting shortcut: [$current_section] $action = $existing_shortcut"
-            fi
+            # Check all bindings (they can be tab-separated, stored as literal \t or actual tab)
+            # First, replace literal \t with actual tab for consistent processing
+            # Use printf to interpret escape sequences
+            existing_bindings=$(printf "%b" "$existing_bindings")
+            
+            # Split by tab and check each binding
+            IFS=$'\t' read -ra BINDING_ARRAY <<< "$existing_bindings"
+            for existing_binding in "${BINDING_ARRAY[@]}"; do
+                # Trim whitespace
+                existing_binding=$(echo "$existing_binding" | xargs)
+                [[ -z "$existing_binding" ]] && continue
+                
+                normalized_existing=$(echo "$existing_binding" | tr -d ' ' | tr '[:lower:]' '[:upper:]')
+                
+                if [[ -n "${shortcuts_to_set[$normalized_existing]}" ]]; then
+                    conflicts_to_unbind+=("$current_section|$action")
+                    echo "Unbinding conflicting shortcut: [$current_section] $action = $existing_binding"
+                    break  # Only need to add once per action
+                fi
+            done
         fi
     done < "$TARGET_FILE"
 fi
