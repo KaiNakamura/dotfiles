@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# NOTE: Use `kcmshell6 --list` to see available modules, some other useful commands:
+# NOTE: Use `kcmshell5 --list` to see available modules, some other useful commands:
 # `kreadconfig5 --file <file_name> --group <group_name> --key <key_name>`
 # `kwriteconfig5 --file <file_name> --group <group_name> --key <key_name> <value>`
 
@@ -28,9 +28,8 @@ kwriteconfig5 --file kdeglobals --group General --key TerminalApplication ~/.loc
 kwriteconfig5 --file kdeglobals --group General --key TerminalService kitty.desktop
 
 # Firefox
-# TODO: Disabling for now, want to figure out a way to toggle between Firefox and Chrome (I use Firefox for personal and Chrome for work)
-# kwriteconfig5 --file kdeglobals --group General --key BrowserApplication firefox_firefox.desktop
-# kwriteconfig5 --file mimeapps.list --group "Default Applications" --key application/pdf firefox_firefox.desktop;
-# kwriteconfig5 --file mimeapps.list --group "Default Applications" --key text/html firefox_firefox.desktop;
-# kwriteconfig5 --file mimeapps.list --group "Default Applications" --key x-scheme-handler/http firefox_firefox.desktop;
-# kwriteconfig5 --file mimeapps.list --group "Default Applications" --key x-scheme-handler/https firefox_firefox.desktop;
+kwriteconfig5 --file kdeglobals --group General --key BrowserApplication firefox_firefox.desktop
+kwriteconfig5 --file mimeapps.list --group "Default Applications" --key application/pdf firefox_firefox.desktop;
+kwriteconfig5 --file mimeapps.list --group "Default Applications" --key text/html firefox_firefox.desktop;
+kwriteconfig5 --file mimeapps.list --group "Default Applications" --key x-scheme-handler/http firefox_firefox.desktop;
+kwriteconfig5 --file mimeapps.list --group "Default Applications" --key x-scheme-handler/https firefox_firefox.desktop;

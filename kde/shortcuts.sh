@@ -1,7 +1,5 @@
 #!/bin/bash
 
-# TODO: Update (or abandon, I might move away from KDE, but Hyprland keybinds take precedence over these)
-
 # ===== KWin Shortcuts =====
 
 # `kwriteconfig5 --file kglobalshortcutsrc --group kwin --key "KEY_NAME" "BIND,DEFAULT,DESCRIPTION"`
@@ -46,12 +44,12 @@ kwriteconfig5 --file kglobalshortcutsrc --group kwin --key "Window Maximize" "Me
 kwriteconfig5 --file kglobalshortcutsrc --group kwin --key "Window Minimize" "Meta+Alt+Down,Meta+PgDown,Minimize Window"
 
 # ===== Application Shortcuts =====
+#
+# Disable Konsole shortcut
+kwriteconfig5 --file kglobalshortcutsrc --group "services/org.kde.konsole.desktop" --key "_launch" "none"
 
 # Launch Kitty: Ctrl+Alt+T and Meta+N
 kwriteconfig5 --file kglobalshortcutsrc --group "services/kitty.desktop" --key "_launch" "Ctrl+Alt+T"$'\t'"Meta+N"
-
-# Disable Konsole shortcut
-kwriteconfig5 --file kglobalshortcutsrc --group "services/org.kde.konsole.desktop" --key "_launch" "none"
 
 # Launch Firefox: Meta+F
 kwriteconfig5 --file kglobalshortcutsrc --group "services/firefox_firefox.desktop" --key "_launch" "Meta+F"
