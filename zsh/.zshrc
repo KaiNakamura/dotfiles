@@ -1,13 +1,44 @@
-plugins=(
-	git
-)
+export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH
+
+# Oh My Zsh
+export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME="robbyrussell"
+plugins=(git)
+source $ZSH/oh-my-zsh.sh
+
+# Homebrew
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
+# Neovim
+export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
+export PATH="/home/kai/.pixi/bin:$PATH"
+alias v="vim"
+alias nv="nvim"
 
 # Starship
 eval "$(starship init zsh)"
 
-# zoxide
-eval "$(zoxide init zsh)"
-# alias cd="z"
+# Git Aliases
+alias g="git"
+alias gs="git status"
+alias ga="git add"
+alias gm="git commit -m"
+alias gam="git add . && git commit -m"
+alias gb="git branch"
+alias gp="git push"
+alias gpo="git push origin"
+alias gpu="git pull origin"
+alias gc="git checkout"
+alias gl="git log"
 
-# Neovim
-export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
+# k8s
+alias k="kubectl"
+alias kx="kubectx"
+
+# For Cursor (and probably other apps) to not be slow on wayland
+export ELECTRON_OZONE_PLATFORM_HINT=auto
+
+# zoxide
+alias cd="z"
+eval "$(zoxide init zsh)"
+export _ZO_DOCTOR=0
