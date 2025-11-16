@@ -123,6 +123,57 @@ else
     gh auth login -p ssh -w
 fi
 
+# Ensure .ssh directory exists
+mkdir -p "$HOME/.ssh"
+chmod 700 "$HOME/.ssh"
+
+# Determine SSH key path
+SSH_KEY="$HOME/.ssh/id_ed25519"
+SSH_KEY_PUB="$HOME/.ssh/id_ed25519.pub"
+
+# Generate SSH key if none exists
+if [[ ! -f "$SSH_KEY" ]]; then
+    print_info "No SSH key found. Generating SSH key..."
+    ssh-keygen -t ed25519 -C "kaihnakamura@gmail.com" -f "$SSH_KEY" -N ""
+else
+    print_info "SSH key found at $SSH_KEY"
+fi
+
+# Ensure SSH agent is running and key is loaded
+eval "$(ssh-agent -s)" 2>/dev/null || true
+ssh-add "$SSH_KEY" 2>/dev/null || true
+
+# Check if key is uploaded to GitHub and working
+KEY_UPLOADED=false
+if gh auth status &> /dev/null; then
+    # Test SSH connectivity to GitHub
+    print_info "Testing SSH connectivity to GitHub..."
+    if ssh -T git@github.com -o StrictHostKeyChecking=no -o ConnectTimeout=5 &> /dev/null; then
+        KEY_UPLOADED=true
+        print_success "SSH key is configured and working"
+    else
+        # SSH test failed, upload the key
+        print_info "SSH key not working with GitHub. Uploading key..."
+        KEY_TITLE="kai@$(hostname) ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+        gh ssh-key add "$SSH_KEY_PUB" --title "$KEY_TITLE"
+        
+        # Wait a moment for GitHub to process
+        sleep 2
+        
+        # Verify it works now
+        if ssh -T git@github.com -o StrictHostKeyChecking=no -o ConnectTimeout=5 &> /dev/null; then
+            KEY_UPLOADED=true
+            print_success "SSH key uploaded and verified"
+        else
+            print_warning "SSH key uploaded but verification failed. May need a moment to propagate."
+            KEY_UPLOADED=true  # Assume it will work, GitHub sometimes takes a moment
+        fi
+    fi
+else
+    print_warning "GitHub not authenticated. Cannot verify SSH key upload."
+    print_warning "SSH key exists locally but may not be uploaded to GitHub."
+fi
+
 # Install additional dependencies
 sudo apt update && sudo apt install -y \
     cmake \
