@@ -116,17 +116,31 @@ fi
 
 # Authenticate with GitHub
 if gh auth status &> /dev/null; then
-    print_info "GitHub is already authenticated, skipping..."
+    print_info "GitHub is already authenticated, ensuring SSH key scope..."
+    # Refresh to ensure we have SSH key scope
+    gh auth refresh -h github.com -s admin:public_key < /dev/tty > /dev/tty 2>/dev/null || true
 else
     print_info "Authenticating with GitHub..."
     # Enable accessible prompter to avoid escape sequence issues with survey library
-    # The accessible prompter uses a different library that may handle terminal state better
     export GH_ACCESSIBLE_PROMPTER=1
-    # Ensure TERM is set for proper terminal handling
     export TERM="${TERM:-xterm-256color}"
     # gh checks os.Stdin and os.Stdout for TTY detection
-    # Redirect stdin/stdout to /dev/tty for interactive prompts
     gh auth login -p ssh < /dev/tty > /dev/tty
+    
+    # Refresh authentication to add SSH key scope
+    print_info "Refreshing authentication with SSH key scope..."
+    gh auth refresh -h github.com -s admin:public_key < /dev/tty > /dev/tty
+fi
+
+# Verify SSH connectivity after authentication
+print_info "Verifying SSH connectivity to GitHub..."
+if ! ssh -T git@github.com -o StrictHostKeyChecking=no -o ConnectTimeout=5 &> /dev/null; then
+    print_error "SSH authentication to GitHub failed."
+    print_error "Please ensure SSH keys were generated and uploaded during gh auth login."
+    print_error "You may need to run: gh ssh-key add ~/.ssh/id_ed25519.pub"
+    exit 1
+else
+    print_success "SSH authentication is working"
 fi
 
 # Install additional dependencies
@@ -145,7 +159,7 @@ else
     print_info "Cloning dotfiles repository..."
     mkdir -p ~/repos
     cd ~/repos
-    git clone git@github.com:KaiNakamura/dotfiles.git
+    gh repo clone KaiNakamura/dotfiles
     cd dotfiles
 fi
 
