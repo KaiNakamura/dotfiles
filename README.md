@@ -54,3 +54,5 @@ Some other settings you may want to configure:
 
 - [ ] Use symlink for vimrc as well
 - [ ] Add a module for work stuff?
+- [ ] Keybinds for kitty and firefox not working properly ootb
+- [ ] Also firefox gets messed up on install?
