@@ -120,9 +120,15 @@ if gh auth status &> /dev/null; then
 else
     print_info "Authenticating with GitHub..."
     # gh checks os.Stdin and os.Stdout for TTY detection
-    # Redirect all file descriptors to /dev/tty to ensure proper terminal interaction
-    # Reset terminal state before running gh to avoid escape sequence issues
+    # Ensure TERM is set and terminal is in a clean state
+    export TERM="${TERM:-xterm-256color}"
+    # Clear any pending input and reset terminal
+    stty -echo -icanon time 0 min 0 < /dev/tty 2>/dev/null || true
+    # Drain any pending input
+    while read -t 0 < /dev/tty; do read -n 1 < /dev/tty; done 2>/dev/null || true
+    # Restore terminal settings
     stty sane < /dev/tty 2>/dev/null || true
+    # Run gh with proper TTY redirection
     gh auth login -p ssh < /dev/tty > /dev/tty 2> /dev/tty
 fi
 
