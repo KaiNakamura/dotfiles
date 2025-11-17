@@ -144,46 +144,51 @@ eval "$(ssh-agent -s)" > /dev/null
 ssh-add "$SSH_KEY_PATH" 2>/dev/null || true
 
 # Upload SSH key to GitHub
+# gh ssh-key add will fail if scope is missing, but we handle that gracefully
 print_info "Uploading SSH key to GitHub..."
 KEY_TITLE="${USER}@$(hostname) ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
 
-# Check if we can list SSH keys first (tests if we have the required scope)
-if ! timeout 10 gh ssh-key list &>/dev/null; then
-    print_warning "Cannot access SSH keys - may need to refresh authentication with admin:public_key scope"
-    print_info "Attempting to refresh authentication..."
-    if timeout 30 gh auth refresh -h github.com -s admin:public_key < /dev/tty > /dev/tty 2>&1; then
-        print_success "Authentication refreshed"
-    else
-        print_error "Failed to refresh authentication. You may need to run manually:"
-        print_error "  gh auth refresh -h github.com -s admin:public_key"
-        exit 1
-    fi
-fi
-
-# gh ssh-key add handles "already exists" gracefully - it returns success either way
-# Use timeout to prevent hanging, redirect stdin to avoid prompts
-UPLOAD_OUTPUT=$(timeout 30 gh ssh-key add "$SSH_PUB_KEY_PATH" --title "$KEY_TITLE" < /dev/null 2>&1)
+# Try to upload - if it fails due to scope, we'll handle it
+UPLOAD_OUTPUT=$(gh ssh-key add "$SSH_PUB_KEY_PATH" --title "$KEY_TITLE" 2>&1)
 UPLOAD_EXIT=$?
 
-if [[ $UPLOAD_EXIT -eq 124 ]]; then
-    print_error "SSH key upload timed out"
-    exit 1
-elif echo "$UPLOAD_OUTPUT" | grep -q "already exists"; then
-    print_info "SSH key already exists on GitHub"
-elif echo "$UPLOAD_OUTPUT" | grep -q "added to your account"; then
-    print_success "SSH key uploaded to GitHub"
-elif echo "$UPLOAD_OUTPUT" | grep -qi "scope\|permission\|unauthorized\|404"; then
-    print_error "Failed to upload SSH key - missing permissions"
-    print_error "Output: $UPLOAD_OUTPUT"
-    exit 1
-elif [[ $UPLOAD_EXIT -ne 0 ]]; then
-    print_error "Failed to upload SSH key"
-    print_error "Exit code: $UPLOAD_EXIT"
-    print_error "Output: $UPLOAD_OUTPUT"
-    exit 1
+if [[ $UPLOAD_EXIT -eq 0 ]]; then
+    if echo "$UPLOAD_OUTPUT" | grep -q "already exists"; then
+        print_info "SSH key already exists on GitHub"
+    elif echo "$UPLOAD_OUTPUT" | grep -q "added to your account"; then
+        print_success "SSH key uploaded to GitHub"
+    else
+        print_success "SSH key processed"
+    fi
 else
-    # Assume success if we get here (gh returns success even if key exists)
-    print_success "SSH key processed"
+    # Check if it's a scope error
+    if echo "$UPLOAD_OUTPUT" | grep -qi "admin:public_key\|404\|403\|scope\|permission"; then
+        print_warning "Missing admin:public_key scope. Refreshing authentication..."
+        if gh auth refresh -h github.com -s admin:public_key < /dev/tty > /dev/tty 2>&1; then
+            # Retry upload after refresh
+            print_info "Retrying SSH key upload..."
+            RETRY_OUTPUT=$(gh ssh-key add "$SSH_PUB_KEY_PATH" --title "$KEY_TITLE" 2>&1)
+            if [[ $? -eq 0 ]]; then
+                if echo "$RETRY_OUTPUT" | grep -q "added to your account\|already exists"; then
+                    print_success "SSH key uploaded to GitHub"
+                else
+                    print_success "SSH key processed"
+                fi
+            else
+                print_error "Failed to upload SSH key after refresh"
+                print_error "Output: $RETRY_OUTPUT"
+                exit 1
+            fi
+        else
+            print_error "Failed to refresh authentication. Please run manually:"
+            print_error "  gh auth refresh -h github.com -s admin:public_key"
+            exit 1
+        fi
+    else
+        print_error "Failed to upload SSH key:"
+        echo "$UPLOAD_OUTPUT" >&2
+        exit 1
+    fi
 fi
 
 # Verify SSH connectivity with retries (no sleep - just retry)
