@@ -118,20 +118,7 @@ fi
 if gh auth status &> /dev/null; then
     print_info "GitHub is already authenticated, skipping..."
 else
-    # Debug: Check if running interactively
-    print_info "Checking interactive environment..."
-    print_info "TERM: ${TERM:-not set}"
-    print_info "SSH_TTY: ${SSH_TTY:-not set}"
-    print_info "stdin is TTY: $([ -t 0 ] && echo 'yes' || echo 'no')"
-    print_info "stdout is TTY: $([ -t 1 ] && echo 'yes' || echo 'no')"
-    print_info "stderr is TTY: $([ -t 2 ] && echo 'yes' || echo 'no')"
-    print_info "CI: ${CI:-not set}"
-    print_info "DEBIAN_FRONTEND: ${DEBIAN_FRONTEND:-not set}"
-    print_info "USER: ${USER:-not set}"
-    print_info "SUDO_USER: ${SUDO_USER:-not set}"
-    
-    # Force stdin/stdout to use terminal for interactive prompts
-    gh auth login -p ssh < /dev/tty > /dev/tty
+    gh auth login
 fi
 
 # Install additional dependencies
