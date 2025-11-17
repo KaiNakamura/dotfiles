@@ -118,7 +118,7 @@ fi
 if gh auth status &> /dev/null; then
     print_info "GitHub is already authenticated, skipping..."
 else
-    gh auth login
+    bash -c 'gh auth login -p ssh' < /dev/tty > /dev/tty
 fi
 
 # Install additional dependencies
