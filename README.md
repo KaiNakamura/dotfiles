@@ -4,15 +4,38 @@ My personal config for quick and easy setup
 
 ## Installation
 
-### Quick Install
-
-For a fresh [Kubuntu 24.04 LTS](https://cdimage.ubuntu.com/kubuntu/releases/noble/release/) installation, run:
+For a fresh [Kubuntu 24.04 LTS](https://cdimage.ubuntu.com/kubuntu/releases/noble/release/) installation:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/KaiNakamura/dotfiles/main/boot.sh | bash
-```
+# Install essential packages
+sudo apt update && sudo apt install -y \
+    git \
+    curl \
+    wget \
+    tmux \
+    cmake \
+    build-essential
 
-### Manual Install
+# Install Homebrew
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Add Homebrew to PATH
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc
+
+# Install GitHub CLI (and gcc since brew recommends it)
+brew install gh gcc
+
+# Authenticate with GitHub (follow prompts, choose to generate/upload SSH key when asked)
+gh auth login -p ssh
+
+# Clone and install dotfiles
+mkdir -p ~/repos
+cd ~/repos
+gh repo clone KaiNakamura/dotfiles
+cd dotfiles
+./install.sh
+```
 
 If you already have the repository cloned:
 
