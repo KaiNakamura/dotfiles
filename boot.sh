@@ -119,17 +119,14 @@ if gh auth status &> /dev/null; then
     print_info "GitHub is already authenticated, skipping..."
 else
     print_info "Authenticating with GitHub..."
-    # gh checks os.Stdin and os.Stdout for TTY detection
-    # Ensure TERM is set and terminal is in a clean state
+    # Enable accessible prompter to avoid escape sequence issues with survey library
+    # The accessible prompter uses a different library that may handle terminal state better
+    export GH_ACCESSIBLE_PROMPTER=1
+    # Ensure TERM is set for proper terminal handling
     export TERM="${TERM:-xterm-256color}"
-    # Clear any pending input and reset terminal
-    stty -echo -icanon time 0 min 0 < /dev/tty 2>/dev/null || true
-    # Drain any pending input
-    while read -t 0 < /dev/tty; do read -n 1 < /dev/tty; done 2>/dev/null || true
-    # Restore terminal settings
-    stty sane < /dev/tty 2>/dev/null || true
-    # Run gh with proper TTY redirection
-    gh auth login -p ssh < /dev/tty > /dev/tty 2> /dev/tty
+    # gh checks os.Stdin and os.Stdout for TTY detection
+    # Redirect stdin/stdout to /dev/tty for interactive prompts
+    gh auth login -p ssh < /dev/tty > /dev/tty
 fi
 
 # Install additional dependencies
