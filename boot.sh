@@ -116,9 +116,7 @@ fi
 
 # Authenticate with GitHub
 if gh auth status &> /dev/null; then
-    print_info "GitHub is already authenticated, ensuring SSH key scope..."
-    # Refresh to ensure we have SSH key scope
-    gh auth refresh -h github.com -s admin:public_key < /dev/tty > /dev/tty 2>/dev/null || true
+    print_info "GitHub is already authenticated, skipping..."
 else
     print_info "Authenticating with GitHub..."
     # Enable accessible prompter to avoid escape sequence issues with survey library
@@ -126,21 +124,62 @@ else
     export TERM="${TERM:-xterm-256color}"
     # gh checks os.Stdin and os.Stdout for TTY detection
     gh auth login -p ssh < /dev/tty > /dev/tty
-    
-    # Refresh authentication to add SSH key scope
-    print_info "Refreshing authentication with SSH key scope..."
-    gh auth refresh -h github.com -s admin:public_key < /dev/tty > /dev/tty
 fi
 
-# Verify SSH connectivity after authentication
-print_info "Verifying SSH connectivity to GitHub..."
-if ! ssh -T git@github.com -o StrictHostKeyChecking=no -o ConnectTimeout=5 &> /dev/null; then
-    print_error "SSH authentication to GitHub failed."
-    print_error "Please ensure SSH keys were generated and uploaded during gh auth login."
-    print_error "You may need to run: gh ssh-key add ~/.ssh/id_ed25519.pub"
-    exit 1
+# Setup SSH key for GitHub
+SSH_KEY_PATH="$HOME/.ssh/id_ed25519"
+SSH_PUB_KEY_PATH="$SSH_KEY_PATH.pub"
+
+# Generate SSH key if it doesn't exist
+if [[ ! -f "$SSH_KEY_PATH" ]]; then
+    print_info "Generating SSH key..."
+    mkdir -p ~/.ssh
+    ssh-keygen -t ed25519 -C "" -N "" -f "$SSH_KEY_PATH"
+    print_success "SSH key generated"
+fi
+
+# Add SSH key to agent
+print_info "Adding SSH key to agent..."
+eval "$(ssh-agent -s)" > /dev/null
+ssh-add "$SSH_KEY_PATH" 2>/dev/null || true
+
+# Upload SSH key to GitHub
+print_info "Uploading SSH key to GitHub..."
+KEY_TITLE="${USER}@$(hostname) ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+
+# gh ssh-key add handles "already exists" gracefully - it returns success either way
+UPLOAD_OUTPUT=$(gh ssh-key add "$SSH_PUB_KEY_PATH" --title "$KEY_TITLE" 2>&1)
+if echo "$UPLOAD_OUTPUT" | grep -q "already exists"; then
+    print_info "SSH key already exists on GitHub"
 else
+    # Key was successfully uploaded
+    print_success "SSH key uploaded to GitHub"
+fi
+
+# Verify SSH connectivity with retries (no sleep - just retry)
+print_info "Verifying SSH connectivity to GitHub..."
+MAX_RETRIES=5
+RETRY_COUNT=0
+SSH_WORKING=false
+
+while [[ $RETRY_COUNT -lt $MAX_RETRIES ]]; do
+    if ssh -T git@github.com -o StrictHostKeyChecking=no -o ConnectTimeout=5 &> /dev/null; then
+        SSH_WORKING=true
+        break
+    fi
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    if [[ $RETRY_COUNT -lt $MAX_RETRIES ]]; then
+        print_info "SSH not ready yet, retrying ($RETRY_COUNT/$MAX_RETRIES)..."
+    fi
+done
+
+if [[ "$SSH_WORKING" == "true" ]]; then
     print_success "SSH authentication is working"
+else
+    print_error "SSH authentication to GitHub failed after $MAX_RETRIES attempts."
+    print_error "The key may need a moment to propagate. You can verify manually with:"
+    print_error "  ssh -T git@github.com"
+    exit 1
 fi
 
 # Install additional dependencies
