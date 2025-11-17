@@ -130,8 +130,8 @@ else
     print_info "USER: ${USER:-not set}"
     print_info "SUDO_USER: ${SUDO_USER:-not set}"
     
-    print_info "Authenticating with GitHub..."
-    gh auth login -p ssh
+    # Force stdin/stdout to use terminal for interactive prompts
+    gh auth login -p ssh < /dev/tty > /dev/tty
 fi
 
 # Install additional dependencies
