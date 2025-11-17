@@ -120,9 +120,10 @@ if gh auth status &> /dev/null; then
 else
     print_info "Authenticating with GitHub..."
     # gh checks os.Stdin and os.Stdout for TTY detection
-    # We need to ensure gh's stdin/stdout are connected to /dev/tty
-    # Use a subshell with explicit redirection to /dev/tty
-    (gh auth login -p ssh) < /dev/tty > /dev/tty
+    # Redirect all file descriptors to /dev/tty to ensure proper terminal interaction
+    # Reset terminal state before running gh to avoid escape sequence issues
+    stty sane < /dev/tty 2>/dev/null || true
+    gh auth login -p ssh < /dev/tty > /dev/tty 2> /dev/tty
 fi
 
 # Install additional dependencies
