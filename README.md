@@ -56,3 +56,5 @@ Some other settings you may want to configure:
 - [ ] Add a module for work stuff?
 - [ ] Keybinds for kitty and firefox not working properly ootb
 - [ ] Also firefox gets messed up on install?
+- [ ] Disable middle click paste
+- [ ] Maybe different profile pic? Or accent color in KDE?
