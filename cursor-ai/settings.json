@@ -9,6 +9,7 @@
   "editor.minimap.autohide": "mouseover",
   "editor.suggestSelection": "first",
   "editor.wordWrap": "on",
+  "editor.inlayHints.enabled": "off",
 
   // Vim
   "vim.useSystemClipboard": true,
