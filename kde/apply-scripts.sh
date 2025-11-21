@@ -119,47 +119,31 @@ sed -i '/^\[kwin\]/,/^\[/{ /^_launch=Meta+[HJKL]/d; /^_launch=Meta+Shift+[HJKL]/
 # Reload kglobalaccel service first (to register desktop files)
 echo "Reloading kglobalaccel service..."
 if systemctl --user restart plasma-kglobalaccel.service 2>/dev/null; then
-    sleep 2  # Give service time to fully restart and register desktop files
+    sleep 1  # Give service time to register desktop files
     echo "Service reloaded successfully."
 else
     echo "Warning: Failed to restart plasma-kglobalaccel.service"
     echo "You may need to log out and back in for shortcuts to take effect."
 fi
 
-# Register shortcuts AFTER service restart (so they don't get cleared)
+# Register shortcuts AFTER service restart (using kwriteconfig5)
 echo "Registering shortcuts..."
 for shortcut_def in "${shortcuts[@]}"; do
     # Parse shortcut definition (format: id:key_combo:script:friendly_name)
     shortcut_id=$(echo "$shortcut_def" | cut -d':' -f1)
     key_combo=$(echo "$shortcut_def" | cut -d':' -f2)
-    script_name=$(echo "$shortcut_def" | cut -d':' -f3)
     friendly_name=$(echo "$shortcut_def" | cut -d':' -f4)
     section="${shortcut_id}.desktop"
     
     echo "  $key_combo -> $friendly_name"
-    # Write directly to config file (kwriteconfig5 gets cleared by service restart)
-    # Check if section exists, if not create it
-    if ! grep -q "^\[${section}\]" "$CONFIG_FILE" 2>/dev/null; then
-        echo "" >> "$CONFIG_FILE"
-        echo "[${section}]" >> "$CONFIG_FILE"
-        echo "_k_friendly_name=${section}" >> "$CONFIG_FILE"
-    fi
-    # Update _launch key
-    if grep -q "^_launch=" "$CONFIG_FILE" 2>/dev/null && sed -n "/^\[${section}\]/,/^\[/p" "$CONFIG_FILE" | grep -q "^_launch="; then
-        # Update existing _launch line in section
-        sed -i "/^\[${section}\]/,/^\[/s|^_launch=.*|_launch=${key_combo},none,${friendly_name}|" "$CONFIG_FILE"
-    else
-        # Append _launch line to section
-        sed -i "/^\[${section}\]/,/^\[/{ /^\[${section}\]/a_launch=${key_combo},none,${friendly_name}
-        }" "$CONFIG_FILE"
-    fi
+    kwriteconfig5 --file kglobalshortcutsrc --group "$section" --key "_launch" "${key_combo},none,${friendly_name}" 2>/dev/null
 done
 
 # Reload service to pick up the key bindings
 echo "Reloading kglobalaccel service to apply key bindings..."
 if systemctl --user restart plasma-kglobalaccel.service 2>/dev/null; then
     sleep 1
-    # Re-apply shortcuts after restart (they get cleared)
+    # Re-apply shortcuts after restart (they get cleared by service restart)
     for shortcut_def in "${shortcuts[@]}"; do
         shortcut_id=$(echo "$shortcut_def" | cut -d':' -f1)
         key_combo=$(echo "$shortcut_def" | cut -d':' -f2)
