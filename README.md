@@ -59,3 +59,4 @@ Some other settings you may want to configure:
 - [ ] Disable middle click paste
 - [ ] Maybe different profile pic? Or accent color in KDE?
 - [ ] Git config for default branch and also rebase false
+- [ ] Window Managment -> Task Switcher -> Filter windows by Screens (Current screen)
