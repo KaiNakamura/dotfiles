@@ -2,7 +2,7 @@
 # kwin-center-cursor.sh - Helper to center cursor on active window
 
 # Wait a moment for focus/position to settle
-sleep 0.1
+sleep 0.01
 
 # Get active window and move cursor to center
 WINDOW_ID=$(xdotool getactivewindow 2>/dev/null)
