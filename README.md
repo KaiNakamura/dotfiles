@@ -60,3 +60,7 @@ Some other settings you may want to configure:
 - [ ] Maybe different profile pic? Or accent color in KDE?
 - [ ] Git config for default branch and also rebase false
 - [ ] Window Managment -> Task Switcher -> Filter windows by Screens (Current screen)
+- [ ] Fix Cursor/VS Code leader keys not working for panel selection when no file open
+- [ ] Consider changing Meta+Shift+# (move window to desktop) to also change to that desktop
+- [ ] Consider Meta+Ctrl+# to move all windows to that desktop number
+- [ ] Consider Meta+Ctrl+Shift+# to "switch" desktop windows
