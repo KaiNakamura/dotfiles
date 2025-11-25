@@ -64,3 +64,5 @@ Some other settings you may want to configure:
 - [ ] Consider changing Meta+Shift+# (move window to desktop) to also change to that desktop
 - [ ] Consider Meta+Ctrl+# to move all windows to that desktop number
 - [ ] Consider Meta+Ctrl+Shift+# to "switch" desktop windows
+- [ ] Some kind of visual indicator when a window gets focused?
+- [ ] Remove animations for switching desktops
