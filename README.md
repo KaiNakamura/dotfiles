@@ -52,7 +52,7 @@ Some other settings you may want to configure:
 
 ## TODO
 
-- [ ] Use symlink for vimrc as well
+- [ ] Turn off symlink for .zshrc (annoying if you want to make local changes)
 - [ ] Add a module for work stuff?
 - [ ] Keybinds for kitty and firefox not working properly ootb
 - [ ] Also firefox gets messed up on install?
@@ -70,3 +70,4 @@ Some other settings you may want to configure:
 - [ ] Hotkeys for switching between apps? (Like Alt+Shift+# instead of Alt+Tab?)
 - [ ] Would be nice if Meta+HJKL didn't switch focus if we're already on that screen
 - [ ] Some kind of auto-tiling? Similar to TWM behavior (is this even possible in KDE?)
+- [ ] AWS CLI
