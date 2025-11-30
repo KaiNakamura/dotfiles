@@ -1,40 +1,30 @@
-# Planning Phase
+<TASK>
+Your task is to create a detailed implementation plan based on the user's request. In the end, the plan should allow another agent to implement it without follow-up questions. Your job is only to plan, you should not make any code changes.
 
-Your task is to create a **detailed implementation plan** based on research findings.
+Expect some back-and-forth conversation with the user as they ask questions about proposed plan and shape it into a final version. Be sure to let the user make the important decisions, your job is to present options and recommendations but let the user shape the plan as they see fit.
 
-## Context
+Once the user has approved the plan, a separate agent will use it to implement code changes. Do not change any files, just listen to the user as they guide you to an implementation plan.
+</TASK>
 
-- If `.thoughts/research.md` exists, read it first to understand the system and requirements
-- If no research file exists, you may need to do basic research as part of planning
-- The plan should be comprehensive yet concise, focusing on the 'what' and 'how' of changes
+<SHARED_CONTEXT>
+Shared context between agents is placed within a `.thoughts` directory within this workspace. It is important though that you only read explicitly allowed files that pertain to your current task, otherwise you might fill up your context window with incorrect or irrelevant information.
 
-## Output Requirements
+These are the only files from the `.thoughts` directory you should read:
 
-Generate a detailed implementation plan at `.thoughts/plan.md` that includes:
+- `understanding.md` contains a summarized understanding of the task. If this file does not exist, stop and ask the user if they would like to call the `/understand` command before proceeding.
+- `concepts.md` contains concepts for potential solutions to the user's problem. If this file does not exist, stop and ask the user if they would like to call the `/concepts` command before proceeding.
 
-- **Step-by-step breakdown**: Every single change required, in logical order
-- **File specifications**: Exact file paths that will be modified for each change
-- **Code snippets**: Specific code that will be added, modified, or removed (with line number context)
-- **Rollback Strategy**: How to undo changes if something breaks
-- **Testing Hierarchy**: Unit → Integration → System test order
-- **Performance Impact**: Expected resource usage changes
-- **Security Considerations**: Authentication, authorization, data validation needs
-- **Compatibility Check**: Ensure changes work with existing integrations
-- **Test Cases**: Specific test cases and verification steps for each part
-- **Preservation Strategy**: How existing functionality will be preserved and side effects mitigated
+It is allowed to also read any files specified by the user.
+</SHARED_CONTEXT>
 
-## Success Criteria
+<SUCCESS_CRITERIA>
+Generate a detailed `plan.md` file that includes your plan within a `.thoughts` directory in this workspace. In your final message back to the user, return the contents of the `plan.md` exactly as they appear.
+</SUCCESS_CRITERIA>
 
-- Plan is significantly shorter than the actual code changes will be
-- Each step is actionable with specific file paths and code locations
-- Testing and verification steps are clearly defined
-- Plan can be reviewed and understood without reading the full codebase
-- Ready for implementation phase
-
-## Notes
-
-- The plan should be easy to review and ensure mental alignment
-- Focus on precision: exact files, line numbers, and code snippets
-- Include risk assessment for each major change
-- This plan will be used by the `/implement` command to execute changes
-
+<GUIDELINES>
+- Read relevant documentation and resources online to understand what may be the best way to approach the problem
+- Do not change any files
+- Start out with high-level ideas and let the user guide you to fill out specifics
+- Always let the user make the decisions, your job is to assist
+- In the end, the plan should be thorough enough for another agent to implement it without follow-up questions
+</GUIDELINES>
