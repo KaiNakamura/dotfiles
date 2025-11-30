@@ -26,6 +26,13 @@ INSTALL_ORDER=(
     "wayland"
     "kde"
     "cursor-ai"
+    "bat"
+    "btop"
+    "delta"
+    "eza"
+    "fd"
+    "fzf"
+    "tldr"
 )
 
 # Function to print colored output
