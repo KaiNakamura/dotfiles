@@ -15,6 +15,7 @@ WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Explicit installation order based on dependencies
 INSTALL_ORDER=(
+    "wayland"
     "git-config"
     "nerd-font"
     "zsh"
@@ -23,7 +24,6 @@ INSTALL_ORDER=(
     "kitty"
     "nvim"
     "vim"
-    "wayland"
     "kde"
     "cursor-ai"
     "bat"
