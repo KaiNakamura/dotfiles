@@ -17,7 +17,6 @@ WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_ORDER=(
     "wayland"
     "git-config"
-    "aws"
     "nerd-font"
     "zsh"
     "starship"
@@ -34,6 +33,7 @@ INSTALL_ORDER=(
     "fd"
     "fzf"
     "tldr"
+    "aws"
 )
 
 # Function to print colored output
