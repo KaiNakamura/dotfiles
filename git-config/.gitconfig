@@ -7,6 +7,8 @@
 	insteadOf = https://github.com
 [init]
 	defaultBranch = main
+[pull]
+	rebase = false
 [pager]
 	branch = false
 [delta]

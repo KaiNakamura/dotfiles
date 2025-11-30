@@ -36,6 +36,9 @@ kwriteconfig5 --file kwinrc --group Compositing --key AnimationSpeed 0
 # Note: Requires Wayland session and session restart to take effect
 kwriteconfig5 --file kwinrc --group General --key MiddleClickPaste false
 
+# Filter task switcher to show only windows from current desktop
+kwriteconfig5 --file kwinrc --group TabBox --key ShowOnlyCurrentDesktop true
+
 # ===== Default Applications =====
 
 # Kitty
