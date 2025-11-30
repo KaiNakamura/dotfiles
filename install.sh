@@ -24,6 +24,7 @@ INSTALL_ORDER=(
     "nvim"
     "vim"
     "kde"
+    "cursor-ai"
 )
 
 # Function to print colored output
