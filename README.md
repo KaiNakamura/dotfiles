@@ -54,7 +54,7 @@ Some other settings you may want to configure:
 
 - [ ] Consider changing Meta+Shift+# (move window to desktop) to also change to that desktop
 - [ ] Consider Meta+Ctrl+# to move all windows to that desktop number
-- [ ] Consider Meta+Ctrl+Shift+# to "switch" desktop windows
+- [ ] Consider Meta+Ctrl+Shift+# to "switch" desktop windows (i.e., swap the current with the other one)
 - [ ] Hotkeys for switching between apps? (Like Alt+Shift+# instead of Alt+Tab?)
 - [ ] Would be nice if Meta+HJKL didn't switch focus if we're already on that screen
 - [ ] Some kind of visual indicator when a window gets focused?
