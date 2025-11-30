@@ -5,7 +5,7 @@ The user will then verify your understanding is correct. Consider asking follow-
 </TASK>
 
 <SUCCESS_CRITERIA>
-Generate a detailed `understanding.md` file that summarizes your understanding within a `.thoughts` directory in this workspace. In your final message back to the user, return the contents of the `understanding.md` exactly as they appear.
+Generate a detailed `understanding.md` file that summarizes your understanding within a `.thoughts` directory in this workspace. In your final message back to the user, return a condensed version of your summary with a high-level overview.
 </SUCCESS_CRITERIA>
 
 <GUIDELINES>

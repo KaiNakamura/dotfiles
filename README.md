@@ -52,11 +52,10 @@ Some other settings you may want to configure:
 
 ## TODO
 
-- [ ] Turn off symlink for .zshrc (annoying if you want to make local changes)
+- [ ] Make sure the wayland session stuff works on a fresh install
 - [ ] Add a module for work stuff?
 - [ ] Keybinds for kitty and firefox not working properly ootb
 - [ ] Also firefox gets messed up on install?
-- [ ] Disable middle click paste
 - [ ] Maybe different profile pic? Or accent color in KDE?
 - [ ] Git config for default branch and also rebase false
 - [ ] Window Managment -> Task Switcher -> Filter windows by Screens (Current screen)

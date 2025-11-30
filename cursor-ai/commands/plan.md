@@ -18,7 +18,7 @@ It is allowed to also read any files specified by the user.
 </SHARED_CONTEXT>
 
 <SUCCESS_CRITERIA>
-Generate a detailed `plan.md` file that includes your plan within a `.thoughts` directory in this workspace. In your final message back to the user, return the contents of the `plan.md` exactly as they appear.
+Generate a detailed `plan.md` file that includes your plan within a `.thoughts` directory in this workspace. In your final message back to the user, return a condensed version of your summary with a high-level overview.
 </SUCCESS_CRITERIA>
 
 <GUIDELINES>

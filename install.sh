@@ -23,6 +23,7 @@ INSTALL_ORDER=(
     "kitty"
     "nvim"
     "vim"
+    "wayland"
     "kde"
     "cursor-ai"
 )

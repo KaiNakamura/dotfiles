@@ -134,18 +134,90 @@ done
 echo "Unbound $unbinds_count conflicting shortcuts."
 echo "Applied $shortcuts_applied shortcuts."
 
-# Reload shortcuts by restarting kglobalaccel service
-echo "Reloading kglobalaccel service..."
+# Reload shortcuts
+# On Wayland, kglobalaccel is embedded in kwin_wayland, not a standalone systemd service
+# On X11, kglobalaccel runs as a standalone systemd service
+# Detect session type to use the appropriate reload method
+echo "Reloading keyboard shortcuts..."
 
-if systemctl --user restart plasma-kglobalaccel.service; then
-    sleep 1
-    echo "Shortcuts reloaded successfully."
-    echo "Note: You may need to log out and back in for all shortcuts to take full effect."
+# Detect session type
+SESSION_TYPE="${XDG_SESSION_TYPE:-unknown}"
+if [[ "$SESSION_TYPE" == "wayland" ]] || [[ -n "$WAYLAND_DISPLAY" ]]; then
+    SESSION_TYPE="wayland"
 else
-    echo "Error: Failed to restart plasma-kglobalaccel.service"
-    echo "Changes have been saved to ~/.config/kglobalshortcutsrc"
-    echo "Please log out and back in, or restart KDE for changes to take effect."
-    exit 1
+    SESSION_TYPE="x11"
+fi
+
+if [[ "$SESSION_TYPE" == "wayland" ]]; then
+    # Wayland: kglobalaccel is embedded in kwin_wayland
+    # Systemd service restart will fail because D-Bus name is already registered
+    # Use D-Bus reload method instead
+    echo "Detected Wayland session - using D-Bus reload method..."
+    
+    if command -v qdbus &> /dev/null && qdbus org.kde.KWin /KWin &>/dev/null 2>&1; then
+        echo "Attempting to reload shortcuts via D-Bus..."
+        if qdbus org.kde.KWin /KWin reconfigure &>/dev/null 2>&1; then
+            echo "Shortcuts reloaded via D-Bus."
+        else
+            echo "D-Bus reload attempted. Changes saved to ~/.config/kglobalshortcutsrc"
+            echo "Note: You may need to log out and back in for all shortcuts to take full effect."
+        fi
+    else
+        echo "Changes saved to ~/.config/kglobalshortcutsrc"
+        echo "Note: You may need to log out and back in for all shortcuts to take full effect."
+    fi
+else
+    # X11: kglobalaccel runs as standalone systemd service
+    # Prefer systemd restart, fall back to D-Bus if needed
+    echo "Detected X11 session - attempting systemd service restart..."
+    
+    if systemctl --user list-unit-files | grep -q "plasma-kglobalaccel.service"; then
+        # Check if service is active before trying restart
+        if systemctl --user is-active --quiet plasma-kglobalaccel.service; then
+            if systemctl --user restart plasma-kglobalaccel.service; then
+                sleep 1
+                echo "Shortcuts reloaded successfully via systemd service restart."
+            else
+                echo "Warning: Failed to restart plasma-kglobalaccel.service, trying D-Bus reload..."
+                # Fallback to D-Bus reload if systemd restart fails
+                if command -v qdbus &> /dev/null && qdbus org.kde.KWin /KWin &>/dev/null 2>&1; then
+                    if qdbus org.kde.KWin /KWin reconfigure &>/dev/null 2>&1; then
+                        echo "Shortcuts reloaded via D-Bus fallback."
+                    else
+                        echo "Changes saved to ~/.config/kglobalshortcutsrc"
+                        echo "Please log out and back in, or restart KDE for changes to take effect."
+                    fi
+                else
+                    echo "Changes saved to ~/.config/kglobalshortcutsrc"
+                    echo "Please log out and back in, or restart KDE for changes to take effect."
+                fi
+            fi
+        else
+            # Service exists but isn't running - try to start it
+            echo "Service not running, attempting to start..."
+            if systemctl --user start plasma-kglobalaccel.service; then
+                echo "Service started successfully."
+            else
+                echo "Warning: Could not start plasma-kglobalaccel.service"
+                echo "Changes saved to ~/.config/kglobalshortcutsrc"
+                echo "Please log out and back in, or restart KDE for changes to take effect."
+            fi
+        fi
+    else
+        echo "Warning: plasma-kglobalaccel.service not found, trying D-Bus reload..."
+        # Fallback to D-Bus if systemd service doesn't exist
+        if command -v qdbus &> /dev/null && qdbus org.kde.KWin /KWin &>/dev/null 2>&1; then
+            if qdbus org.kde.KWin /KWin reconfigure &>/dev/null 2>&1; then
+                echo "Shortcuts reloaded via D-Bus fallback."
+            else
+                echo "Changes saved to ~/.config/kglobalshortcutsrc"
+                echo "Please log out and back in, or restart KDE for changes to take effect."
+            fi
+        else
+            echo "Changes saved to ~/.config/kglobalshortcutsrc"
+            echo "Please log out and back in, or restart KDE for changes to take effect."
+        fi
+    fi
 fi
 
 echo "Done! Shortcuts applied."
