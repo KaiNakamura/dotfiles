@@ -64,7 +64,6 @@ Some other settings you may want to configure:
 - [ ] Consider Meta+Ctrl+# to move all windows to that desktop number
 - [ ] Consider Meta+Ctrl+Shift+# to "switch" desktop windows
 - [ ] Some kind of visual indicator when a window gets focused?
-- [ ] Remove animations for switching desktops
 - [ ] More CLI tools like eza, bat, etc. (look through my nixos config and select)
 - [ ] Hotkeys for switching between apps? (Like Alt+Shift+# instead of Alt+Tab?)
 - [ ] Would be nice if Meta+HJKL didn't switch focus if we're already on that screen
