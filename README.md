@@ -65,6 +65,7 @@ Some other settings you may want to configure:
 - [ ] Maybe different profile pic? Or accent color in KDE?
 - [ ] Fix Cursor/VS Code leader keys not working for panel selection when no file open (Update: actually this does seem to work, I think it just seems to not sometimes because it takes time for vim keybinds to load, any way to speed that up?)
 - [ ] Some kind of auto-tiling? Similar to TWM behavior (is this even possible in KDE?)
+- [ ] Blur terminal
 
 ### Notes for Agentic Workflow
 
