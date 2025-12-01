@@ -29,3 +29,12 @@ if [[ -f "$WORKDIR/settings.sh" ]]; then
 else
     echo "settings.sh not found in $WORKDIR"
 fi
+
+# Configure scripts
+if [[ -f "$WORKDIR/apply-scripts.sh" ]]; then
+    echo "Configuring scripts..."
+    chmod +x "$WORKDIR/apply-scripts.sh"
+    "$WORKDIR/apply-scripts.sh"
+else
+    echo "apply-scripts.sh not found in $WORKDIR"
+fi

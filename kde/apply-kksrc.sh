@@ -41,7 +41,12 @@ while IFS= read -r line; do
         keybindings="${BASH_REMATCH[2]}"
         action=$(echo "$action" | xargs)
         keybindings=$(echo "$keybindings" | xargs)
-        [[ -z "$keybindings" ]] && continue
+        # If keybindings is empty, unbind the action
+        if [[ -z "$keybindings" ]]; then
+            kwin_actions+=("$action")
+            kwin_values+=("none")
+            continue
+        fi
         
         # Process bindings
         IFS=';' read -ra BINDINGS <<< "$keybindings"
@@ -126,8 +131,16 @@ done
 # Apply all KWin shortcuts
 shortcuts_applied=0
 for i in "${!kwin_actions[@]}"; do
-    if kwriteconfig5 --file kglobalshortcutsrc --group kwin --key "${kwin_actions[$i]}" "${kwin_values[$i]}" 2>/dev/null; then
-        ((shortcuts_applied++))
+    if [[ "${kwin_values[$i]}" == "none" ]]; then
+        # Unbind shortcut
+        if kwriteconfig5 --file kglobalshortcutsrc --group kwin --key "${kwin_actions[$i]}" "none" 2>/dev/null; then
+            ((shortcuts_applied++))
+        fi
+    else
+        # Bind shortcut
+        if kwriteconfig5 --file kglobalshortcutsrc --group kwin --key "${kwin_actions[$i]}" "${kwin_values[$i]}" 2>/dev/null; then
+            ((shortcuts_applied++))
+        fi
     fi
 done
 
