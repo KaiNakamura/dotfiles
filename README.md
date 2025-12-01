@@ -65,3 +65,10 @@ Some other settings you may want to configure:
 - [ ] Maybe different profile pic? Or accent color in KDE?
 - [ ] Fix Cursor/VS Code leader keys not working for panel selection when no file open (Update: actually this does seem to work, I think it just seems to not sometimes because it takes time for vim keybinds to load, any way to speed that up?)
 - [ ] Some kind of auto-tiling? Similar to TWM behavior (is this even possible in KDE?)
+
+### Notes for Agentic Workflow
+
+Kind of separate from TODO but also under the same umbrella. Planning out improvements for agentic workflows and sticking points I'm noticing while working with Cursor commands (will maybe help things when looking at OpenCode later).
+
+- I want some way of being more permissive for what agents are allowed to touch. Oftentimes I'll have to approve requests for touching `.thoughts` files, but they should always be allowed to touch these.
+- Some way to avoid colliding environments (containerized seems like the way to go, but there's also large overhead in that, Git worktrees might be another option but things could get messy if they're making their own `.thoughts` directory instead of a shared one). Maybe everything on my local machine? But might make being permissive for what it can/can't do a bit harder...
