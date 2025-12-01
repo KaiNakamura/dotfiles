@@ -42,3 +42,21 @@ export ELECTRON_OZONE_PLATFORM_HINT=auto
 alias cd="z"
 eval "$(zoxide init zsh)"
 export _ZO_DOCTOR=0
+
+# bat
+# Remove decorations and disable pager, this is useful for things that
+# expect `cat` to behave like `cat`.
+alias cat="bat --style plain --pager never"
+
+# eza
+# Default options: --group-directories-first --icons
+alias ls="eza --group-directories-first --icons"
+alias la="eza -a --group-directories-first --icons"
+alias ll="eza -al --group-directories-first --icons"
+alias lt="eza -a --tree --level=1 --group-directories-first --icons"
+
+# fzf
+# Setup fzf key bindings and fuzzy completion
+# This is typically done by $(brew --prefix)/opt/fzf/install, but we source it here
+# to ensure it's available in the shell
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh

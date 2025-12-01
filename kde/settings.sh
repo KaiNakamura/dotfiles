@@ -27,8 +27,17 @@ fi
 kwriteconfig5 --file ksmserverrc --group General --key loginMode emptySession
 
 # Number of Virtual Desktops
-kwriteconfig5 --file kwinrc --group Desktops --key Number 5
+kwriteconfig5 --file kwinrc --group Desktops --key Number 10
 
+# Disable animations (set animation speed to instant)
+kwriteconfig5 --file kwinrc --group Compositing --key AnimationSpeed 0
+
+# Disable middle-click paste
+# Note: Requires Wayland session and session restart to take effect
+kwriteconfig5 --file kwinrc --group General --key MiddleClickPaste false
+
+# Filter task switcher to show only windows from current desktop
+kwriteconfig5 --file kwinrc --group TabBox --key ShowOnlyCurrentDesktop true
 
 # ===== Default Applications =====
 

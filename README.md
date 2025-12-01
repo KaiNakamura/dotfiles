@@ -52,11 +52,16 @@ Some other settings you may want to configure:
 
 ## TODO
 
-- [ ] Use symlink for vimrc as well
+- [ ] Consider changing Meta+Shift+# (move window to desktop) to also change to that desktop
+- [ ] Consider Meta+Ctrl+# to move all windows to that desktop number
+- [ ] Consider Meta+Ctrl+Shift+# to "switch" desktop windows (i.e., swap the current with the other one)
+- [ ] Hotkeys for switching between apps? (Like Alt+Shift+# instead of Alt+Tab?)
+- [ ] Would be nice if Meta+HJKL didn't switch focus if we're already on that screen
+- [ ] Some kind of visual indicator when a window gets focused?
+- [ ] Make sure the wayland session stuff works on a fresh install
 - [ ] Add a module for work stuff?
 - [ ] Keybinds for kitty and firefox not working properly ootb
 - [ ] Also firefox gets messed up on install?
-- [ ] Disable middle click paste
 - [ ] Maybe different profile pic? Or accent color in KDE?
-- [ ] Git config for default branch and also rebase false
-- [ ] Window Managment -> Task Switcher -> Filter windows by Screens (Current screen)
+- [ ] Fix Cursor/VS Code leader keys not working for panel selection when no file open (Update: actually this does seem to work, I think it just seems to not sometimes because it takes time for vim keybinds to load, any way to speed that up?)
+- [ ] Some kind of auto-tiling? Similar to TWM behavior (is this even possible in KDE?)
