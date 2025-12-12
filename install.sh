@@ -24,6 +24,7 @@ INSTALL_ORDER=(
     "kitty"
     "nvim"
     "vim"
+    "ydotool"
     "kde"
     "cursor-ai"
     "bat"
