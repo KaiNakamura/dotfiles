@@ -1,30 +1,27 @@
-<TASK>
-Your task is to create a detailed implementation plan based on the user's request. In the end, the plan should allow another agent to implement it without follow-up questions. Your job is only to plan, you should not make any code changes.
+<TASK> Your task is to create an implementation plan based on the user's request. The plan will be provided to another agent for implementation. Your job is only to plan, you should not make any code changes.
 
-Expect some back-and-forth conversation with the user as they ask questions about proposed plan and shape it into a final version. Be sure to let the user make the important decisions, your job is to present options and recommendations but let the user shape the plan as they see fit.
+Expect some back-and-forth conversation with the user as they ask questions about proposed plan and shape it into a final version. Your plan should start out at a rough high-level and become more detailed as the user helps fill in more details. Be sure to let the user make the important decisions, your job is to present options and recommendations but let the user shape the plan as they see fit.
 
-Once the user has approved the plan, a separate agent will use it to implement code changes. Do not change any files, just listen to the user as they guide you to an implementation plan.
+@shared-thoughts
+
+Steps:
+1. Determine the branch and current iteration
+2. Read these thoughts, follow @read-only-specified-thoughts:
+    - `.thoughts/{BRANCH}/problem.md`: Problem statement
+    - `.thoughts/{BRANCH}/iteration-NN/understanding-NN.md` - The most recent (highest number) understanding summary
+    - `.thoughts/{BRANCH}/iteration-NN/concepts-NN.md` - The most recent (highest number) concepts
+    - Any thoughts explicitly specified by the user
+3. Create a new `.thoughts/{BRANCH}/iteration-NN/plan/plan-NN.md` file at the next number (e.g., if the most recent file is `plan-01.md`, write to `plan-02.md`)
 </TASK>
 
-<SHARED_CONTEXT>
-Shared context between agents is placed within a `.thoughts` directory within this workspace. It is important though that you only read explicitly allowed files that pertain to your current task, otherwise you might fill up your context window with incorrect or irrelevant information.
-
-These are the only files from the `.thoughts` directory you should read:
-
-- `understanding.md` contains a summarized understanding of the task. If this file does not exist, stop and ask the user if they would like to call the `/understand` command before proceeding.
-- `concepts.md` contains concepts for potential solutions to the user's problem. If this file does not exist, stop and ask the user if they would like to call the `/concepts` command before proceeding.
-
-It is allowed to also read any files specified by the user.
-</SHARED_CONTEXT>
-
 <SUCCESS_CRITERIA>
-Generate a detailed `plan.md` file that includes your plan within a `.thoughts` directory in this workspace. In your final message back to the user, return a condensed version of your summary with a high-level overview.
+- `.thoughts/{BRANCH}/iteration-NN/plan/plan-NN.md` created in current iteration
+- No code files have been changed
 </SUCCESS_CRITERIA>
 
 <GUIDELINES>
+- @read-only-specified-thoughts
 - Read relevant documentation and resources online to understand what may be the best way to approach the problem
-- Do not change any files
 - Start out with high-level ideas and let the user guide you to fill out specifics
 - Always let the user make the decisions, your job is to assist
-- In the end, the plan should be thorough enough for another agent to implement it without follow-up questions
 </GUIDELINES>
