@@ -1,13 +1,25 @@
 [Unit]
 Description=ydotool daemon
+After=systemd-modules-load.service
 After=graphical.target
+Requires=graphical.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/ydotoold
-Restart=on-failure
+# Use new version from /usr/local/bin if available, fallback to /usr/bin
+# New version: use /tmp/.ydotool_socket with proper permissions
+# Old version: uses /tmp/.ydotool_socket by default
+ExecStart=/bin/sh -c 'if [ -f /usr/local/bin/ydotoold ]; then /usr/local/bin/ydotoold --socket-path=/tmp/.ydotool_socket --socket-perm=0666; else /usr/bin/ydotoold; fi'
+ExecStartPost=/bin/sh -c 'chmod 666 /tmp/.ydotool_socket || true'
+Restart=always
 RestartSec=5
+StartLimitIntervalSec=0
+User=root
+Group=input
+UMask=0000
+StandardOutput=journal
+StandardError=journal
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target
 
