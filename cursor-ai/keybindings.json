@@ -3,7 +3,6 @@
   // DISABLES - All Default Conflicts
   // Must come first as keybindings are processed in order
   // ============================================
-  
   // Ctrl+W disables
   {
     "key": "ctrl+w",
@@ -25,7 +24,6 @@
     "key": "ctrl+w",
     "command": "-workbench.action.closeEditor"
   },
-  
   // Ctrl+Q disables
   {
     "key": "ctrl+q",
@@ -35,13 +33,11 @@
     "key": "ctrl+q",
     "command": "-workbench.action.closeWindow"
   },
-  
   // Alt+Q disables
   {
     "key": "alt+q",
     "command": "-workbench.action.closeWindow"
   },
-  
   // Alt+H/L disables
   {
     "key": "alt+h",
@@ -58,7 +54,6 @@
     "command": "-toggleFindInSelection",
     "when": "editorFocus"
   },
-  
   // Ctrl+O/I disables
   {
     "key": "ctrl+o",
@@ -84,7 +79,6 @@
     "command": "-extension.vim_ctrl+i",
     "when": "editorTextFocus && vim.active && vim.use<C-i> && !inDebugRepl"
   },
-  
   // Ctrl+L disables - Composer/Chat panel
   {
     "key": "ctrl+l",
@@ -102,7 +96,15 @@
     "key": "ctrl+l",
     "command": "-workbench.action.chat.focus"
   },
-  
+  {
+    "key": "ctrl+l",
+    "command": "-composer.sendToAgent",
+    "when": "editorHasPromptBar && editorPromptBarFocused"
+  },
+  {
+    "key": "ctrl+l",
+    "command": "-aichat.newchataction"
+  },
   // Ctrl+K disables - Quick edit
   {
     "key": "ctrl+k",
@@ -112,18 +114,15 @@
     "key": "ctrl+k",
     "command": "-editor.action.quickCommand"
   },
-
   // ============================================
   // GLOBAL CONTEXT - Works from anywhere
   // ============================================
-  
   // Escape - Universal return to editor
   {
     "key": "escape",
     "command": "workbench.action.focusActiveEditorGroup",
     "when": "!editorTextFocus || sideBarFocus || panelFocus || auxiliaryBarFocus"
   },
-  
   // Vim leader keybindings - When nothing is selected (no editor focused or vim not active)
   // These work when there's no editor open or vim isn't handling the keys
   // Exclude all input contexts (command palette, search, etc.) so space works normally there
@@ -137,11 +136,9 @@
     "command": "composer.startComposerPrompt",
     "when": "!editorFocus && !quickInputVisible && !inQuickOpen && !inputFocus && !textInputFocus"
   },
-
   // ============================================
   // EDITOR CONTEXT - When editor is focused
   // ============================================
-  
   // Split operations - Create editor splits
   {
     "key": "ctrl+o",
@@ -153,7 +150,6 @@
     "command": "workbench.action.splitEditorRight",
     "when": "editorFocus"
   },
-  
   // Window navigation - Navigate between split windows
   {
     "key": "ctrl+h",
@@ -175,7 +171,6 @@
     "command": "workbench.action.navigateRight",
     "when": "editorTextFocus && vim.active && !inDebugRepl"
   },
-  
   // Tab navigation - Switch between editor tabs
   {
     "key": "alt+h",
@@ -192,7 +187,6 @@
     "command": "workbench.action.closeActiveEditor",
     "when": "!auxiliaryBarFocus"
   },
-  
   // Font zoom - Adjust editor font size
   {
     "key": "ctrl+shift+=",
@@ -202,11 +196,9 @@
     "key": "ctrl+shift+-",
     "command": "editor.action.fontZoomOut"
   },
-
   // ============================================
   // PANEL/SIDEBAR CONTEXT - When panels/sidebars are focused
   // ============================================
-  
   // Close operations - Context-dependent close (sidebar/panel/editor)
   {
     "key": "ctrl+q",
@@ -228,7 +220,6 @@
     "command": "workbench.action.closeActiveEditor",
     "when": "editorFocus"
   },
-  
   // Resize operations - Adjust panel/sidebar size
   {
     "key": "ctrl+=",
@@ -240,11 +231,18 @@
     "command": "workbench.action.decreaseViewSize",
     "when": "sideBarFocus || panelFocus || auxiliaryBarFocus"
   },
-
   // ============================================
   // COMPOSER CONTEXT - When composer is focused
   // ============================================
-  
+  {
+    "key": "alt+o",
+    "command": "composer.sendToAgent",
+    "when": "editorHasPromptBar && editorPromptBarFocused"
+  },
+  {
+    "key": "alt+o",
+    "command": "aichat.newchataction"
+  },
   // Switch between AI modes
   {
     "key": "alt+a",
@@ -258,7 +256,6 @@
     "key": "alt+s",
     "command": "composerMode.chat"
   },
-  
   // Chat navigation and management - Only when composer is focused
   // Disable any default Alt+N bindings that might close composer
   {
@@ -294,11 +291,9 @@
     "command": "composer.selectNextComposer",
     "when": "auxiliaryBarFocus"
   },
-
   // ============================================
   // EXPLORER CONTEXT - When file explorer is focused
   // ============================================
-  
   // File operations - Create, delete, rename files
   {
     "key": "ctrl+n",
