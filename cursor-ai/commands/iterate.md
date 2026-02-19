@@ -9,7 +9,7 @@ Steps:
 3. Otherwise, if there are previous iterations, find the current iteration (highest `.thoughts/{BRANCH}/iteration-NN/`)
    - Append a summary to `.thoughts/{BRANCH}/iterations.md` that captures the reason we need to reiterate. Our goal is to guide new agents so they don't repeat the same mistakes.
    - Create new iteration directory: `.thoughts/{BRANCH}/iteration-NN/` (next number)
-4. Create `.thoughts/{BRANCH}/iteration-NN/progress.md` with a high level overview of the problem context
+4. Create `.thoughts/{BRANCH}/iteration-NN/progress.md` with a high-level overview of the problem context
 </TASK>
 
 <SUCCESS_CRITERIA>
