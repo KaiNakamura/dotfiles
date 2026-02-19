@@ -2,8 +2,11 @@
 
 set -e
 
-# Install Claude Code
-curl -fsSL https://claude.ai/install.sh | bash
+if command -v claude &>/dev/null; then
+    claude --update
+else
+    curl -fsSL https://claude.ai/install.sh | bash
+fi
 
 # Get the directory where this script is located
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
