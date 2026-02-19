@@ -26,6 +26,7 @@ INSTALL_ORDER=(
     "vim"
     "kde"
     "cursor-ai"
+    "claude"
     "bat"
     "btop"
     "delta"
