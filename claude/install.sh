@@ -27,3 +27,6 @@ cp -r "$WORKDIR/rules/"* ~/.claude/rules/
 
 # Copy skills directory (overwrites existing files)
 cp -r "$WORKDIR/skills/"* ~/.claude/skills/
+
+# Copy agents
+cp "$WORKDIR/agents/"* ~/.claude/agents/

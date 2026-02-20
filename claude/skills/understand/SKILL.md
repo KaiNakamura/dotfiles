@@ -13,23 +13,28 @@ Your task is to thoroughly understand the existing codebase and how it pertains 
     - `.thoughts/iterations.md`: Cross-iteration summary
     - `.thoughts/iteration-NN/progress.md`: Progress summary for the current iteration
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
-3. Analyze the codebase to understand the user's request
-    - Read relevant documentation within the codebase whenever possible
-    - Search for relevant documentation online for external tools, packages, etc.
-    - Trace identifiers (functions, variables, classes, etc.) as deep as you can
-4. Ask follow-up questions for clarification
-5. Create a new `.thoughts/iteration-NN/understanding-NN.md` file at the next version number
-
-The user will then verify your understanding is correct. Consider asking follow-up questions back to the user for additional clarification on any unclear parts. Do not change any files and do not propose solutions, just give an overview of your understanding of the problem and await user confirmation that it is correct.
+3. Analyze the research question and plan our what teammate agents are needed to fully understand the problem
+    - You have access to the following teammate agents:
+        - `web-searcher`: Searches the web for documentation, examples, resources, etc. Use when research benefits from consulting external information.
+        - `code-searcher`: Searches and reads the local codebase. Use to learn existing code structure, file layout, patterns, or tracing how something is implemented locally.
+    - How many teammates of each type are warranted? (You may spawn 0, 1, or multiple of either type. For trivial questions or if specified by the user via `$ARFUMENTS`, skip teammates and research directly.)
+4. Create an agent team and for each teammate, provide:
+    - Its specific, focused research question
+    - Relevant context: problem summary, current iteration, what is already known
+5. Wait for all agents to complete and collect their text summaries
+6. Synthesize all summaries into `.thoughts/iteration-NN/understanding/understanding-NN.md`
+7. Ask follow-up questions for clarification if anything remains unclear
+8. Clean up the team when done
 
 ## Success Criteria
 
-- `.thoughts/iteration-NN/understanding-NN.md` created in current iteration
+- `.thoughts/iteration-NN/understanding/understanding-NN.md` created in current iteration
+- Produce a coherent, unified document, not a concatenation of agent outputs
 - No code files have been changed
 - Summary returned to user for verification
 - Summary does not contain any potential solutions, only an understanding of the problem
 
 ## Guidelines
 
-- Read relevant documentation and resources online
 - Ask follow-up questions to the user to clarify unclear parts
+- Do not propose solutions, just give an overview of your understanding of the problem
