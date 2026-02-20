@@ -54,11 +54,11 @@ extract_prefixes_from_json() {
   local json="$1"
   echo "$json" | jq -r '.[]? // empty' 2>/dev/null \
     | grep -E '^Bash\(' \
-    | sed -E 's/^Bash\(//; s/(:\*)?\)$//'
+    | sed -E 's/^Bash\(//; s/\s*\*?\)$//'
 }
 
 # Extract allowed Bash command prefixes from a settings file
-# Matches patterns like Bash(ls:*), Bash(git log:*), etc.
+# Matches patterns like Bash(ls *), Bash(git log *), etc.
 extract_prefixes_from_file() {
   local file="$1"
   if [[ ! -f "$file" ]]; then
@@ -68,7 +68,7 @@ extract_prefixes_from_file() {
   debug "Reading prefixes from: $file"
   jq -r '.permissions.allow[]? // empty' "$file" 2>/dev/null \
     | grep -E '^Bash\(' \
-    | sed -E 's/^Bash\(//; s/(:\*)?\)$//'
+    | sed -E 's/^Bash\(//; s/\s*\*?\)$//'
 }
 
 # Find git root directory (project root)
