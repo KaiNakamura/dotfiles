@@ -1,0 +1,24 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(ls)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(git status)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git branch *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(echo *)",
+      "Bash(which *)",
+      "Bash(* --version)",
+      "Bash(* --help)",
+      "Edit(.thoughts/**)",
+      "Write(.thoughts/**)"
+    ]
+  }
+}
