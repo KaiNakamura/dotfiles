@@ -6,6 +6,7 @@
   },
   "permissions": {
     "allow": [
+      "Read(*)",
       "Edit(.thoughts/**)",
       "Write(.thoughts/**)",
       "Bash(* --version)",
