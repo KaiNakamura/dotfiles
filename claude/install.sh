@@ -14,6 +14,10 @@ WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Create target directories
 mkdir -p ~/.claude/rules
 mkdir -p ~/.claude/skills
+mkdir -p ~/.claude/agents
+
+# Copy settings.json
+cp "$WORKDIR/settings.json" ~/.claude/settings.json
 
 # Copy CLAUDE.md
 cp "$WORKDIR/CLAUDE.md" ~/.claude/CLAUDE.md
@@ -23,3 +27,6 @@ cp -r "$WORKDIR/rules/"* ~/.claude/rules/
 
 # Copy skills directory (overwrites existing files)
 cp -r "$WORKDIR/skills/"* ~/.claude/skills/
+
+# Copy agents
+cp "$WORKDIR/agents/"* ~/.claude/agents/

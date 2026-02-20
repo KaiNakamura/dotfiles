@@ -12,14 +12,14 @@ Expect some back-and-forth conversation with the user as they ask questions abou
 1. Determine the current iteration (highest `iteration-NN/` directory in `.thoughts/`)
 2. Read these thoughts:
     - `.thoughts/problem.md`: Problem statement
-    - `.thoughts/iteration-NN/understanding-NN.md`: The most recent (highest number) understanding summary
-    - `.thoughts/iteration-NN/concepts-NN.md`: The most recent (highest number) concepts
+    - `.thoughts/iteration-NN/understanding/understanding-NN.md`: The most recent (highest number) understanding summary
+    - `.thoughts/iteration-NN/concepts/concepts-NN.md`: The most recent (highest number) concepts
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
-3. Create a new `.thoughts/iteration-NN/plan-NN.md` file at the next version number
+3. Create a new `.thoughts/iteration-NN/plan/plan-NN.md` file at the next version number
 
 ## Success Criteria
 
-- `.thoughts/iteration-NN/plan-NN.md` created in current iteration
+- `.thoughts/iteration-NN/plan/plan-NN.md` created in current iteration
 - No code files have been changed
 
 ## Guidelines

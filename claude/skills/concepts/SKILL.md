@@ -10,13 +10,13 @@ Your task is to generate concepts for solving the user's problem. Propose many p
 1. Determine the current iteration (highest `iteration-NN/` directory in `.thoughts/`)
 2. Read these thoughts:
     - `.thoughts/problem.md`: Problem statement
-    - `.thoughts/iteration-NN/understanding-NN.md`: The most recent (highest number) understanding summary
+    - `.thoughts/iteration-NN/understanding/understanding-NN.md`: The most recent (highest number) understanding summary
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
-3. Create a new `.thoughts/iteration-NN/concepts-NN.md` file at the next version number
+3. Create a new `.thoughts/iteration-NN/concepts/concepts-NN.md` file at the next version number
 
 ## Success Criteria
 
-- `.thoughts/iteration-NN/concepts-NN.md` created in current iteration
+- `.thoughts/iteration-NN/concepts/concepts-NN.md` created in current iteration
 - No code files have been changed
 - Multiple options presented with recommendations
 
