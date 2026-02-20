@@ -28,8 +28,6 @@
       "Bash(done)",
       "Bash(ruff *)",
       "Bash(nvidia-smi *)",
-      "Bash(pdflatex *)",
-      "Bash(biber *)",
       "Bash(tmux ls *)",
       "Bash(tmux capture-pane *)",
       "Bash(tmux list-sessions *)",
