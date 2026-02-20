@@ -55,10 +55,7 @@
       "Bash(git -C :* push:*)",
       "Bash(git -C :* log:*)",
       "WebSearch",
-      "WebFetch(domain:anthropic.com)",
-      "WebFetch(domain:docs.anthropic.com)",
-      "WebFetch(domain:github.com)",
-      "WebFetch(domain:arxiv.org)"
+      "WebFetch"
     ]
   }
 }
