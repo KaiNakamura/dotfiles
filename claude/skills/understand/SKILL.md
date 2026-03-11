@@ -15,7 +15,7 @@ Your task is to thoroughly understand the existing codebase and how it pertains 
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
 3. Analyze the research question and plan what teammate agents are needed to fully understand the problem
     - Refer to the available agents and team composition guidelines in the project rules to determine what teammates to use
-    - How many teammates of each type are warranted? You may spawn 0, 1, or multiple of any type. For trivial questions or if specified by the user via `$ARGUMENTS`, skip teammates and research directly.
+    - You may spawn 0, 1, or multiple of any type. For trivial questions or if specified by the user via `$ARGUMENTS`, skip teammates and research directly.
     - Understanding tasks primarily benefit from code-searchers and web-searchers for broad research. Include critics when validating existing research.
 4. Create an agent team and for each teammate, provide:
     - Its specific, focused research question
