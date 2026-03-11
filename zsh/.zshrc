@@ -14,6 +14,7 @@ export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
 export PATH="/home/kai/.pixi/bin:$PATH"
 alias v="vim"
 alias nv="nvim"
+alias nvz="nvim ~/.zshrc"
 
 # Starship
 eval "$(starship init zsh)"
@@ -31,11 +32,23 @@ alias gpu="git pull origin"
 alias gc="git checkout"
 alias gl="git log"
 alias gw="git worktree"
-alias gw="git worktree add"
 
-# TODO: Add alias for something like:
-# `git worktree add -b name name origin/<base> --no-track`
-# But might want to make this a script or something
+# Clone a repo as bare + .bare pattern for worktree workflow
+# Usage: gwc owner/repo [directory]
+gwc() {
+  local repo=$1
+  local name=${2:-$(basename "$repo" .git)}
+  mkdir "$name" && cd "$name"
+  gh repo clone "$repo" .bare -- --bare
+  echo "gitdir: ./.bare" > .git
+  git config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+  git fetch origin
+}
+
+# Worktrunk (git worktree manager)
+eval "$(wt config shell init zsh)"
+alias wts="wt switch"
+alias wtl="wt list"
 
 # k8s
 alias k="kubectl"
