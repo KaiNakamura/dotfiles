@@ -7,15 +7,15 @@ Expect some back-and-forth conversation with the user as they ask questions abou
 Steps:
 1. Determine the branch and current iteration
 2. Read these thoughts, follow @read-only-specified-thoughts:
-    - `.thoughts/{BRANCH}/problem.md`: Problem statement
-    - `.thoughts/{BRANCH}/iteration-NN/understanding-NN.md`: The most recent (highest number) understanding summary
-    - `.thoughts/{BRANCH}/iteration-NN/concepts-NN.md`: The most recent (highest number) concepts
+    - `.thoughts/problem.md`: Problem statement
+    - `.thoughts/iteration-NN/understanding-NN.md`: The most recent (highest number) understanding summary
+    - `.thoughts/iteration-NN/concepts-NN.md`: The most recent (highest number) concepts
     - Any thoughts explicitly specified by the user
-3. Create a new `.thoughts/{BRANCH}/iteration-NN/plan/plan-NN.md` file at the next number (e.g., if the most recent file is `plan-01.md`, write to `plan-02.md`)
+3. Create a new `.thoughts/iteration-NN/plan/plan-NN.md` file at the next number (e.g., if the most recent file is `plan-01.md`, write to `plan-02.md`)
 </TASK>
 
 <SUCCESS_CRITERIA>
-- `.thoughts/{BRANCH}/iteration-NN/plan/plan-NN.md` created in current iteration
+- `.thoughts/iteration-NN/plan/plan-NN.md` created in current iteration
 - No code files have been changed
 </SUCCESS_CRITERIA>
 

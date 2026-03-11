@@ -7,7 +7,7 @@ Your progress summary will onboard the next agent instance providing it with all
 
 Steps:
 1. Determine the branch and current iteration
-2. Generate or update a progress summary at `.thoughts/{BRANCH}/iteration-NN/progress.md` that includes:
+2. Generate or update a progress summary at `.thoughts/iteration-NN/progress.md` that includes:
     - **Completed Tasks**: What's been finished with verification status
     - **Current State**: Exact file modifications and system status
     - **Key Decisions**: Why certain approaches were chosen with rationale
@@ -17,7 +17,7 @@ Your progress summary should contain all essential information so that the next 
 </TASK>
 
 <SUCCESS_CRITERIA>
-- `.thoughts/{BRANCH}/iteration-NN/progress.md` updated in current iteration
+- `.thoughts/iteration-NN/progress.md` updated in current iteration
 - All critical context captured for handoff
 - No other files or directories have been modified
 </SUCCESS_CRITERIA>

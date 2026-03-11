@@ -6,14 +6,14 @@ Your task is to generate concepts for solving the user's problem. Propose many p
 Steps:
 1. Determine the branch and current iteration
 2. Read these thoughts, follow @read-only-specified-thoughts:
-    - `.thoughts/{BRANCH}/problem.md`: Problem statement
-    - `.thoughts/{BRANCH}/iteration-NN/understanding-NN.md`: The most recent (highest number) understanding summary
+    - `.thoughts/problem.md`: Problem statement
+    - `.thoughts/iteration-NN/understanding-NN.md`: The most recent (highest number) understanding summary
     - Any thoughts explicitly specified by the user
-3. Create a new `.thoughts/{BRANCH}/iteration-NN/concepts/concepts-NN.md` file at the next number (e.g., if the most recent file is `concepts-01.md`, write to `concepts-02.md`)
+3. Create a new `.thoughts/iteration-NN/concepts/concepts-NN.md` file at the next number (e.g., if the most recent file is `concepts-01.md`, write to `concepts-02.md`)
 </TASK>
 
 <SUCCESS_CRITERIA>
-- `.thoughts/{BRANCH}/iteration-NN/concepts/concepts-NN.md` created in current iteration
+- `.thoughts/iteration-NN/concepts/concepts-NN.md` created in current iteration
 - No code files have been changed
 - Multiple options presented with recommendations
 </SUCCESS_CRITERIA>

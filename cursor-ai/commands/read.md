@@ -6,9 +6,9 @@ Read specified files from shared thoughts to familizarize yourself with the curr
 Steps:
 1. Determine the branch and current iteration
 2. Read these thoughts, follow @read-only-specified-thoughts:
-    - `.thoughts/{BRANCH}/problem.md`: Problem statement
-    - `.thoughts/{BRANCH}/iterations.md`: Cross-iteration summary
-    - `.thoughts/{BRANCH}/iteration-NN/progress.md`: Progress summary for the current iteration
+    - `.thoughts/problem.md`: Problem statement
+    - `.thoughts/iterations.md`: Cross-iteration summary
+    - `.thoughts/iteration-NN/progress.md`: Progress summary for the current iteration
     - Any thoughts explicitly specified by the user
 3. Output a brief summary of what you learned
 
