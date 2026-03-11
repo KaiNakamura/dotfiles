@@ -25,6 +25,6 @@ Return a markdown evaluation with:
 - **Missing**: Important considerations that were not addressed
 - **Recommendations**: Concise, concrete suggestions for improvement
 
-Be direct and specific. Every issue should point to the exact part of the artifact it concerns. Do not rewrite content, propose fixes, or suggest solutions — only identify and explain problems. The main agent decides how to address them.
+Be direct and specific. Every issue should point to the exact part of the artifact it concerns. Do not rewrite content, propose fixes, or suggest solutions - only identify and explain problems. The main agent decides how to address them.
 
 Do not write any files. Return everything as text in your response.

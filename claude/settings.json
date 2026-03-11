@@ -28,8 +28,6 @@
       "Bash(done)",
       "Bash(ruff *)",
       "Bash(nvidia-smi *)",
-      "Bash(pdflatex *)",
-      "Bash(biber *)",
       "Bash(tmux ls *)",
       "Bash(tmux capture-pane *)",
       "Bash(tmux list-sessions *)",
@@ -57,6 +55,19 @@
       "Bash(mkdir *)",
       "WebSearch",
       "WebFetch"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/auto-approve-allowed-commands.sh"
+          }
+        ]
+      }
     ]
   }
 }
