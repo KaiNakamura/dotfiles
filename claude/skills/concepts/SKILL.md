@@ -14,16 +14,19 @@ Propose many potential solutions each with pros/cons and let the user weigh in o
     - `.thoughts/problem.md`: Problem statement
     - `.thoughts/iteration-NN/understanding/understanding-NN.md`: The most recent (highest number) understanding summary
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
-3. Decide how many concept-generator agents to spawn (usually around 2–3; adjust based on solution space breadth). Let `$ARGUMENTS` influence count or focus if the user has hinted at preferences. Optionally give each agent a different angle to nudge diversity, but this is not required — parallel agents will naturally produce varied results.
-4. Spawn all concept-generator agents in parallel, each with:
+3. If the user requests an agent team, or if the task would benefit from parallel research, compose a team from the available agents listed in the project rules
+    - Concept generation primarily uses concept-generator agents, but also benefits from web-searchers and code-searchers to find alternative approaches as well as critics to evaluate and challenge proposed concepts
+    - You may spawn 0, 1, or multiple of any agent type. For trivial questions or if specified by the user via `$ARGUMENTS`, skip teammates and research directly.
+4. Decide how many concept-generator agents to spawn (usually around 2–3; adjust based on solution space breadth). Let `$ARGUMENTS` influence count or focus if the user has hinted at preferences. Optionally give each agent a different angle to nudge diversity, but this is not required - parallel agents will naturally produce varied results.
+5. Spawn all concept-generator agents in parallel, each with:
     - Relevant context: problem summary, key understanding findings, current iteration number
     - Optionally: a specific angle to look at if useful (e.g., simple/easy-to-understand, elegant/creative/outside-the-box, pre-existing/tried-and-true, reliable/robust, etc.)
-5. Wait for all agents to return their concepts
-6. Synthesize results into `.thoughts/iteration-NN/concepts/concepts-NN.md` at the next version number:
+6. Wait for all agents to return their concepts
+7. Synthesize results into `.thoughts/iteration-NN/concepts/concepts-NN.md` at the next version number:
     - Rank concepts from most to least recommended
     - Preserve each concept's pros/cons from the generators, but feel free to add additional commentary appropriately
-7. Present summary back to the user
-8. Clean up the team when done
+8. Present summary back to the user
+9. Clean up the team when done
 
 ## Success Criteria
 
