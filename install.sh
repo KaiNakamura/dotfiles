@@ -33,6 +33,7 @@ INSTALL_ORDER=(
     "eza"
     "fd"
     "fzf"
+    "worktrunk"
     "tldr"
     "aws"
 )
