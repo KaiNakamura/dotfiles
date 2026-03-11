@@ -12,7 +12,10 @@ Your task is to generate concepts for solving the user's problem. Propose many p
     - `.thoughts/problem.md`: Problem statement
     - `.thoughts/iteration-NN/understanding/understanding-NN.md`: The most recent (highest number) understanding summary
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
-3. Create a new `.thoughts/iteration-NN/concepts/concepts-NN.md` file at the next version number
+3. If the user requests an agent team, or if the task would benefit from parallel research, compose a team from the available agents listed in the project rules
+    - Concept generation benefits from web-searchers (find alternative approaches) and critics (evaluate and challenge proposed concepts)
+    - You may spawn 0, 1, or multiple of any agent type. For trivial questions or if specified by the user via `$ARGUMENTS`, skip teammates and research directly.
+4. Create a new `.thoughts/iteration-NN/concepts/concepts-NN.md` file at the next version number
 
 ## Success Criteria
 

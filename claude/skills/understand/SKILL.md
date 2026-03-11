@@ -13,11 +13,10 @@ Your task is to thoroughly understand the existing codebase and how it pertains 
     - `.thoughts/iterations.md`: Cross-iteration summary
     - `.thoughts/iteration-NN/progress.md`: Progress summary for the current iteration
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
-3. Analyze the research question and plan our what teammate agents are needed to fully understand the problem
-    - You have access to the following teammate agents:
-        - `web-searcher`: Searches the web for documentation, examples, resources, etc. Use when research benefits from consulting external information.
-        - `code-searcher`: Searches and reads the local codebase. Use to learn existing code structure, file layout, patterns, or tracing how something is implemented locally.
-    - How many teammates of each type are warranted? (You may spawn 0, 1, or multiple of either type. For trivial questions or if specified by the user via `$ARFUMENTS`, skip teammates and research directly.)
+3. Analyze the research question and plan what teammate agents are needed to fully understand the problem
+    - Refer to the available agents and team composition guidelines in the project rules to determine what teammates to use
+    - How many teammates of each type are warranted? You may spawn 0, 1, or multiple of any type. For trivial questions or if specified by the user via `$ARGUMENTS`, skip teammates and research directly.
+    - Understanding tasks primarily benefit from code-searchers and web-searchers for broad research. Include critics when validating existing research.
 4. Create an agent team and for each teammate, provide:
     - Its specific, focused research question
     - Relevant context: problem summary, current iteration, what is already known

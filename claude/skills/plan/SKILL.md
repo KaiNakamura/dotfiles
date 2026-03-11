@@ -15,7 +15,10 @@ Expect some back-and-forth conversation with the user as they ask questions abou
     - `.thoughts/iteration-NN/understanding/understanding-NN.md`: The most recent (highest number) understanding summary
     - `.thoughts/iteration-NN/concepts/concepts-NN.md`: The most recent (highest number) concepts
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
-3. Create a new `.thoughts/iteration-NN/plan/plan-NN.md` file at the next version number
+3. If the user requests an agent team, or if the plan requires significant research, compose a team from the available agents listed in the project rules
+    - Planning benefits from code-searchers (understand implementation details), web-searchers (find best practices), and critics (identify risks and gaps)
+    - You may spawn 0, 1, or multiple of any agent type. For trivial questions or if specified by the user via `$ARGUMENTS`, skip teammates and research directly.
+4. Create a new `.thoughts/iteration-NN/plan/plan-NN.md` file at the next version number
 
 ## Success Criteria
 
