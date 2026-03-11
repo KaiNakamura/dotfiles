@@ -30,6 +30,12 @@ alias gpo="git push origin"
 alias gpu="git pull origin"
 alias gc="git checkout"
 alias gl="git log"
+alias gw="git worktree"
+alias gw="git worktree add"
+
+# TODO: Add alias for something like:
+# `git worktree add -b name name origin/<base> --no-track`
+# But might want to make this a script or something
 
 # k8s
 alias k="kubectl"
