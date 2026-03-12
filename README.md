@@ -61,7 +61,7 @@ Some other settings you may want to configure:
 - [ ] Make sure the wayland session stuff works on a fresh install
 - [ ] Add a module for work stuff?
 - [ ] Keybinds for kitty and firefox not working properly ootb
-- [ ] Also firefox gets messed up on install?
+- [ ] Also firefox gets messed up on install? (this seems to be related to X11 vs. Wayland, reproducible which swapping between them)
 - [ ] Maybe different profile pic? Or accent color in KDE?
 - [ ] Fix Cursor/VS Code leader keys not working for panel selection when no file open (Update: actually this does seem to work, I think it just seems to not sometimes because it takes time for vim keybinds to load, any way to speed that up?)
 - [ ] Some kind of auto-tiling? Similar to TWM behavior (is this even possible in KDE?)
