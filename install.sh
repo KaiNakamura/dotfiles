@@ -27,7 +27,6 @@ INSTALL_ORDER=(
     "kde"
     "cursor-ai"
     "claude"
-    "godot"
     "bat"
     "btop"
     "delta"
