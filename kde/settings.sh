@@ -32,6 +32,10 @@ kwriteconfig5 --file kwinrc --group Desktops --key Number 10
 # Disable animations (set animation speed to instant)
 kwriteconfig5 --file kwinrc --group Compositing --key AnimationSpeed 0
 
+# Reduce blur strength (range 1-15, default 15 is too strong for terminal transparency)
+kwriteconfig5 --file kwinrc --group Effect-blur --key BlurStrength 5
+kwriteconfig5 --file kwinrc --group Effect-blur --key NoiseStrength 0
+
 # Disable middle-click paste
 # Note: Requires Wayland session and session restart to take effect
 kwriteconfig5 --file kwinrc --group General --key MiddleClickPaste false
