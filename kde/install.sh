@@ -12,6 +12,15 @@ echo "KDE detected. Proceeding with configuration..."
 # Get the directory where this script is located
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Install Klassy window decoration (for active window outline)
+if [[ -f "$WORKDIR/install-klassy.sh" ]]; then
+    echo "Installing Klassy..."
+    chmod +x "$WORKDIR/install-klassy.sh"
+    "$WORKDIR/install-klassy.sh"
+else
+    echo "install-klassy.sh not found in $WORKDIR"
+fi
+
 # Configure shortcuts
 if [[ -f "$WORKDIR/apply-kksrc.sh" ]]; then
     echo "Configuring keyboard shortcuts..."

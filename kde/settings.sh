@@ -21,6 +21,24 @@ else
     echo "Warning: apply-wallpaper.sh not found in $WORKDIR"
 fi
 
+# ===== Window Focus Indicator (Klassy Window Decoration) =====
+
+# Disable ShapeCorners if previously installed
+kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_shapecornersEnabled false
+
+# Set Klassy as the window decoration
+kwriteconfig5 --file kwinrc --group org.kde.kdecoration2 --key library org.kde.klassy
+kwriteconfig5 --file kwinrc --group org.kde.kdecoration2 --key theme Klassy
+
+# Outline: Breeze blue custom color, 3px (active=87% opacity, inactive=30% opacity)
+KLASSY_RC="$HOME/.config/klassyrc"
+kwriteconfig5 --file "$KLASSY_RC" --group Windeco --key ThinWindowOutlineStyle WindowOutlineCustomColor
+kwriteconfig5 --file "$KLASSY_RC" --group Windeco --key ThinWindowOutlineCustomColor "61,174,233"
+kwriteconfig5 --file "$KLASSY_RC" --group Windeco --key ThinWindowOutlineThickness 3.0
+
+# Show outline on maximized and tiled windows
+kwriteconfig5 --file "$KLASSY_RC" --group Windeco --key DrawBorderOnMaximizedWindows true
+
 # ===== Behavior =====
 
 # On login, always start with an empty session
