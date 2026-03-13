@@ -39,6 +39,15 @@ kwriteconfig5 --file "$KLASSY_RC" --group Windeco --key ThinWindowOutlineThickne
 # Show outline on maximized and tiled windows
 kwriteconfig5 --file "$KLASSY_RC" --group Windeco --key DrawBorderOnMaximizedWindows true
 
+# Install maximized-window-gap KWin script (prevents shadow/outline clipping on maximized windows)
+GAP_SCRIPT_SRC="$WORKDIR/kwin-scripts/maximized-window-gap"
+GAP_SCRIPT_DST="$HOME/.local/share/kwin/scripts/maximized-window-gap"
+if [[ -d "$GAP_SCRIPT_SRC" ]]; then
+    mkdir -p "$GAP_SCRIPT_DST"
+    cp -r "$GAP_SCRIPT_SRC"/* "$GAP_SCRIPT_DST"/
+    kwriteconfig5 --file kwinrc --group Plugins --key maximized-window-gapEnabled true
+fi
+
 # ===== Behavior =====
 
 # On login, always start with an empty session

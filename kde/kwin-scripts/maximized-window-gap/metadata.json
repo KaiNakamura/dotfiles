@@ -1,0 +1,11 @@
+{
+    "KPlugin": {
+        "Name": "Maximized Window Gap",
+        "Description": "Adds a small gap around maximized windows so the decoration outline remains visible.",
+        "Id": "maximized-window-gap",
+        "ServiceTypes": ["KWin/Script"],
+        "Version": "1.0"
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js"
+}
