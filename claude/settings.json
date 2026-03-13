@@ -110,6 +110,7 @@
       "Bash(true *)",
       "Bash(false *)",
       "Bash(cloc *)",
+      "Bash(journalctl *)",
       "WebSearch",
       "WebFetch"
     ]
