@@ -21,6 +21,32 @@ else
     echo "Warning: apply-wallpaper.sh not found in $WORKDIR"
 fi
 
+# ===== Window Focus Indicator (Klassy Window Decoration) =====
+
+# Disable ShapeCorners if previously installed
+kwriteconfig5 --file kwinrc --group Plugins --key kwin4_effect_shapecornersEnabled false
+
+# Set Klassy as the window decoration
+kwriteconfig5 --file kwinrc --group org.kde.kdecoration2 --key library org.kde.klassy
+kwriteconfig5 --file kwinrc --group org.kde.kdecoration2 --key theme Klassy
+
+# Outline: accent colour, 3px
+KLASSY_RC="$HOME/.config/klassyrc"
+kwriteconfig5 --file "$KLASSY_RC" --group Windeco --key ThinWindowOutlineStyle WindowOutlineAccentColor
+kwriteconfig5 --file "$KLASSY_RC" --group Windeco --key ThinWindowOutlineThickness 3.0
+
+# Show outline on maximized and tiled windows
+kwriteconfig5 --file "$KLASSY_RC" --group Windeco --key DrawBorderOnMaximizedWindows true
+
+# Install maximized-window-gap KWin script (prevents shadow/outline clipping on maximized windows)
+GAP_SCRIPT_SRC="$WORKDIR/kwin-scripts/maximized-window-gap"
+GAP_SCRIPT_DST="$HOME/.local/share/kwin/scripts/maximized-window-gap"
+if [[ -d "$GAP_SCRIPT_SRC" ]]; then
+    mkdir -p "$GAP_SCRIPT_DST"
+    cp -r "$GAP_SCRIPT_SRC"/* "$GAP_SCRIPT_DST"/
+    kwriteconfig5 --file kwinrc --group Plugins --key maximized-window-gapEnabled true
+fi
+
 # ===== Behavior =====
 
 # On login, always start with an empty session
