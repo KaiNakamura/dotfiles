@@ -38,3 +38,12 @@ if [[ -f "$WORKDIR/apply-scripts.sh" ]]; then
 else
     echo "apply-scripts.sh not found in $WORKDIR"
 fi
+
+# Configure open-browser handler
+if [[ -f "$WORKDIR/apply-open-browser.sh" ]]; then
+    echo "Configuring open-browser handler..."
+    chmod +x "$WORKDIR/apply-open-browser.sh"
+    "$WORKDIR/apply-open-browser.sh"
+else
+    echo "apply-open-browser.sh not found in $WORKDIR"
+fi
