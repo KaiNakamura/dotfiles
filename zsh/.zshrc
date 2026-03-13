@@ -49,6 +49,7 @@ gwc() {
 eval "$(wt config shell init zsh)"
 alias wts="wt switch"
 alias wtl="wt list"
+alias wtc="wt switch --create"
 
 # k8s
 alias k="kubectl"
