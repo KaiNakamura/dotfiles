@@ -9,22 +9,6 @@ fi
 
 echo "Configuring scripts..."
 
-# Check if xdotool is installed (required for cursor movement on X11)
-if ! command -v xdotool &> /dev/null; then
-    echo "xdotool is not installed. Installing it now..."
-    echo "The window switch scripts require xdotool to move the cursor."
-    
-    # Try to install xdotool
-    if sudo apt-get update && sudo apt-get install -y xdotool; then
-        echo "xdotool installed successfully."
-    else
-        echo "Error: Failed to install xdotool."
-        echo "Please install it manually with: sudo apt-get install xdotool"
-        echo "The scripts will be installed but won't work until xdotool is available."
-    fi
-    echo ""
-fi
-
 # Get the directory where this script is located
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_DIR="$WORKDIR/scripts"
@@ -67,17 +51,9 @@ echo "Installed $scripts_installed scripts to $TARGET_BIN"
 
 # Define shortcuts to create
 # Format: shortcut_id:key_combo:script_name:friendly_name
+# NOTE: Move-to-screen shortcuts (Meta+Shift+HJKL) are now handled by the
+# hjkl-edge-guard KWin script. See kde/kwin-scripts/hjkl-edge-guard/
 declare -a shortcuts=(
-    # Window switching (center cursor)
-    "kwin-switch-left:Meta+H:kwin-switch-left.sh:Switch Window Left with Cursor"
-    "kwin-switch-down:Meta+J:kwin-switch-down.sh:Switch Window Down with Cursor"
-    "kwin-switch-up:Meta+K:kwin-switch-up.sh:Switch Window Up with Cursor"
-    "kwin-switch-right:Meta+L:kwin-switch-right.sh:Switch Window Right with Cursor"
-    # Window move to screen (center cursor)
-    "kwin-move-screen-left:Meta+Shift+H:kwin-move-screen-left.sh:Move Window to Screen Left with Cursor"
-    "kwin-move-screen-down:Meta+Shift+J:kwin-move-screen-down.sh:Move Window to Screen Down with Cursor"
-    "kwin-move-screen-up:Meta+Shift+K:kwin-move-screen-up.sh:Move Window to Screen Up with Cursor"
-    "kwin-move-screen-right:Meta+Shift+L:kwin-move-screen-right.sh:Move Window to Screen Right with Cursor"
 )
 
 # Create desktop files

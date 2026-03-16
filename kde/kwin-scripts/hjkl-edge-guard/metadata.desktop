@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=HJKL Edge Guard
+Comment=Directional window switching that stops at screen edges
+Icon=preferences-system-windows
+Type=Service
+X-Plasma-API=javascript
+X-Plasma-MainScript=code/main.js
+X-KDE-ServiceTypes=KWin/Script
+X-KDE-PluginInfo-Author=Kai Nakamura
+X-KDE-PluginInfo-Name=hjkl-edge-guard
+X-KDE-PluginInfo-License=GPL
+X-KDE-PluginInfo-Version=1
