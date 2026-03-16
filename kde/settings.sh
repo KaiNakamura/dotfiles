@@ -75,9 +75,17 @@ kwriteconfig5 --file kwinrc --group TabBox --key ShowOnlyCurrentDesktop true
 kwriteconfig5 --file kdeglobals --group General --key TerminalApplication ~/.local/kitty.app/bin/kitty
 kwriteconfig5 --file kdeglobals --group General --key TerminalService kitty.desktop
 
-# Firefox
-kwriteconfig5 --file kdeglobals --group General --key BrowserApplication firefox_firefox.desktop
-kwriteconfig5 --file mimeapps.list --group "Default Applications" --key application/pdf firefox_firefox.desktop;
-kwriteconfig5 --file mimeapps.list --group "Default Applications" --key text/html firefox_firefox.desktop;
-kwriteconfig5 --file mimeapps.list --group "Default Applications" --key x-scheme-handler/http firefox_firefox.desktop;
-kwriteconfig5 --file mimeapps.list --group "Default Applications" --key x-scheme-handler/https firefox_firefox.desktop;
+# Default Browser
+source "$(dirname "$0")/../lib/profile.sh"
+
+if [[ "$DOTFILES_PROFILE" == "work" ]]; then
+    BROWSER_DESKTOP="google-chrome.desktop"
+else
+    BROWSER_DESKTOP="firefox_firefox.desktop"
+fi
+
+kwriteconfig5 --file kdeglobals --group General --key BrowserApplication "$BROWSER_DESKTOP"
+kwriteconfig5 --file mimeapps.list --group "Default Applications" --key application/pdf "$BROWSER_DESKTOP"
+kwriteconfig5 --file mimeapps.list --group "Default Applications" --key text/html "$BROWSER_DESKTOP"
+# NOTE: x-scheme-handler/http and x-scheme-handler/https are intentionally NOT set here.
+# Those are owned by open-browser.desktop (registered via apply-open-browser.sh).

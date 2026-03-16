@@ -44,6 +44,29 @@ cd ~/repos/dotfiles
 ./install.sh
 ```
 
+## Machine Profiles
+
+Different machines can have different configurations (e.g., work vs home). Set a profile before or during install:
+
+```bash
+# Set profile during install
+./install.sh --profile work
+
+# Or set it manually (install.sh reads this file)
+echo "work" > ~/.dotfiles-profile
+```
+
+Available profiles: `home` (default), `work`
+
+### What profiles affect
+
+- **Default browser**: `home` = Firefox, `work` = Chrome (in `kde/settings.sh` and `kde/open-browser/open-browser.sh`)
+- **Starship prompt**: Uses `starship.work.toml` if it exists and profile is `work`
+
+### Machine-specific shell config
+
+For shell customizations that shouldn't be in the repo (work aliases, proxy settings, etc.), create `~/.zshrc.local`. It's sourced at the end of `.zshrc` and is not tracked by git.
+
 Some other settings you may want to configure:
 
 - System Settings -> Mouse -> Pointer Speed = -0.4 (Depends on mouse though)
@@ -59,7 +82,7 @@ Some other settings you may want to configure:
 - [ ] Would be nice if Meta+HJKL didn't switch focus if we're already on that screen
 - [ ] Some kind of visual indicator when a window gets focused?
 - [ ] Make sure the wayland session stuff works on a fresh install
-- [ ] Add a module for work stuff?
+- [x] Add a module for work stuff? (Solved via machine profiles — see above)
 - [ ] Keybinds for kitty and firefox not working properly ootb
 - [ ] Also firefox gets messed up on install? (this seems to be related to X11 vs. Wayland, reproducible which swapping between them)
 - [ ] Maybe different profile pic? Or accent color in KDE?

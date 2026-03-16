@@ -2,6 +2,7 @@
 
 # Get the directory where this script is located
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$(dirname "$0")/../lib/profile.sh"
 
 # Install zsh
 sudo apt install -y zsh
@@ -36,6 +37,20 @@ else
     # Copy .zshrc
     cp "$zshrc_source" "$zshrc_target"
     echo ".zshrc copied to dotfiles"
+fi
+
+# Copy profile-specific .zshrc.local if applicable
+zshrc_local_source="$WORKDIR/.zshrc.${DOTFILES_PROFILE}"
+zshrc_local_target="$HOME/.zshrc.local"
+
+if [[ -f "$zshrc_local_source" ]]; then
+    if [[ -e "$zshrc_local_target" ]]; then
+        echo "Backing up existing .zshrc.local to ${zshrc_local_target}.bak"
+        mv "$zshrc_local_target" "${zshrc_local_target}.bak"
+    fi
+
+    cp "$zshrc_local_source" "$zshrc_local_target"
+    echo ".zshrc.local copied from ${DOTFILES_PROFILE} profile"
 fi
 
 # Change default shell to zsh

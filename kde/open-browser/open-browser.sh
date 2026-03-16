@@ -7,21 +7,36 @@
 URL="$1"
 if [[ -z "$URL" ]]; then exit 1; fi
 
-# Detect browser by finding the first available browser binary
-if command -v google-chrome-stable &> /dev/null; then
-    BROWSER_BIN="google-chrome-stable"
-    RESOURCE_CLASS="google-chrome"
-elif command -v firefox &> /dev/null; then
-    BROWSER_BIN="firefox"
-    RESOURCE_CLASS="firefox"
-elif command -v chromium-browser &> /dev/null; then
-    BROWSER_BIN="chromium-browser"
-    RESOURCE_CLASS="chromium-browser"
-elif command -v chromium &> /dev/null; then
-    BROWSER_BIN="chromium"
-    RESOURCE_CLASS="chromium"
-else
-    # No known browser found — fall back to kde-open5
+# Read profile to determine preferred browser
+DOTFILES_PROFILE=$(cat ~/.dotfiles-profile 2>/dev/null || echo "home")
+
+case "$DOTFILES_PROFILE" in
+    work)
+        BROWSER_BIN="google-chrome-stable"
+        RESOURCE_CLASS="google-chrome"
+        ;;
+    *)
+        BROWSER_BIN="firefox"
+        RESOURCE_CLASS="firefox"
+        ;;
+esac
+
+# Verify the preferred browser is installed, fall back to detection if not
+if ! command -v "$BROWSER_BIN" &> /dev/null; then
+    BROWSER_BIN=""
+    RESOURCE_CLASS=""
+    for candidate in google-chrome-stable:google-chrome firefox:firefox chromium-browser:chromium-browser chromium:chromium; do
+        bin="${candidate%%:*}"
+        class="${candidate##*:}"
+        if command -v "$bin" &> /dev/null; then
+            BROWSER_BIN="$bin"
+            RESOURCE_CLASS="$class"
+            break
+        fi
+    done
+fi
+
+if [[ -z "$BROWSER_BIN" ]]; then
     exec kde-open5 "$URL"
 fi
 

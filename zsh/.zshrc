@@ -80,3 +80,26 @@ alias lt="eza -a --tree --level=1 --group-directories-first --icons"
 # This is typically done by $(brew --prefix)/opt/fzf/install, but we source it here
 # to ensure it's available in the shell
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+# Worktree-aware prompt context
+# Sets WORKTREE_REPO env var when inside a linked git worktree
+# so Starship can display the parent repo name (e.g., dotfiles/better-worktrees)
+_update_worktree_repo() {
+  local git_dir=$(git rev-parse --git-dir 2>/dev/null)
+  local git_common=$(git rev-parse --git-common-dir 2>/dev/null)
+  if [[ -n "$git_dir" && "$git_dir" != "$git_common" ]]; then
+    local common_abs=$(git rev-parse --path-format=absolute --git-common-dir)
+    local repo_dir=$(basename "$common_abs")
+    if [[ "$repo_dir" == ".bare" ]]; then
+      repo_dir=$(basename "$(dirname "$common_abs")")
+    fi
+    export WORKTREE_REPO="$repo_dir"
+  else
+    unset WORKTREE_REPO
+  fi
+}
+add-zsh-hook chpwd _update_worktree_repo
+_update_worktree_repo  # chpwd doesn't fire on shell open
+
+# Machine-specific overrides (may be managed by install.sh --profile)
+[[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
