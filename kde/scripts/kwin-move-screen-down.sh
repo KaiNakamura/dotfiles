@@ -1,10 +1,5 @@
 #!/bin/bash
-# kwin-move-screen-down.sh - Move window to screen down and center cursor
+# kwin-move-screen-down.sh - Move window to screen down
 
-# Execute KWin action (move window to different screen)
 qdbus org.kde.kglobalaccel /component/kwin invokeShortcut "Window One Screen Down"
-
-# Move cursor to center using helper script
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-"$SCRIPT_DIR/kwin-center-cursor.sh"
 

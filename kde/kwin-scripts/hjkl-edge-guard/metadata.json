@@ -1,0 +1,14 @@
+{
+    "KPlugin": {
+        "Name": "HJKL Edge Guard",
+        "Description": "Directional window switching that stops at screen edges",
+        "Icon": "preferences-system-windows",
+        "Authors": [{ "Name": "Kai Nakamura" }],
+        "Id": "hjkl-edge-guard",
+        "Version": "1.0",
+        "License": "GPL"
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js",
+    "KPackageStructure": "KWin/Script"
+}
