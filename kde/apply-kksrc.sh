@@ -1,5 +1,8 @@
 #!/bin/bash
 # apply-kksrc.sh - Convert and apply binds.kksrc programmatically
+# TODO: Verify python3 + python-dbus are available on a fresh KDE install.
+#       The D-Bus live-activation step (and kde/install.sh HJKL setup) depend on them.
+#       If missing, shortcuts still persist via kwriteconfig but won't activate until re-login.
 
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BINDS_FILE="$WORKDIR/binds.kksrc"
