@@ -44,7 +44,7 @@ cd ~/repos/dotfiles
 ./install.sh
 ```
 
-## Machine Profiles
+## Profiles
 
 Different machines can have different configurations (e.g., work vs home). Set a profile before or during install:
 
@@ -82,7 +82,6 @@ Some other settings you may want to configure:
 - [ ] Would be nice if Meta+HJKL didn't switch focus if we're already on that screen
 - [ ] Some kind of visual indicator when a window gets focused?
 - [ ] Make sure the wayland session stuff works on a fresh install
-- [x] Add a module for work stuff? (Solved via machine profiles — see above)
 - [ ] Keybinds for kitty and firefox not working properly ootb
 - [ ] Also firefox gets messed up on install? (this seems to be related to X11 vs. Wayland, reproducible which swapping between them)
 - [ ] Maybe different profile pic? Or accent color in KDE?
