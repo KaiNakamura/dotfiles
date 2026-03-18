@@ -5,6 +5,8 @@ description: Research the codebase to build understanding of the problem, writin
 
 Your task is to thoroughly understand the existing codebase and how it pertains to the user's problem. Carefully analyze the prompt and the codebase to understand what they are asking. Your job is to gather as much context as possible about the problem and understand how to approach it.
 
+Structure your output following [template.md](template.md).
+
 ## Steps
 
 1. Determine the current iteration (highest `iteration-NN/` directory in `.thoughts/`)

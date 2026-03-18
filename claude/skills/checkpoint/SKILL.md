@@ -7,16 +7,12 @@ Your current task is nearing a logical checkpoint, or your context window is app
 
 Your progress summary will onboard the next agent instance providing it with all the necessary context to continue seamlessly without repeating prior work or requiring extensive re-analysis. Focus on precision and brevity, ensuring all essential information is present without unnecessary verbosity.
 
+Structure your output following [template.md](template.md).
+
 ## Steps
 
 1. Determine the current iteration (highest `iteration-NN/` directory in `.thoughts/`)
-2. Generate or update a progress summary at `.thoughts/iteration-NN/progress.md` that includes:
-    - **Completed Tasks**: What's been finished with verification status
-    - **Current State**: Exact file modifications and system status
-    - **Key Decisions**: Why certain approaches were chosen with rationale
-    - **Context for Handoff**: Critical information the next agent needs
-
-Your progress summary should contain all essential information so that the next agent can continue without asking clarifying questions. No important context or decisions should be lost and the summary is immediately usable for handoff.
+2. Generate or update a progress summary at `.thoughts/iteration-NN/progress.md`
 
 ## Success Criteria
 

@@ -6,6 +6,8 @@ argument-hint: "[specific plan step or section]"
 
 Your task is to implement a plan provided by the user. Carefully analyze the plan and follow it as directed. If at any point you get stuck following the plan, you should immediately stop and ask the user how they would like to proceed. You shouldn't deviate from the plan without approval from the user.
 
+Structure your implementation summary following [template.md](template.md).
+
 ## Steps
 
 1. Determine the current iteration (highest `iteration-NN/` directory in `.thoughts/`)

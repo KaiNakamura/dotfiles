@@ -7,6 +7,8 @@ Your task is to generate concepts for solving the user's problem by orchestratin
 
 Propose many potential solutions each with pros/cons and let the user weigh in on the final decision. Order recommended solutions from best to worst and keep explanations at a high-level. Expect some back-and-forth conversation with the user as they ask questions about proposed solutions and shape it into a final plan. Be sure to let the user make the important decisions, your job is to present options and recommendations but let the user shape ideas as they see fit.
 
+Structure your output following [template.md](template.md).
+
 ## Steps
 
 1. Determine the current iteration (highest `iteration-NN/` directory in `.thoughts/`)

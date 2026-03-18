@@ -6,6 +6,8 @@ argument-hint: "[reason for iterating]"
 
 Start a new iteration for the current task.
 
+When updating `.thoughts/iterations.md`, structure each iteration entry following [template.md](template.md).
+
 ## Steps
 
 1. Determine the current iteration (highest `iteration-NN/` directory in `.thoughts/`)
@@ -13,7 +15,7 @@ Start a new iteration for the current task.
 3. Otherwise, if there are previous iterations:
    - Append a summary to `.thoughts/iterations.md` that captures the reason we need to reiterate. Our goal is to guide new agents so they don't repeat the same mistakes.
    - Create new iteration directory: `.thoughts/iteration-NN/` (next number)
-4. Create `.thoughts/iteration-NN/progress.md` with a high-level overview of the problem context
+4. Create `.thoughts/iteration-NN/progress.md` following the checkpoint [template.md](../checkpoint/template.md)
 
 ## Success Criteria
 

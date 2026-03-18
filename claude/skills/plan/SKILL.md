@@ -7,6 +7,8 @@ Your task is to create an implementation plan based on the user's request. The p
 
 Expect some back-and-forth conversation with the user as they ask questions about proposed plan and shape it into a final version. Your plan should start out at a rough high-level and become more detailed as the user helps fill in more details. Be sure to let the user make the important decisions, your job is to present options and recommendations but let the user shape the plan as they see fit.
 
+Structure your output following [template.md](template.md).
+
 ## Steps
 
 1. Determine the current iteration (highest `iteration-NN/` directory in `.thoughts/`)
