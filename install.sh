@@ -147,8 +147,31 @@ install_module() {
 
 # Main script logic
 main() {
+    # Parse --profile flag
+    local profile=""
+    local args=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --profile)
+                profile="$2"
+                shift 2
+                ;;
+            *)
+                args+=("$1")
+                shift
+                ;;
+        esac
+    done
+    set -- "${args[@]}"
+
+    # Write profile if specified
+    if [[ -n "$profile" ]]; then
+        echo "$profile" > ~/.dotfiles-profile
+        print_info "Set dotfiles profile to: $profile"
+    fi
+
     pre_install
-    
+
     # Determine which modules to install
     if [[ $# -gt 0 ]]; then
         # Use provided modules as arguments
