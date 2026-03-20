@@ -21,6 +21,15 @@ else
     echo "apply-kksrc.sh not found in $WORKDIR"
 fi
 
+# Configure KWin scripts
+if [[ -f "$WORKDIR/apply-kwin-scripts.sh" ]]; then
+    echo "Configuring KWin scripts..."
+    chmod +x "$WORKDIR/apply-kwin-scripts.sh"
+    "$WORKDIR/apply-kwin-scripts.sh"
+else
+    echo "apply-kwin-scripts.sh not found in $WORKDIR"
+fi
+
 # Configure settings
 if [[ -f "$WORKDIR/settings.sh" ]]; then
     echo "Configuring settings..."

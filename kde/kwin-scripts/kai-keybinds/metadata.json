@@ -1,0 +1,11 @@
+{
+    "KPackageStructure": "KWin/Script",
+    "KPlugin": {
+        "Id": "kai-keybinds",
+        "Name": "Kai Keybinds",
+        "Description": "Custom workspace keybinds",
+        "Version": "1.0.0"
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js"
+}
