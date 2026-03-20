@@ -15,6 +15,7 @@ Structure your output following [template.md](template.md).
     - `.thoughts/iterations.md`: Cross-iteration summary
     - `.thoughts/iteration-NN/progress.md`: Progress summary for the current iteration
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
+    - If your task requires context beyond these files, consult `log.md` to identify other relevant artifacts by their descriptions and slugs
 3. Analyze the research question and plan what teammate agents are needed to fully understand the problem
     - Refer to the available agents and team composition guidelines in the project rules to determine what teammates to use
     - You may spawn 0, 1, or multiple of any type. For trivial questions or if specified by the user via `$ARGUMENTS`, skip teammates and research directly.

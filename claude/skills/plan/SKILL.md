@@ -17,6 +17,7 @@ Structure your output following [template.md](template.md).
     - The most recent understanding file (highest NN) matching `.thoughts/iteration-NN/understanding/understanding-*.md`
     - The most recent concepts file (highest NN) matching `.thoughts/iteration-NN/concepts/concepts-*.md`
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
+    - If your task requires context beyond these files, consult `log.md` to identify other relevant artifacts by their descriptions and slugs
 3. If the user requests an agent team, or if the plan requires significant research, compose a team from the available agents listed in the project rules
     - Planning benefits from code-searchers (understand implementation details), web-searchers (find best practices), and critics (identify risks and gaps)
     - You may spawn 0, 1, or multiple of any agent type. For trivial questions or if specified by the user via `$ARGUMENTS`, skip teammates and research directly.

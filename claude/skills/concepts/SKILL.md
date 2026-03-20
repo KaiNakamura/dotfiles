@@ -16,6 +16,7 @@ Structure your output following [template.md](template.md).
     - `.thoughts/problem.md`: Problem statement
     - The most recent understanding file (highest NN) matching `.thoughts/iteration-NN/understanding/understanding-*.md`
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
+    - If your task requires context beyond these files, consult `log.md` to identify other relevant artifacts by their descriptions and slugs
 3. If the user requests an agent team, or if the task would benefit from parallel research, compose a team from the available agents listed in the project rules
     - Concept generation primarily uses concept-generator agents, but also benefits from web-searchers and code-searchers to find alternative approaches as well as critics to evaluate and challenge proposed concepts
     - You may spawn 0, 1, or multiple of any agent type. For trivial questions or if specified by the user via `$ARGUMENTS`, skip teammates and research directly.

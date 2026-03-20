@@ -1,6 +1,6 @@
 # Shared Thoughts Context
 
-Shared context between agents is placed within a `.thoughts/` directory within this workspace. It is important that you only read explicitly allowed files that pertain to your current task, otherwise you might fill up your context window with incorrect or irrelevant information. You should only read files from the `.thoughts/` directory when explicitly instructed to do so by your prompt.
+Shared context between agents is placed within a `.thoughts/` directory within this workspace. Be selective when reading from `.thoughts/`, use `log.md` entries and artifact slugs to judge relevance before reading full artifacts. Avoid loading everything indiscriminately, but feel free to read something if it's relevant to your current task.
 
 ## Directory Structure
 
