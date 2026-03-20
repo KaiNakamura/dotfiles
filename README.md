@@ -75,19 +75,22 @@ Some other settings you may want to configure:
 
 ## TODO
 
-- [ ] Consider changing Meta+Shift+# (move window to desktop) to also change to that desktop
-- [ ] Consider Meta+Ctrl+# to move all windows to that desktop number
-- [ ] Consider Meta+Ctrl+Shift+# to "switch" desktop windows (i.e., swap the current with the other one)
-- [ ] Hotkeys for switching between apps? (Like Alt+Shift+# instead of Alt+Tab?)
-- [ ] Would be nice if Meta+HJKL didn't switch focus if we're already on that screen
+- [ ] Move mouse to windows when changing focus
+- [ ] More keybinds
+    - [ ] Consider changing Meta+Shift+# (move window to desktop) to also change to that desktop
+    - [ ] Consider Meta+Ctrl+# to move all windows to that desktop number
+    - [ ] Consider Meta+Ctrl+Shift+# to "switch" desktop windows (i.e., swap the current with the other one)
+    - [ ] Hotkeys for switching between apps? (Like Alt+Shift+# instead of Alt+Tab?)
 - [ ] Some kind of visual indicator when a window gets focused?
-- [ ] Make sure the wayland session stuff works on a fresh install
-- [ ] Keybinds for kitty and firefox not working properly ootb
-- [ ] Also firefox gets messed up on install? (this seems to be related to X11 vs. Wayland, reproducible which swapping between them)
+    - [ ] Have some basic visual indicator now, but maybe something that looks better?
+- [ ] Wayland/X11 related stuff
+    - [ ] Make sure the wayland session stuff works on a fresh install
+    - [ ] Keybinds for kitty and firefox not working properly ootb
+    - [ ] Also firefox gets messed up on install? (this seems to be related to X11 vs. Wayland, reproducible which swapping between them)
 - [ ] Maybe different profile pic? Or accent color in KDE?
 - [ ] Fix Cursor/VS Code leader keys not working for panel selection when no file open (Update: actually this does seem to work, I think it just seems to not sometimes because it takes time for vim keybinds to load, any way to speed that up?)
+    - [ ] A bit lower priority, kind of moving back to nvim anyways
 - [ ] Some kind of auto-tiling? Similar to TWM behavior (is this even possible in KDE?)
-- [ ] Blur terminal
 
 ### Notes for Agentic Workflow
 
