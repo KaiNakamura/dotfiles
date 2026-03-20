@@ -23,13 +23,14 @@ Structure your output following [template.md](template.md).
     - Its specific, focused research question
     - Relevant context: problem summary, current iteration, what is already known
 5. Wait for all agents to complete and collect their text summaries
-6. Synthesize all summaries into `.thoughts/iteration-NN/understanding/understanding-NN.md`
-7. Ask follow-up questions for clarification if anything remains unclear
-8. Clean up the team when done
+6. Synthesize all summaries into `.thoughts/iteration-NN/understanding/understanding-NN-topic.md` (include a short kebab-case topic in the filename)
+7. Append a one-line entry to `.thoughts/iteration-NN/log.md` describing what was researched and linking to the artifact
+8. Ask follow-up questions for clarification if anything remains unclear
+9. Clean up the team when done
 
 ## Success Criteria
 
-- `.thoughts/iteration-NN/understanding/understanding-NN.md` created in current iteration
+- `.thoughts/iteration-NN/understanding/understanding-NN-topic.md` created in current iteration
 - Produce a coherent, unified document, not a concatenation of agent outputs
 - No code files have been changed
 - Summary returned to user for verification

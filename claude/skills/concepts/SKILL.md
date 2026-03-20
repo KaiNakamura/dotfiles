@@ -14,7 +14,7 @@ Structure your output following [template.md](template.md).
 1. Determine the current iteration (highest `iteration-NN/` directory in `.thoughts/`)
 2. Read these thoughts:
     - `.thoughts/problem.md`: Problem statement
-    - `.thoughts/iteration-NN/understanding/understanding-NN.md`: The most recent (highest number) understanding summary
+    - The most recent understanding file (highest NN) matching `.thoughts/iteration-NN/understanding/understanding-*.md`
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
 3. If the user requests an agent team, or if the task would benefit from parallel research, compose a team from the available agents listed in the project rules
     - Concept generation primarily uses concept-generator agents, but also benefits from web-searchers and code-searchers to find alternative approaches as well as critics to evaluate and challenge proposed concepts
@@ -24,15 +24,16 @@ Structure your output following [template.md](template.md).
     - Relevant context: problem summary, key understanding findings, current iteration number
     - Optionally: a specific angle to look at if useful (e.g., simple/easy-to-understand, elegant/creative/outside-the-box, pre-existing/tried-and-true, reliable/robust, etc.)
 6. Wait for all agents to return their concepts
-7. Synthesize results into `.thoughts/iteration-NN/concepts/concepts-NN.md` at the next version number:
+7. Synthesize results into `.thoughts/iteration-NN/concepts/concepts-NN-topic.md` at the next version number (include a short kebab-case topic in the filename):
     - Rank concepts from most to least recommended
     - Preserve each concept's pros/cons from the generators, but feel free to add additional commentary appropriately
-8. Present summary back to the user
-9. Clean up the team when done
+8. Append a one-line entry to `.thoughts/iteration-NN/log.md` describing what concepts were generated and linking to the artifact
+9. Present summary back to the user
+10. Clean up the team when done
 
 ## Success Criteria
 
-- `.thoughts/iteration-NN/concepts/concepts-NN.md` created in current iteration
+- `.thoughts/iteration-NN/concepts/concepts-NN-topic.md` created in current iteration
 - Multiple concepts ranked with recommendations
 - No code files have been changed
 

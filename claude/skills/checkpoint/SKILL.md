@@ -13,6 +13,7 @@ Structure your output following [template.md](template.md).
 
 1. Determine the current iteration (highest `iteration-NN/` directory in `.thoughts/`)
 2. Generate or update a progress summary at `.thoughts/iteration-NN/progress.md`
+3. Append a one-line entry to `.thoughts/iteration-NN/log.md` noting the checkpoint
 
 ## Success Criteria
 

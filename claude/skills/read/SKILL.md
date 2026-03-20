@@ -11,6 +11,7 @@ Read specified files from shared thoughts to familiarize yourself with the curre
 2. Read these thoughts:
     - `.thoughts/problem.md`: Problem statement
     - `.thoughts/iterations.md`: Cross-iteration summary
+    - `.thoughts/iteration-NN/log.md`: Chronological narrative of the iteration
     - `.thoughts/iteration-NN/progress.md`: Progress summary for the current iteration
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
 3. Output a brief summary of what you learned
