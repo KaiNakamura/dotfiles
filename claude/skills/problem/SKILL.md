@@ -6,6 +6,8 @@ argument-hint: "[problem description]"
 
 Create or update the problem definition for the current task.
 
+Structure your output following [template.md](template.md).
+
 ## Steps
 
 1. Create `.thoughts/` if it doesn't exist
@@ -14,11 +16,10 @@ Create or update the problem definition for the current task.
 
 ## Success Criteria
 
-- `.thoughts/problem.md` exists with the user's problem statement
+- `.thoughts/problem.md` exists with the user's exact problem statement, word-for-word
 - No other files or directories have been modified
 
 ## Guidelines
 
-- Keep the problem statement concise but complete
-- This file is user-controlled - prioritize using their exact words
+- This file is user-controlled - use their exact words
 - Do not embellish or expand beyond what the user provides
