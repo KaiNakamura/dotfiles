@@ -57,6 +57,62 @@ else
     echo "apply-open-browser.sh not found in $WORKDIR"
 fi
 
+# Install dotool (cursor movement tool for Wayland)
+echo "Installing dotool..."
+if ! command -v dotool &> /dev/null && ! [[ -x "$HOME/.local/bin/dotool" ]]; then
+    if ! command -v go &> /dev/null; then
+        echo "Error: Go is required to build dotool but not found."
+        echo "Install Go first: https://go.dev/dl/"
+        exit 1
+    fi
+    if ! pkg-config --exists xkbcommon 2>/dev/null; then
+        echo "Installing libxkbcommon-dev (required for dotool)..."
+        sudo apt-get install -y libxkbcommon-dev
+    fi
+    DOTOOL_BUILD=$(mktemp -d)
+    git clone https://git.sr.ht/~geb/dotool "$DOTOOL_BUILD"
+    (cd "$DOTOOL_BUILD" && go build -o dotool .)
+    mkdir -p "$HOME/.local/bin"
+    cp "$DOTOOL_BUILD/dotool" "$HOME/.local/bin/dotool"
+    cp "$DOTOOL_BUILD/dotoold" "$HOME/.local/bin/dotoold"
+    cp "$DOTOOL_BUILD/dotoolc" "$HOME/.local/bin/dotoolc"
+    chmod +x "$HOME/.local/bin/dotool" "$HOME/.local/bin/dotoold" "$HOME/.local/bin/dotoolc"
+    rm -rf "$DOTOOL_BUILD"
+    echo "dotool built and installed to ~/.local/bin/"
+else
+    echo "dotool already installed."
+fi
+
+# Start dotoold (keeps the virtual input device alive for fast dotoolc calls)
+if ! pgrep -x dotoold > /dev/null 2>&1; then
+    echo "Starting dotoold..."
+    "$HOME/.local/bin/dotoold" &
+    sleep 1
+fi
+
+# Install mouse mover D-Bus service (bridges KWin script to dotool)
+echo "Installing mouse mover D-Bus service..."
+MOUSE_MOVER_SRC="$WORKDIR/scripts/mouse-mover-service.py"
+MOUSE_MOVER_DST="$HOME/.local/bin/mouse-mover-service.py"
+DBUS_SERVICE_SRC="$WORKDIR/dbus-services/org.hjkl.MouseMover.service"
+DBUS_SERVICE_DST="$HOME/.local/share/dbus-1/services/org.hjkl.MouseMover.service"
+
+mkdir -p "$HOME/.local/bin"
+mkdir -p "$HOME/.local/share/dbus-1/services"
+cp "$MOUSE_MOVER_SRC" "$MOUSE_MOVER_DST"
+chmod +x "$MOUSE_MOVER_DST"
+
+# Write D-Bus service file with resolved path
+cat > "$DBUS_SERVICE_DST" << EOF
+[D-BUS Service]
+Name=org.hjkl.MouseMover
+Exec=/usr/bin/python3 $MOUSE_MOVER_DST
+EOF
+
+# Kill any existing mouse mover service so D-Bus restarts it with new code
+pkill -f "mouse-mover-service" 2>/dev/null || true
+echo "Mouse mover D-Bus service installed."
+
 # Install KWin scripts
 KWIN_SCRIPT_DIR="$WORKDIR/kwin-scripts/hjkl-edge-guard"
 if [[ -d "$KWIN_SCRIPT_DIR" ]]; then
