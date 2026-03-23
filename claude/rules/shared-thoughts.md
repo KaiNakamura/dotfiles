@@ -56,4 +56,14 @@ An agent will never need to read information from a previous iteration. The only
 
 ## Iteration Log
 
-Each iteration has a `log.md` that records the chronological progression. Every skill appends an entry after producing its artifact. Entries are one line each: a brief description of what happened and why, with a link to any artifact produced. User requests and decisions that don't produce artifacts should also be logged.
+Each iteration has a `log.md` that records the chronological progression. Skills append an entry after producing their artifact. Entries are one line each: a brief description of what happened and why, with a link to any artifact produced. User requests and decisions that don't produce artifacts should also be logged.
+
+Entry format: `- {what was done}, [artifact-filename.md](./phase/artifact-filename.md)`
+For non-artifact entries: `- {what happened or was decided}`
+
+Example:
+```
+- Researched keybind setup and KWin environment, [understanding-01-keybinds.md](./understanding/understanding-01-keybinds.md)
+- User clarified mouse should center on screen, not window
+- Generated 5 concepts for cursor warp, [concepts-01-cursor-warp.md](./concepts/concepts-01-cursor-warp.md)
+```
