@@ -49,6 +49,21 @@ function centerOf(geo) {
     return { x: geo.x + geo.width / 2, y: geo.y + geo.height / 2 };
 }
 
+function warpToScreenCenter(targetScreen) {
+    var screens = api.getScreens();
+    var bboxW = 0, bboxH = 0;
+    for (var i = 0; i < screens.length; i++) {
+        var g = api.getScreenGeo(screens[i]);
+        bboxW = Math.max(bboxW, g.x + g.width);
+        bboxH = Math.max(bboxH, g.y + g.height);
+    }
+    if (bboxW === 0 || bboxH === 0) return;
+    var sg = api.getScreenGeo(targetScreen);
+    var normX = ((sg.x + sg.width / 2) / bboxW).toString();
+    var normY = ((sg.y + sg.height / 2) / bboxH).toString();
+    callDBus("org.hjkl.MouseMover", "/MouseMover", "org.hjkl.MouseMover", "MoveTo", normX, normY);
+}
+
 // Edge-based directional filter + cone-based fallback for each direction
 var directions = {
     left: {
@@ -168,6 +183,7 @@ function switchDirection(dir) {
         if (dir === opposites[top.arrivedVia] && isSwitchable(top.window)) {
             _history.pop();
             doActivate(top.window);
+            warpToScreenCenter(api.getScreen(top.window));
             return;
         }
     }
@@ -179,6 +195,7 @@ function switchDirection(dir) {
     if (cross) {
         historyPush(active, dir);
         doActivate(cross);
+        warpToScreenCenter(api.getScreen(cross));
         return;
     }
 
@@ -189,6 +206,7 @@ function switchDirection(dir) {
     if (cone) {
         historyPush(active, dir);
         doActivate(cone);
+        warpToScreenCenter(api.getScreen(cone));
         return;
     }
 }
@@ -259,6 +277,7 @@ function moveDirection(dir) {
             _moveHistory.pop();
             _movingWindow = win;
             doMove(win, top.fromScreen);
+            warpToScreenCenter(top.fromScreen);
             return;
         }
     }
@@ -269,6 +288,7 @@ function moveDirection(dir) {
     _movingWindow = win;
     moveHistoryPush(win, fromScreen, dir);
     doMove(win, targetScreen);
+    warpToScreenCenter(targetScreen);
 }
 
 // Shortcut registration

@@ -55,6 +55,10 @@ kwriteconfig5 --file ksmserverrc --group General --key loginMode emptySession
 # Number of Virtual Desktops
 kwriteconfig5 --file kwinrc --group Desktops --key Number 10
 
+# Focus stays on the screen the cursor is on when switching desktops
+kwriteconfig5 --file kwinrc --group Windows --key SeparateScreenFocus true
+kwriteconfig5 --file kwinrc --group Windows --key ActiveMouseScreen false
+
 # Disable animations (set animation speed to instant)
 kwriteconfig5 --file kwinrc --group Compositing --key AnimationSpeed 0
 
