@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Open Browser
-Exec=open-browser.sh %u
+Exec=OPEN_BROWSER_BIN_PATH %u
 NoDisplay=true
-MimeType=x-scheme-handler/http;x-scheme-handler/https;
+MimeType=text/html;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
 X-KDE-StartupNotify=false
