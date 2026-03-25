@@ -3,8 +3,7 @@
 ## Context
 <!-- 2-4 sentences: What are we making concepts for? -->
 
-## Concept [A-Z]: [One-line summary]
-<!-- Brief description of the approach -->
+## Concept [A-Z]: [One-line summary] <!-- Brief description of the approach, label each concept with uppercase letters (A, B, C, etc.) not numbers  -->
 
 ### Pros
 <!-- 2-4 bullets -->
