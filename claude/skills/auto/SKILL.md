@@ -27,28 +27,28 @@ You are working as part of an autonomous engineering pipeline. Your "user" is th
    a. **Assess state.** Read `.thoughts/iteration-NN/log.md` and the current artifacts. Decide what action would be most valuable right now.
 
    Available actions:
-   - **understand** -- research the problem or a specific sub-question
-   - **concepts** -- generate solution options for a design decision
-   - **plan** -- create concrete implementation steps from a chosen direction
-   - **implement** -- execute a plan
-   - **checkpoint** -- save progress for context continuity
-   - **iterate** -- start a fresh iteration when the current approach needs rethinking
+   - **understand**: Research the problem or a specific sub-question
+   - **concepts**: Generate solution options for a design decision
+   - **plan**: Create concrete implementation steps from a chosen direction
+   - **implement**: Execute a plan
+   - **checkpoint**: Save progress for context continuity, useful for compacting context when reaching a logical checkpoint
+   - **iterate**: Start a fresh iteration when the current approach needs rethinking
 
    b. **Prepare the worker prompt.** Read `~/.claude/skills/{action}/SKILL.md` (strip front matter) and `~/.claude/skills/{action}/template.md`. Construct the prompt:
 
       ```
       [Worker Framing]
 
+      CONTEXT:
+      Problem: [contents of .thoughts/problem.md]
+      Current iteration: [NN]
+      Iteration log: [contents of log.md]
+
       SKILL INSTRUCTIONS:
       [Contents of {action}/SKILL.md, front matter stripped]
 
       ARTIFACT TEMPLATE:
       [Contents of {action}/template.md]
-
-      CONTEXT:
-      Problem: [contents of .thoughts/problem.md]
-      Current iteration: [NN]
-      Iteration log: [contents of log.md]
       ```
 
       Replace `$ARGUMENTS` references in the skill with the problem statement or a specific sub-question relevant to the chosen action. The worker has full file access and will read additional context files as directed by the skill instructions.
