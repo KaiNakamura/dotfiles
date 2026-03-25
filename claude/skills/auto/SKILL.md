@@ -1,7 +1,6 @@
 ---
 name: auto
 description: Run the engineering design process autonomously across multiple iterations
-argument-hint: "[problem statement or topic]"
 ---
 
 Run the engineering design process autonomously by acting as the orchestrating "user" for phase workers. Spawn a fresh subagent for each action, respond to their questions via SendMessage, and loop until the problem is solved or the user intervenes.
@@ -16,15 +15,11 @@ You are working as part of an autonomous engineering pipeline. Your "user" is th
 
 ## Steps
 
-1. **Bootstrap.** Accept `$ARGUMENTS` as the problem statement.
-   - If `.thoughts/problem.md` does not exist and `$ARGUMENTS` is provided, create it with the problem statement
-   - If `.thoughts/problem.md` does not exist and no arguments, stop with an error
-   - If no `.thoughts/iteration-*/` directories exist, create `iteration-01/` with `log.md` and `progress.md`
-   - Determine the current iteration (highest `iteration-NN/`)
+1. **Bootstrap.** Verify `.thoughts/problem.md` exists. If not, stop and ask the user to run `/problem` first.
 
 2. **Decision loop.** Repeat:
 
-   a. **Assess state.** Read `.thoughts/iteration-NN/log.md` and the current artifacts. Decide what action would be most valuable right now.
+   a. **Assess state.** Read `.thoughts/iterations.md`, `.thoughts/iteration-NN/log.md`, and relevant artifacts. Decide what action would be most valuable right now.
 
    Available actions:
    - **understand**: Research the problem or a specific sub-question
