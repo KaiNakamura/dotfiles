@@ -74,31 +74,29 @@ if ! command -v dotool &> /dev/null && ! [[ -x "$HOME/.local/bin/dotool" ]]; the
     (cd "$DOTOOL_BUILD" && go build -o dotool .)
     mkdir -p "$HOME/.local/bin"
     cp "$DOTOOL_BUILD/dotool" "$HOME/.local/bin/dotool"
-    cp "$DOTOOL_BUILD/dotoold" "$HOME/.local/bin/dotoold"
-    cp "$DOTOOL_BUILD/dotoolc" "$HOME/.local/bin/dotoolc"
-    chmod +x "$HOME/.local/bin/dotool" "$HOME/.local/bin/dotoold" "$HOME/.local/bin/dotoolc"
+    chmod +x "$HOME/.local/bin/dotool"
     rm -rf "$DOTOOL_BUILD"
     echo "dotool built and installed to ~/.local/bin/"
 else
     echo "dotool already installed."
 fi
 
-# Start dotoold (keeps the virtual input device alive for fast dotoolc calls)
-if ! pgrep -x dotoold > /dev/null 2>&1; then
-    echo "Starting dotoold..."
-    "$HOME/.local/bin/dotoold" &
-    sleep 1
-fi
+# Clean up stale dotoold/FIFO state from previous architecture
+pkill -f "mouse-mover-service" 2>/dev/null || true
+pkill -x dotoold 2>/dev/null || true
+rm -f /tmp/dotool-pipe
 
 # Install mouse mover D-Bus service (bridges KWin script to dotool)
 echo "Installing mouse mover D-Bus service..."
 MOUSE_MOVER_SRC="$WORKDIR/scripts/mouse-mover-service.py"
 MOUSE_MOVER_DST="$HOME/.local/bin/mouse-mover-service.py"
-DBUS_SERVICE_SRC="$WORKDIR/dbus-services/org.hjkl.MouseMover.service"
 DBUS_SERVICE_DST="$HOME/.local/share/dbus-1/services/org.hjkl.MouseMover.service"
+SYSTEMD_UNIT_SRC="$WORKDIR/systemd/mouse-mover.service"
+SYSTEMD_UNIT_DST="$HOME/.config/systemd/user/mouse-mover.service"
 
 mkdir -p "$HOME/.local/bin"
 mkdir -p "$HOME/.local/share/dbus-1/services"
+mkdir -p "$HOME/.config/systemd/user"
 cp "$MOUSE_MOVER_SRC" "$MOUSE_MOVER_DST"
 chmod +x "$MOUSE_MOVER_DST"
 
@@ -107,10 +105,13 @@ cat > "$DBUS_SERVICE_DST" << EOF
 [D-BUS Service]
 Name=org.hjkl.MouseMover
 Exec=/usr/bin/python3 $MOUSE_MOVER_DST
+SystemdService=mouse-mover.service
 EOF
 
-# Kill any existing mouse mover service so D-Bus restarts it with new code
-pkill -f "mouse-mover-service" 2>/dev/null || true
+# Install systemd user unit for the mouse mover service
+cp "$SYSTEMD_UNIT_SRC" "$SYSTEMD_UNIT_DST"
+systemctl --user daemon-reload
+systemctl --user enable mouse-mover.service
 echo "Mouse mover D-Bus service installed."
 
 # Install KWin scripts

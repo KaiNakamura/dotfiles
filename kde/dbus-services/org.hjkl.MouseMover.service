@@ -1,3 +1,4 @@
 [D-BUS Service]
 Name=org.hjkl.MouseMover
 Exec=/usr/bin/python3 __MOUSE_MOVER_PATH__
+SystemdService=mouse-mover.service
