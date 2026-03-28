@@ -75,6 +75,8 @@ Some other settings you may want to configure:
 
 ## TODO
 
+- [ ] Install broken because Go required for dotool!
+
 - [ ] Move mouse to windows when changing focus
 - [ ] More keybinds
     - [ ] Consider changing Meta+Shift+# (move window to desktop) to also change to that desktop
