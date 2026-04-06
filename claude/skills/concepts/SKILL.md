@@ -1,11 +1,11 @@
 ---
 name: concepts
-description: Generate solution concepts with pros/cons for the user to evaluate
+description: Generate concepts for each open design decision, with pros/cons for the user to evaluate
 ---
 
-Your task is to generate concepts for solving the user's problem by orchestrating parallel concept-generator agents, then synthesizing and ranking their output. Your job is to spawn the agents and produce a final ranked concepts document.
+Your task is to generate separate concepts for each open design decision in the user's problem by orchestrating concept-generator agents, then synthesizing and ranking their output. Your job is to spawn agents and produce a concepts document organized by decision.
 
-Propose many potential solutions each with pros/cons and let the user weigh in on the final decision. Order recommended solutions from best to worst and keep explanations at a high-level. Expect some back-and-forth conversation with the user as they ask questions about proposed solutions and shape it into a final plan. Be sure to let the user make the important decisions, your job is to present options and recommendations but let the user shape ideas as they see fit.
+For each design decision, propose multiple potential approaches with pros/cons and let the user weigh in on the final decisoin. Rank recommendations within each decision from best to worst and keep explanations high-level. Expect some back-and-forth conversation with the user as they ask questions about proposed solutions and shape it into a final plan. Be sure to let the user make the important decisions, your job is to present options and recommendations but let the user shape ideas as they see fit.
 
 Structure your output following [template.md](template.md).
 
@@ -26,7 +26,8 @@ Structure your output following [template.md](template.md).
     - Optionally: a specific angle to look at if useful (e.g., simple/easy-to-understand, elegant/creative/outside-the-box, pre-existing/tried-and-true, reliable/robust, etc.)
 6. Wait for all agents to return their concepts
 7. Synthesize results into `.thoughts/iteration-NN/concepts/concepts-NN-topic.md` at the next version number (include a short kebab-case topic in the filename):
-    - Rank concepts from most to least recommended
+    - Group concepts by design decision (if there is only one design decision a single group is fine)
+    - Rank concepts within each decision from most to least recommended (each decision gets its own recommendation)
     - Preserve each concept's pros/cons from the generators, but feel free to add additional commentary appropriately
 8. Append a one-line entry to `.thoughts/iteration-NN/log.md` describing what concepts were generated and linking to the artifact
 9. Present summary back to the user
@@ -35,7 +36,7 @@ Structure your output following [template.md](template.md).
 ## Success Criteria
 
 - `.thoughts/iteration-NN/concepts/concepts-NN-topic.md` created in current iteration
-- Multiple concepts ranked with recommendations
+- Concepts organized by design decision, with per-decision recommendations
 - No code files have been changed
 
 ## Guidelines
