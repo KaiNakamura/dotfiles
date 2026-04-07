@@ -7,8 +7,8 @@ Example:
 - Write `The agent, which runs locally, reads the file`
 
 Example:
-- Instead of `All edits target the dotfiles repo — the user will manually install.`
-- Write `All edits target the dotfiles repo, the user will manually install.`
+- Instead of `Edits target the dotfiles repo — the user will manually install.`
+- Write `Edits target the dotfiles repo, the user will manually install.`
 
 Example:
 - Instead of `→`
