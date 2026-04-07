@@ -11,12 +11,12 @@ Structure your output following [template.md](template.md).
 
 ## Steps
 
-1. Determine the current iteration (highest `iteration-NN/` directory in `.thoughts/`)
-2. Generate or update a progress summary at `.thoughts/iteration-NN/progress.md`
-3. Append a one-line entry to `.thoughts/iteration-NN/log.md` noting the checkpoint
+1. Determine the current iteration (highest `iteration-NN/` directory)
+2. Generate or update a progress summary at `iteration-NN/progress.md`
+3. Append a one-line entry to `iteration-NN/log.md` noting the checkpoint
 
 ## Success Criteria
 
-- `.thoughts/iteration-NN/progress.md` updated in current iteration
+- `iteration-NN/progress.md` updated in current iteration
 - All critical context captured for handoff
 - No other files or directories have been modified

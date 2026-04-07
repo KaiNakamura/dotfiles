@@ -8,8 +8,8 @@
   "permissions": {
     "allow": [
       "Read(*)",
-      "Edit(.thoughts/**)",
-      "Write(.thoughts/**)",
+      "Edit(~/repos/thoughts/**)",
+      "Write(~/repos/thoughts/**)",
       "Bash",
       "WebSearch",
       "WebFetch"

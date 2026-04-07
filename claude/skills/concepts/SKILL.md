@@ -11,10 +11,10 @@ Structure your output following [template.md](template.md).
 
 ## Steps
 
-1. Determine the current iteration (highest `iteration-NN/` directory in `.thoughts/`)
+1. Determine the current iteration (highest `iteration-NN/` directory)
 2. Read these thoughts:
-    - `.thoughts/problem.md`: Problem statement
-    - The most recent understanding file (highest NN) matching `.thoughts/iteration-NN/understanding/understanding-*.md`
+    - `problem.md`: Problem statement
+    - The most recent understanding file (highest NN) matching `iteration-NN/understanding/understanding-*.md`
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
     - If your task requires context beyond these files, consult `log.md` to identify other relevant artifacts by their descriptions and slugs
 3. If the user requests an agent team, or if the task would benefit from parallel research, compose a team from the available agents listed in the project rules
@@ -23,18 +23,19 @@ Structure your output following [template.md](template.md).
 4. Decide how many concept-generator agents to spawn (usually around 2–3; adjust based on solution space breadth). Let `$ARGUMENTS` influence count or focus if the user has hinted at preferences. Optionally give each agent a different angle to nudge diversity, but this is not required - parallel agents will naturally produce varied results.
 5. Spawn all concept-generator agents in parallel, each with:
     - Relevant context: problem summary, key understanding findings, current iteration number
+    - Code repo paths from the hub file frontmatter so agents know where source code lives
     - Optionally: a specific angle to look at if useful (e.g., simple/easy-to-understand, elegant/creative/outside-the-box, pre-existing/tried-and-true, reliable/robust, etc.)
 6. Wait for all agents to return their concepts
-7. Synthesize results into `.thoughts/iteration-NN/concepts/concepts-NN-topic.md` at the next version number (include a short kebab-case topic in the filename):
+7. Synthesize results into `iteration-NN/concepts/concepts-NN-topic.md` at the next version number (include a short kebab-case topic in the filename):
     - Rank concepts from most to least recommended
     - Preserve each concept's pros/cons from the generators, but feel free to add additional commentary appropriately
-8. Append a one-line entry to `.thoughts/iteration-NN/log.md` describing what concepts were generated and linking to the artifact
+8. Append a one-line entry to `iteration-NN/log.md` describing what concepts were generated and linking to the artifact
 9. Present summary back to the user
 10. Clean up the team when done
 
 ## Success Criteria
 
-- `.thoughts/iteration-NN/concepts/concepts-NN-topic.md` created in current iteration
+- `iteration-NN/concepts/concepts-NN-topic.md` created in current iteration
 - Multiple concepts ranked with recommendations
 - No code files have been changed
 

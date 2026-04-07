@@ -11,22 +11,23 @@ Structure your output following [template.md](template.md).
 
 ## Steps
 
-1. Determine the current iteration (highest `iteration-NN/` directory in `.thoughts/`)
+1. Determine the current iteration (highest `iteration-NN/` directory)
 2. Read these thoughts:
-    - `.thoughts/problem.md`: Problem statement
-    - The most recent understanding file (highest NN) matching `.thoughts/iteration-NN/understanding/understanding-*.md`
-    - The most recent concepts file (highest NN) matching `.thoughts/iteration-NN/concepts/concepts-*.md`
+    - `problem.md`: Problem statement
+    - The most recent understanding file (highest NN) matching `iteration-NN/understanding/understanding-*.md`
+    - The most recent concepts file (highest NN) matching `iteration-NN/concepts/concepts-*.md`
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
     - If your task requires context beyond these files, consult `log.md` to identify other relevant artifacts by their descriptions and slugs
 3. If the user requests an agent team, or if the plan requires significant research, compose a team from the available agents listed in the project rules
     - Planning benefits from code-searchers (understand implementation details), web-searchers (find best practices), and critics (identify risks and gaps)
     - You may spawn 0, 1, or multiple of any agent type. For trivial questions or if specified by the user via `$ARGUMENTS`, skip teammates and research directly.
-4. Create a new `.thoughts/iteration-NN/plan/plan-NN-topic.md` file at the next version number (include a short kebab-case topic in the filename)
-5. Append a one-line entry to `.thoughts/iteration-NN/log.md` describing what was planned and linking to the artifact
+    - Include code repo paths from the hub file frontmatter so agents know where source code lives
+4. Create a new `iteration-NN/plan/plan-NN-topic.md` file at the next version number (include a short kebab-case topic in the filename)
+5. Append a one-line entry to `iteration-NN/log.md` describing what was planned and linking to the artifact
 
 ## Success Criteria
 
-- `.thoughts/iteration-NN/plan/plan-NN-topic.md` created in current iteration
+- `iteration-NN/plan/plan-NN-topic.md` created in current iteration
 - No code files have been changed
 
 ## Guidelines

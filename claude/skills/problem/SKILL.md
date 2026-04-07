@@ -4,19 +4,19 @@ description: Create or update the problem definition for the current task
 argument-hint: "[problem description]"
 ---
 
-Create or update the problem definition for the current task.
+Update the problem definition for the current task.
 
 Structure your output following [template.md](template.md).
 
 ## Steps
 
-1. Create `.thoughts/` if it doesn't exist
-2. If `.thoughts/problem.md` exists, read it first
-3. Based on the user's prompt or `$ARGUMENTS`, create/update `.thoughts/problem.md`
+1. If `problem.md` doesn't exist, tell the user to run `/new-project` first
+2. If `problem.md` exists, read it first
+3. Based on the user's prompt or `$ARGUMENTS`, update `problem.md`
 
 ## Success Criteria
 
-- `.thoughts/problem.md` exists with the user's exact problem statement, word-for-word
+- `problem.md` exists with the user's exact problem statement, word-for-word
 - No other files or directories have been modified
 
 ## Guidelines
