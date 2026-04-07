@@ -24,6 +24,7 @@ Structure your output following [template.md](template.md).
     - Its specific, focused research question
     - Relevant context: problem summary, current iteration, what is already known
     - Include code repo paths from the hub file frontmatter so agents know where source code lives
+    - If the hub file links to related projects, consider whether those projects have relevant findings. Read their hub files if the research question would benefit from cross-project context. Use judgment: don't read unrelated projects.
 5. Wait for all agents to complete and collect their text summaries
 6. Synthesize all summaries into `iteration-NN/understanding/understanding-NN-topic.md` (include a short kebab-case topic in the filename)
 7. Append a one-line entry to `iteration-NN/log.md` describing what was researched and linking to the artifact
