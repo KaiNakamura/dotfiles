@@ -1,6 +1,6 @@
 # Shared Thoughts Context
 
-Shared context between agents lives in a centralized Obsidian vault at `~/repos/thoughts/`. Claude is launched from a project folder within the vault, so all project paths are relative to CWD. Be selective when reading artifacts. Use `log.md` entries and artifact slugs to judge relevance before reading full files.
+Shared context between agents lives in a centralized Obsidian vault at `~/repos/thoughts/`. Claude is launched from a project folder within the vault. Be selective when reading artifacts. Use `log.md` entries and artifact slugs to judge relevance before reading full files.
 
 ## Vault Structure
 
@@ -8,29 +8,25 @@ The vault organizes work into projects under `projects/`:
 
 ```
 ~/repos/thoughts/
-├── README.md                <- vault overview
+├── README.md
 ├── projects/
-│   ├── group-folder/        <- organizational grouping (no problem.md)
-│   │   ├── my-project/      <- project (has problem.md)
-│   │   │   ├── my-project.md
-│   │   │   ├── problem.md
-│   │   │   └── iteration-01/
-│   │   └── other-project/
-│   └── standalone-project/
+│   ├── {group}/             <- folders without problem.md are groups
+│   │   └── {project-name}/  <- folders with problem.md are projects
+│   │       ├── {project-name}.md
+│   │       ├── problem.md
+│   │       └── iteration-01/
+│   └── {project-name}/
 └── .obsidian/
 ```
 
-- Projects live under `~/repos/thoughts/projects/` with arbitrary nesting depth
-- `problem.md` is the project marker. Group folders don't have one.
-- Discover a specific project: `projects/**/slug/problem.md`
-- Enumerate all projects: `projects/**/problem.md`
+Projects live under `projects/` at any nesting depth. `problem.md` marks a project; folders without it are groups. Discover projects: `projects/**/problem.md`.
 
 ## Project Structure
 
 Each project directory follows the Engineering Design Process:
 
 ```
-{slug}.md                <- project hub (unique name, repos in frontmatter)
+{project-name}.md                <- project hub (unique name, repos in frontmatter)
 problem.md               <- problem statement (static anchor)
 iterations.md            <- cross-iteration summary
 iteration-01/
@@ -46,7 +42,7 @@ iteration-01/
     └── implementation-NN-topic.md
 ```
 
-- `{slug}.md`: Project hub (see Hub File section)
+- `{project-name}.md`: Project hub (see Hub File section)
 - `problem.md`: Problem statement
 - `iterations.md`: Cross-iteration summary
 - `iteration-NN/log.md`: Chronological record of the iteration, with links to artifacts produced
@@ -58,30 +54,27 @@ iteration-01/
 
 ## Hub File
 
-- `{slug}.md` is the uniquely-named project hub, where `{slug}` matches the project folder name
+- `{project-name}.md` is the uniquely-named project hub, where `{project-name}` matches the project folder name
 - Frontmatter contains `repos:` (list of absolute paths to code repos) and `status:` (active/dormant)
 - Body contains contextual prose with wiki-links to related projects and key artifacts
 - Agents read this file to learn which code repos to operate on and pass those paths to sub-agents
 
 ### Cross-Project Links
 
-Hub files may contain wiki-links to related projects (e.g., `[[other-slug]]`). When these links are relevant to the current task, read the linked hub file for additional context. Use judgment: don't follow every link automatically, and don't follow links recursively. One hop is typical.
+Hub files may contain wiki-links to related projects. When these links are relevant to the current task, read the linked hub file for additional context. Use judgment: don't follow every link automatically, and don't follow links recursively. One hop is typical.
 
-**Link format:**
-- Hub-to-hub links: use bare `[[slug]]` (works because hub filenames are unique per project)
-- Links to specific artifacts in other projects: use `[[projects/.../artifact|artifact]]` (path-qualified with display alias)
-
-**Resolving a bare `[[slug]]` link:** Glob for `projects/**/slug/slug.md` from the vault root.
+**Link format:** Always use `[[full/path|short-name]]` so links work in Obsidian:
+- Hub-to-hub: `[[projects/{group}/{project-name}/{project-name}|{project-name}]]`
+- Artifact: `[[projects/{group}/{project-name}/iteration-01/understanding/understanding-01-topic|understanding-01-topic]]`
 
 ## Obsidian Basics
 
 This vault is an [Obsidian](https://obsidian.md) vault. Key things agents should know:
 
-- **Wiki-links**: `[[target]]` is the cross-reference syntax. Obsidian resolves bare `[[name]]` by filename match when the name is unique in the vault. For non-unique names, use path-qualified `[[path/to/name]]`.
-- **Frontmatter**: YAML between `---` delimiters at the top of a file. Contains machine-readable metadata. Hub files use `repos:` (list of code repo paths) and `status:` (active/dormant).
+- **Wiki-links**: `[[target]]` is the cross-reference syntax. Always use full paths with display alias: `[[full/path/to/note|display name]]`.
+- **Frontmatter**: YAML between `---` delimiters at the top of a file. Hub files use `repos:` (list of code repo paths) and `status:` (active/dormant).
 - **Filtering by status**: Grep frontmatter to find active projects: `grep -r "status: active" projects/`.
-- **File moves**: Moving files via the filesystem (not the Obsidian GUI) does not trigger automatic link updates. Prefer not moving files. If necessary, update links manually.
-- **Link format config**: The vault uses absolute link format. Obsidian writes `[[full/path|display]]` but bare `[[name]]` resolves fine for unique filenames.
+- **File moves**: Moving files via the filesystem (not Obsidian) does not trigger automatic link updates. Prefer not moving files.
 
 ## Artifact Versioning
 
