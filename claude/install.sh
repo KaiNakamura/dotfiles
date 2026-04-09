@@ -14,6 +14,9 @@ WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Copy settings.json
 cp "$WORKDIR/settings.json" ~/.claude/settings.json
 
+# Copy keybindings.json
+cp "$WORKDIR/keybindings.json" ~/.claude/keybindings.json
+
 # Copy CLAUDE.md
 cp "$WORKDIR/CLAUDE.md" ~/.claude/CLAUDE.md
 
