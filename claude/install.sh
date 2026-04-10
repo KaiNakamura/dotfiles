@@ -8,12 +8,11 @@ else
     curl -fsSL https://claude.ai/install.sh | bash
 fi
 
-# Install caveman plugin (includes skills + auto-loading hooks for always-on terse mode)
-claude plugin marketplace add JuliusBrussee/caveman
-claude plugin install caveman@caveman
-
 # Get the directory where this script is located
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Install plugins
+"$WORKDIR/install-plugins.sh"
 
 # Copy settings.json
 cp "$WORKDIR/settings.json" ~/.claude/settings.json
