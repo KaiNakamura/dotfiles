@@ -26,7 +26,7 @@ Projects live under `projects/` at any nesting depth. `problem.md` marks a proje
 Each project directory follows the Engineering Design Process:
 
 ```
-{project-name}.md                <- project hub (unique name, repos in frontmatter)
+{project-name}.md        <- project hub (unique name, repos in frontmatter)
 problem.md               <- problem statement (static anchor)
 iterations.md            <- cross-iteration summary
 iteration-01/
@@ -55,7 +55,7 @@ iteration-01/
 ## Hub File
 
 - `{project-name}.md` is the uniquely-named project hub, where `{project-name}` matches the project folder name
-- Frontmatter contains `repos:` (list of absolute paths to code repos) and `status:` (active/dormant)
+- Frontmatter contains `repos:` (list of absolute paths to code repos)
 - Body contains contextual prose with wiki-links to related projects and key artifacts
 - Agents read this file to learn which code repos to operate on and pass those paths to sub-agents
 
@@ -72,8 +72,7 @@ Hub files may contain wiki-links to related projects. When these links are relev
 This vault is an [Obsidian](https://obsidian.md) vault. Key things agents should know:
 
 - **Wiki-links**: `[[target]]` is the cross-reference syntax. Always use full paths with display alias: `[[full/path/to/note|display name]]`.
-- **Frontmatter**: YAML between `---` delimiters at the top of a file. Hub files use `repos:` (list of code repo paths) and `status:` (active/dormant).
-- **Filtering by status**: Grep frontmatter to find active projects: `grep -r "status: active" projects/`.
+- **Frontmatter**: YAML between `---` delimiters at the top of a file. Hub files use `repos:` (list of code repo paths).
 - **File moves**: Moving files via the filesystem (not Obsidian) does not trigger automatic link updates. Prefer not moving files.
 
 ## Artifact Versioning

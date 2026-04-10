@@ -9,13 +9,13 @@ Read specified files from shared thoughts to familiarize yourself with the curre
 
 1. Determine the current iteration (highest `iteration-NN/` directory)
 2. Read these thoughts:
-    - `{slug}.md`: Project hub (glob for `*.md` at project root whose stem matches the folder name)
+    - `{project-name}.md`: Project hub (glob for `*.md` at project root whose stem matches the folder name)
     - `problem.md`: Problem statement
     - `iterations.md`: Cross-iteration summary
     - `iteration-NN/log.md`: Chronological narrative of the iteration
     - `iteration-NN/progress.md`: Progress summary for the current iteration
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
-3. Check the hub file for wiki-links to other projects (`[[slug]]`). If any exist, note them in the summary output (e.g., "This project links to: X, Y, Z"). Do not automatically read them.
+3. Check the hub file for wiki-links to other projects. If any exist, note them in the summary output (e.g., "This project links to: X, Y, Z"). Do not automatically read them.
 4. Based on what you learned, output a brief summary covering:
    - Where the iteration currently stands (what phase, what was last done)
    - Key decisions made so far

@@ -12,11 +12,10 @@ Create a new project in the Obsidian thoughts vault with full scaffolding.
 2. Full project path: `~/repos/thoughts/projects/<group-path>/<slug>/`
 3. Create group folders if they don't exist (`mkdir -p`)
 4. Create project structure:
-   - `<slug>.md` -- hub file with frontmatter:
+   - `<slug>.md` -- hub file (the project name, matching the folder) with frontmatter:
      ```yaml
      ---
      repos: []
-     status: active
      ---
      ```
    - `problem.md` -- prompt user for problem statement
