@@ -16,7 +16,7 @@ Structure your output following [template.md](template.md).
     - `.thoughts/iteration-NN/progress.md`: Progress summary for the current iteration
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
     - If your task requires context beyond these files, consult `log.md` to identify other relevant artifacts by their descriptions and slugs
-3. Do NOT spawn agents by default. Work directly unless the user explicitly requests it via natural language (e.g., 'agent team of three', 'use agents', 'use a team'). When requested, parse the team size from the request and compose a team accordingly:
+3. Do NOT spawn agents by default. Work directly unless the user explicitly requests it via natural language (e.g., 'agent team of 3', 'use an agent team').
     - Refer to the available agents and team composition guidelines in the project rules to determine what teammates to use
     - Understanding tasks primarily benefit from code-searchers and web-searchers for broad research. Include critics when validating existing research.
 4. If spawning agents, for each teammate provide:
