@@ -36,6 +36,7 @@ INSTALL_ORDER=(
     "worktrunk"
     "tldr"
     "aws"
+    "earlyoom"
 )
 
 # Function to print colored output

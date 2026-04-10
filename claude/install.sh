@@ -11,8 +11,14 @@ fi
 # Get the directory where this script is located
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Install plugins
+"$WORKDIR/install-plugins.sh"
+
 # Copy settings.json
 cp "$WORKDIR/settings.json" ~/.claude/settings.json
+
+# Copy keybindings.json
+cp "$WORKDIR/keybindings.json" ~/.claude/keybindings.json
 
 # Copy CLAUDE.md
 cp "$WORKDIR/CLAUDE.md" ~/.claude/CLAUDE.md

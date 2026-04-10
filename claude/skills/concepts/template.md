@@ -1,15 +1,18 @@
 # Concepts [NN]: [Topic]
 
 ## Context
-<!-- 2-4 sentences: What are we making concepts for? -->
+<!-- 2-4 sentences: What are we generating concepts for? -->
 
-## Concept [A-Z]: [One-line summary] <!-- Brief description of the approach, label each concept with uppercase letters (A, B, C, etc.) not numbers  -->
+## Decision [N]: [One-line description]
+<!-- Repeat for each open design decision -->
 
-### Pros
+### Concept [A-Z]: [One-line summary] <!-- Brief description of the approach, label each concept with uppercase letters (A, B, C, etc.) not numbers. Letters reset per decision. -->
+
+#### Pros
 <!-- 2-4 bullets -->
 
-### Cons
+#### Cons
 <!-- 2-4 bullets. Only include genuine downsides -- do NOT fabricate cons to fill space -->
 
-## Recommendation
-<!-- Rank concepts. State which is recommended and why. -->
+### Recommendation
+<!-- Rank concepts within this decision. State which is recommended and why. -->
