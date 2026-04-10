@@ -18,9 +18,7 @@ Structure your output following [template.md](template.md).
     - The most recent concepts file (highest NN) matching `.thoughts/iteration-NN/concepts/concepts-*.md`
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
     - If your task requires context beyond these files, consult `log.md` to identify other relevant artifacts by their descriptions and slugs
-3. If the user requests an agent team, or if the plan requires significant research, compose a team from the available agents listed in the project rules
-    - Planning benefits from code-searchers (understand implementation details), web-searchers (find best practices), and critics (identify risks and gaps)
-    - You may spawn 0, 1, or multiple of any agent type. For trivial questions or if specified by the user via `$ARGUMENTS`, skip teammates and research directly.
+3. Do NOT spawn agents by default. Work directly unless the user explicitly requests it via natural language (e.g., 'agent team of 3', 'use an agent team'). When spawning agents, planning benefits from code-searchers (implementation details), web-searchers (best practices), and critics (risks and gaps).
 4. Create a new `.thoughts/iteration-NN/plan/plan-NN-topic.md` file at the next version number (include a short kebab-case topic in the filename)
 5. Append a one-line entry to `.thoughts/iteration-NN/log.md` describing what was planned and linking to the artifact
 

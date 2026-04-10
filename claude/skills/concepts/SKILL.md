@@ -17,10 +17,8 @@ Structure your output following [template.md](template.md).
     - The most recent understanding file (highest NN) matching `.thoughts/iteration-NN/understanding/understanding-*.md`
     - Any thoughts explicitly specified by the user via `$ARGUMENTS`
     - If your task requires context beyond these files, consult `log.md` to identify other relevant artifacts by their descriptions and slugs
-3. If the user requests an agent team, or if the task would benefit from parallel research, compose a team from the available agents listed in the project rules
-    - Concept generation primarily uses concept-generator agents, but also benefits from web-searchers and code-searchers to find alternative approaches as well as critics to evaluate and challenge proposed concepts
-    - You may spawn 0, 1, or multiple of any agent type. For trivial questions or if specified by the user via `$ARGUMENTS`, skip teammates and research directly.
-4. Decide how many concept-generator agents to spawn (usually around 2–3; adjust based on solution space breadth). Let `$ARGUMENTS` influence count or focus if the user has hinted at preferences. Optionally give each agent a different angle to nudge diversity, but this is not required - parallel agents will naturally produce varied results.
+3. Do NOT spawn agents by default. Work directly unless the user explicitly requests it via natural language (e.g., 'agent team of 3', 'use an agent team'). When spawning agents, concept generation primarily uses concept-generator agents, but also benefits from web-searchers and code-searchers to find alternative approaches as well as critics to evaluate and challenge proposed concepts.
+4. If spawning agents, decide how many concept-generator agents to spawn based on the requested team size. Let `$ARGUMENTS` influence count or focus if the user has hinted at preferences. Optionally give each agent a different angle to nudge diversity, but this is not required - parallel agents will naturally produce varied results.
 5. Spawn all concept-generator agents in parallel, each with:
     - Relevant context: problem summary, key understanding findings, current iteration number
     - Optionally: a specific angle to look at if useful (e.g., simple/easy-to-understand, elegant/creative/outside-the-box, pre-existing/tried-and-true, reliable/robust, etc.)

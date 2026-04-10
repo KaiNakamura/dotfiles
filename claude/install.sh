@@ -11,6 +11,9 @@ fi
 # Get the directory where this script is located
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Install plugins
+"$WORKDIR/install-plugins.sh"
+
 # Copy settings.json
 cp "$WORKDIR/settings.json" ~/.claude/settings.json
 
