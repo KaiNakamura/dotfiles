@@ -12,18 +12,18 @@ Create a new project in the Obsidian thoughts vault with full scaffolding.
 2. Full project path: `~/repos/thoughts/projects/<group-path>/<slug>/`
 3. Create group folders if they don't exist (`mkdir -p`)
 4. Create project structure:
-   - `<slug>.md` -- hub file (the project name, matching the folder) with frontmatter:
-     ```yaml
+   - `<slug>.md` -- hub file (the project name, matching the folder) with this content:
+     ````markdown
      ---
      repos: []
      ---
-     ```
+     ````
    - `problem.md` -- prompt user for problem statement
    - `iterations.md` -- empty with header `# Iterations`
    - `iteration-01/log.md` -- with header `# Iteration 01 Log` and initial entry
    - `iteration-01/progress.md` -- from checkpoint template
    - Empty phase dirs: `iteration-01/{understanding,concepts,plan,implementation}/`
-5. Prompt user for repo paths, populate hub file `repos:` frontmatter
+5. Prompt user for repo paths. Populate `repos:` frontmatter with primary working paths (the paths that work on this machine)
 6. Append a line to `~/repos/thoughts/README.md` under the `## Projects` heading: `- [slug](projects/<group-path>/<slug>/<slug>.md): one-line problem summary`
 7. Output the full path so user can `cd` to it
 
