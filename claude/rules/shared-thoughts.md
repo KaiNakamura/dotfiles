@@ -78,11 +78,12 @@ iteration-01/
 
 Hub files may contain wiki-links to related projects. When these links are relevant to the current task, read the linked hub file for additional context. Use judgment: don't follow every link automatically, and don't follow links recursively. One hop is typical.
 
-**Link format:** Use the shortest unique path with a display alias. Obsidian searches the vault, so no leading slash needed. The project slug prefix is typically enough for uniqueness:
+**Link format:** Use the shortest unique path. Obsidian searches the vault by suffix matching, so no leading slash needed. Structural filenames (problem, iterations, log, progress) are not unique across projects and need a slug prefix. Artifact filenames are unique by design and can be used bare:
 - Hub-to-problem: `[[{slug}/problem|problem]]`
 - Hub-to-iterations: `[[{slug}/iterations|iterations]]`
 - problem.md back to hub: `[[{slug}/{slug}|{slug}]]`
-- Artifact: `[[{slug}/iteration-01/understanding/understanding-01-topic|understanding-01-topic]]`
+- Log/progress: `[[{slug}/iteration-01/log|log]]`, `[[{slug}/iteration-01/progress|progress]]`
+- Artifact (in log entries): `[[understanding-01-topic]]`, `[[plan-01-topic]]`
 
 ## Artifact Versioning
 
@@ -105,12 +106,12 @@ An agent will never need to read information from a previous iteration. The only
 
 Each iteration has a `log.md` that records the chronological progression. Skills append an entry after producing their artifact. Entries are one line each: a brief description of what happened and why, with a link to any artifact produced. User requests and decisions that don't produce artifacts should also be logged.
 
-Entry format: `- {what was done}, [artifact-filename.md](./phase/artifact-filename.md)`
+Entry format: `- {what was done}, [[artifact-filename]]`
 For non-artifact entries: `- {what happened or was decided}`
 
 Example:
 ```
-- Researched keybind setup and KWin environment, [understanding-01-keybinds.md](./understanding/understanding-01-keybinds.md)
+- Researched keybind setup and KWin environment, [[understanding-01-keybinds]]
 - User clarified mouse should center on screen, not window
-- Generated 5 concepts for cursor warp, [concepts-01-cursor-warp.md](./concepts/concepts-01-cursor-warp.md)
+- Generated 5 concepts for cursor warp, [[concepts-01-cursor-warp]]
 ```
