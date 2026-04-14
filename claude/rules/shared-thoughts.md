@@ -6,7 +6,7 @@ Shared context between agents lives in a centralized Obsidian vault at `~/repos/
 
 This vault is an [Obsidian](https://obsidian.md) vault. Key things agents should know:
 
-- **Wiki-links**: `[[target]]` is the cross-reference syntax. Use relative paths with a display alias: `[[{slug}/note|display name]]`. Relative paths work in Obsidian and are preferred since projects can move.
+- **Wiki-links**: `[[target]]` is the cross-reference syntax. Obsidian resolves links by searching the vault -- no leading slash needed. Use the shortest unique path with a display alias: `[[{slug}/note|display name]]`.
 - **Frontmatter**: YAML between `---` delimiters at the top of a file. Hub files use `tags: [project]`.
 - **File moves**: Moving files via the filesystem (not Obsidian) does not trigger automatic link updates. Prefer not moving files.
 
@@ -78,7 +78,7 @@ iteration-01/
 
 Hub files may contain wiki-links to related projects. When these links are relevant to the current task, read the linked hub file for additional context. Use judgment: don't follow every link automatically, and don't follow links recursively. One hop is typical.
 
-**Link format:** Use relative paths with display alias `[[{slug}/note|display]]`. Include enough path context for uniqueness -- typically the project slug prefix is sufficient:
+**Link format:** Use the shortest unique path with a display alias. Obsidian searches the vault, so no leading slash needed. The project slug prefix is typically enough for uniqueness:
 - Hub-to-problem: `[[{slug}/problem|problem]]`
 - Hub-to-iterations: `[[{slug}/iterations|iterations]]`
 - problem.md back to hub: `[[{slug}/{slug}|{slug}]]`
