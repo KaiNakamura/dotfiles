@@ -15,7 +15,7 @@ You are working as part of an autonomous engineering pipeline. Your "user" is th
 
 ## Steps
 
-1. **Bootstrap.** Verify `problem.md` exists. If not, stop and ask the user to run `/problem` first. Also read the hub file (`{project-name}.md`) to get code repo paths.
+1. **Bootstrap.** Verify `problem.md` exists. If not, stop and ask the user to run `/problem` first. Also read the hub file (`{project-name}.md`) to get repo paths and project context.
 
 2. **Decision loop.** Repeat:
 
@@ -38,7 +38,7 @@ You are working as part of an autonomous engineering pipeline. Your "user" is th
       Problem: [contents of problem.md]
       Current iteration: [NN]
       Iteration log: [contents of log.md]
-      Code repos: [paths from hub file frontmatter]
+      Code repos: [paths from hub file body]
 
       SKILL INSTRUCTIONS:
       [Contents of {action}/SKILL.md, front matter stripped]

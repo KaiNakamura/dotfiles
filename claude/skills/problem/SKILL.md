@@ -32,13 +32,21 @@ Create or update the problem definition for the current project. Also bootstraps
 ```markdown
 ---
 tags: [project]
-repos:
-  - {$PWD}
 ---
 - [[{slug}/problem|problem]]
 - [[{slug}/iterations|iterations]]
 
 {one-line problem summary from user}
+```
+
+## Problem File Template
+
+```markdown
+[[{slug}/{slug}|{slug}]]
+
+# Problem
+
+{user's exact problem statement}
 ```
 
 ## Iterations File Template

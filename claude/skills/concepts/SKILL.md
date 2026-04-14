@@ -21,7 +21,7 @@ Structure your output following [template.md](template.md).
 4. If spawning agents, decide how many concept-generator agents to spawn based on the requested team size. Let `$ARGUMENTS` influence count or focus if the user has hinted at preferences. Optionally give each agent a different angle to nudge diversity, but this is not required - parallel agents will naturally produce varied results.
 5. Spawn all concept-generator agents in parallel, each with:
     - Relevant context: problem summary, key understanding findings, current iteration number
-    - Code repo paths from the hub file frontmatter so agents know where source code lives
+    - Repo paths and context from the hub file body so agents know where source code lives
     - Optionally: a specific angle to look at if useful (e.g., simple/easy-to-understand, elegant/creative/outside-the-box, pre-existing/tried-and-true, reliable/robust, etc.)
 6. Wait for all agents to return their concepts
 7. Synthesize results into `iteration-NN/concepts/concepts-NN-topic.md` at the next version number (include a short kebab-case topic in the filename):

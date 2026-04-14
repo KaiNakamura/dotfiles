@@ -6,8 +6,8 @@ Shared context between agents lives in a centralized Obsidian vault at `~/repos/
 
 This vault is an [Obsidian](https://obsidian.md) vault. Key things agents should know:
 
-- **Wiki-links**: `[[target]]` is the cross-reference syntax. Always use full paths with display alias: `[[full/path/to/note|display name]]`.
-- **Frontmatter**: YAML between `---` delimiters at the top of a file. Hub files use `repos:` (list of code repo paths).
+- **Wiki-links**: `[[target]]` is the cross-reference syntax. Use relative paths with a display alias: `[[{slug}/note|display name]]`. Relative paths work in Obsidian and are preferred since projects can move.
+- **Frontmatter**: YAML between `---` delimiters at the top of a file. Hub files use `tags: [project]`.
 - **File moves**: Moving files via the filesystem (not Obsidian) does not trigger automatic link updates. Prefer not moving files.
 
 ## Vault Structure
@@ -64,23 +64,25 @@ iteration-01/
 
 `{project-name}.md`: project hub, named to match the folder.
 
-**Frontmatter**: lean `repos:` list of primary working paths on this machine. Agents use as a fast starting point. May be stale or machine-specific.
+**Frontmatter**: `tags: [project]`. Repo paths are tracked in dedicated repo files under `repos/` rather than in hub frontmatter.
 
-**Body**: freeform, human-maintained. No required sections. Common things to include: important worktrees or branches, relevant paths, external links, machine-specific notes, or anything else useful for orienting an agent.
+**Body**: starts with nav links to problem and iterations, then freeform content. Common things to include: important worktrees or branches, relevant paths, external links, or anything else useful for orienting an agent.
 
 ### Agent Instructions
 
-1. Read `repos:` frontmatter for quick path list, pass to sub-agents as starting points
-2. If frontmatter path doesn't exist on disk, read the body and use judgment (`git worktree list`, `ls`, etc.) to locate actual working directory
-3. Don't hard-fail on stale paths, infer, adapt, note discrepancy if relevant
+1. Use hub body for context and starting points
+2. If a path doesn't exist on disk, use judgment (`git worktree list`, `ls`, etc.) to locate actual working directory
+3. Don't hard-fail on stale paths, infer and adapt
 
 ### Cross-Project Links
 
 Hub files may contain wiki-links to related projects. When these links are relevant to the current task, read the linked hub file for additional context. Use judgment: don't follow every link automatically, and don't follow links recursively. One hop is typical.
 
-**Link format:** Always use `[[full/path|short-name]]` so links work in Obsidian:
-- Hub-to-hub: `[[projects/{group}/{project-name}/{project-name}|{project-name}]]`
-- Artifact: `[[projects/{group}/{project-name}/iteration-01/understanding/understanding-01-topic|understanding-01-topic]]`
+**Link format:** Use relative paths with display alias `[[{slug}/note|display]]`. Include enough path context for uniqueness -- typically the project slug prefix is sufficient:
+- Hub-to-problem: `[[{slug}/problem|problem]]`
+- Hub-to-iterations: `[[{slug}/iterations|iterations]]`
+- problem.md back to hub: `[[{slug}/{slug}|{slug}]]`
+- Artifact: `[[{slug}/iteration-01/understanding/understanding-01-topic|understanding-01-topic]]`
 
 ## Artifact Versioning
 

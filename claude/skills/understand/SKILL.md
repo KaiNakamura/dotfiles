@@ -20,7 +20,7 @@ Structure your output following [template.md](template.md).
 4. If spawning agents, for each teammate provide:
     - Its specific, focused research question
     - Relevant context: problem summary, current iteration, what is already known
-    - Include code repo paths from the hub file frontmatter so agents know where source code lives
+    - Include repo paths and context from the hub file body so agents know where source code lives
     - If the hub file links to related projects, consider whether those projects have relevant findings. Read their hub files if the research question would benefit from cross-project context. Use judgment: don't read unrelated projects.
 5. Wait for all agents to complete and collect their text summaries (skip if working directly)
 6. Synthesize all summaries into `iteration-NN/understanding/understanding-NN-topic.md` (include a short kebab-case topic in the filename)
