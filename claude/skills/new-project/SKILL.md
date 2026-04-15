@@ -25,7 +25,15 @@ Create a new project in the Obsidian thoughts vault with full scaffolding.
    - `iteration-01/log.md` -- with header `# Iteration 01 Log` and initial entry
    - `iteration-01/progress.md` -- from checkpoint template
    - Empty phase dirs: `iteration-01/{understanding,concepts,plan,implementation}/`
-5. Prompt user for repo paths. Add them as a list in the hub body under a `Repos:` heading
+5. Prompt user for repo name(s). For each repo:
+   - Glob `~/repos/thoughts/repos/**/<name>.md` to find an existing repo file
+   - If found, add wiki-link to hub body: `[[repos/<org>/<name>|<name>]]`
+   - If not found, create a new repo file at `~/repos/thoughts/repos/<org>/<name>.md`:
+     - Ask user for GitHub org/owner and a one-line description
+     - Frontmatter: `tags: [repo]` and `github: https://github.com/<org>/<name>`
+     - Body: the one-line description
+     - Then add the wiki-link to the hub
+   - List all repo links under a `Repos:` heading in the hub body
 6. Append a line to `~/repos/thoughts/README.md` under the `## Projects` heading: `- [slug](projects/<group-path>/<slug>/<slug>.md): one-line problem summary`
 7. Output the full path so user can `cd` to it
 

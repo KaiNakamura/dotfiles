@@ -34,7 +34,7 @@ Projects live under `projects/` at any nesting depth. `problem.md` marks a proje
 Each project directory follows the Engineering Design Process:
 
 ```
-{project-name}.md        <- project hub (unique name, repos in frontmatter)
+{project-name}.md        <- project hub (unique name, repos as wiki-links to repos/ files)
 problem.md               <- problem statement (static anchor)
 iterations.md            <- cross-iteration summary
 iteration-01/
@@ -66,7 +66,7 @@ iteration-01/
 
 **Frontmatter**: `tags: [project]`. Repo paths are tracked in dedicated repo files under `repos/` rather than in hub frontmatter.
 
-**Body**: starts with nav links to problem and iterations, then freeform content. Common things to include: important worktrees or branches, relevant paths, external links, or anything else useful for orienting an agent.
+**Body**: starts with nav links to problem and iterations, then a `Repos:` section linking to repo files as wiki-links (e.g., `[[repos/org/name|name]]`), then freeform content. Common things to include: important worktrees or branches, relevant paths, external links, or anything else useful for orienting an agent.
 
 ### Agent Instructions
 
