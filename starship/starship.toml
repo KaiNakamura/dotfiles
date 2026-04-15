@@ -30,6 +30,8 @@ symbol = " "
 
 [directory]
 read_only = " 󰌾"
+truncate_to_repo = false
+truncation_length = 4  # set to 0 to show full path
 
 [docker_context]
 symbol = " "
