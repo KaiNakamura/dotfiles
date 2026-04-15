@@ -22,8 +22,6 @@ DANGEROUS_COMMANDS=(
   helm
   terraform
   gcloud
-  curl
-  wget
 )
 
 # Build regex pattern from the array: \b(aws|kubectl|helm|...)\b

@@ -1,11 +1,3 @@
 {
-  "bindings": [
-    {
-      "context": "Chat",
-      "bindings": {
-        "ralt": "voice:pushToTalk",
-        "space": null
-      }
-    }
-  ]
+  "bindings": []
 }
