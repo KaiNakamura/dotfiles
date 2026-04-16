@@ -1,1 +1,1 @@
-worktree-path = "{{ branch | sanitize }}"
+worktree-path = "../{{ branch | sanitize }}"
