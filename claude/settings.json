@@ -4,12 +4,15 @@
     "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
     "DISABLE_TELEMETRY": "1"
   },
+  "voiceEnabled": true,
   "defaultMode": "acceptEdits",
   "permissions": {
     "allow": [
-      "Read(*)",
+      "Read",
       "Edit(~/repos/thoughts/**)",
       "Write(~/repos/thoughts/**)",
+      "Edit(.thoughts/**)",
+      "Write(.thoughts/**)",
       "Bash",
       "WebSearch",
       "WebFetch"
