@@ -26,6 +26,8 @@
       "Write(~/.kube/**)"
     ]
   },
+  "model": "sonnet",
+  "effortLevel": "medium",
   "hooks": {
     "PreToolUse": [
       {
