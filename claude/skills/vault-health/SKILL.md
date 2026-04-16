@@ -10,7 +10,7 @@ Vault path: `~/repos/thoughts/` (hardcoded, single vault).
 
 ## Steps
 
-### 1. Hub Enumeration
+### Hub Enumeration
 
 Use both methods to discover project hubs, then cross-check them against each other.
 
@@ -18,38 +18,34 @@ Use both methods to discover project hubs, then cross-check them against each ot
 
 **Tag-based:** run `obsidian tag name=project verbose`. This gives all files tagged `[project]`.
 
-Look for mismatches between the two lists:
+Look for mismatches between the two lists and try and find structural issues, such as:
 - A dir found via path where the expected `<slug>.md` hub file doesn't exist on disk
 - A hub file found via path where `obsidian property:read name=tags path=<hub>` doesn't include `project`
 - A file found via tags where `<parent>/problem.md` doesn't exist (tagged as a project but no real project structure behind it)
 
-Note any of these as structural issues.
-
-### 2. Isolated Hub Check
+### Isolated Hub Check
 
 For each hub in the reconciled list, run `obsidian links path=<hub>` and check whether any of its outgoing links point into `repos/`. A hub with no `repos/` link is potentially isolated from the rest of the graph.
 
 For each potentially isolated hub, read the file and use judgment: does the project clearly have no external code repo? Look for signals like notes about vault-internal changes, brainstorming-only projects with no codebase, or anything else that makes the absence of a repo link obviously intentional. If it looks intentional, note it as such. If it's ambiguous or looks like a forgotten link, flag it.
 
-### 3. Orphans
+### Orphans
 
-Run `obsidian orphans total`. Expect 1 (README.md only). If there are more, run `obsidian orphans` to see what's unexpected.
+Run `obsidian orphans` to identify orphaned notes. Some files like the README are fine, but see what else is unexpected.
 
-### 4. Unresolved Links
+### Unresolved Links
 
-Run `obsidian unresolved total`. Expect 0, though some false positives from coordinate strings in log entries are acceptable. If there are any, run `obsidian unresolved verbose format=json` to find the sources and targets.
+Run `obsidian unresolved total`, expect 0
+- If there are any, run `obsidian unresolved verbose format=json` to find the sources and targets.
+- If some are false positives (e.g., a bbox string like `[[x1, x2], [y1, y2]]`) wrap in inline code so they get ignored
 
-### 5. Deadends
+### Report
 
-Run `obsidian deadends total`. Just informational, no action needed.
-
-### 6. Report
-
-Share what you found across all five checks. For each area, note whether things look clean or call out what seems off. For isolated hubs that look intentional, briefly mention them so it's clear they were checked. For anything genuinely problematic, describe it clearly enough that it's easy to fix in a follow-up.
+Share what you found across checks. For each area, note whether things look clean or call out what seems off. For things that look intentional, briefly mention them so it's clear they were checked. For anything genuinely problematic, describe it clearly enough that it's easy to fix in a follow-up.
 
 ## Success Criteria
 
-- All five checks run and findings reported
+- All checks run and findings reported
 - Anything that looks like a real issue is surfaced with enough context to act on
 - Intentional edge cases (like repos with no external codebase) are noted so they don't get flagged repeatedly
 - No vault files modified
