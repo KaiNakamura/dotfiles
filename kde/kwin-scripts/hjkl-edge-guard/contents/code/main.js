@@ -1,4 +1,4 @@
-// HJKL Edge Guard — directional window switching with history and relaxed matching
+// HJKL Edge Guard: directional window switching with history and relaxed matching
 // Supports both Plasma 5 (activeClient/clientList/geometry) and Plasma 6 (activeWindow/windowList/frameGeometry)
 
 var TOLERANCE = 5;

@@ -1,5 +1,5 @@
 #!/bin/bash
-# open-browser.sh — Open URL in browser on current virtual desktop
+# open-browser.sh - Open URL in browser on current virtual desktop
 #
 # If the preferred browser has a window on the current desktop, focus it
 # and open the URL as a new tab. Otherwise, open a new browser window
@@ -9,7 +9,7 @@
 [ -e /dev/fd/1 ] || exec 1>/dev/null
 [ -e /dev/fd/2 ] || exec 2>/dev/null
 
-# Clean environment — Electron leaks GDK_BACKEND=x11 into child processes
+# Clean environment: Electron leaks GDK_BACKEND=x11 into child processes
 unset GDK_BACKEND
 
 URL="$1"
@@ -91,7 +91,7 @@ read_journal_token() {
     return 1
 }
 
-# Step 4+5: KWin detection script — check for browser on current desktop
+# Step 4+5: KWin detection script, check for browser on current desktop
 UNIQUE_TOKEN="OPEN_BROWSER_$$_$(date +%s%N)"
 SCRIPT_FILE=$(mktemp /tmp/open-browser-kwin-XXXXXX.js)
 chmod 600 "$SCRIPT_FILE"
@@ -140,11 +140,11 @@ rm -f "$SCRIPT_FILE"
 
 # Open the URL
 if [[ "$RESULT" == *"FOUND"* && "$RESULT" != *"NOT_FOUND"* ]]; then
-    # Browser window focused on current desktop — open as new tab
+    # Browser window focused on current desktop, open as new tab
     exec "$BROWSER_BIN" "$URL"
 fi
 
-# Step 6: NOT_FOUND path — open new window and move to current desktop
+# Step 6: NOT_FOUND path, open new window and move to current desktop
 
 # Extract target desktop and known window IDs from detection result
 # Format: NOT_FOUND:<desktop>:<id1>,<id2>,...
@@ -156,7 +156,7 @@ if [[ -z "$TARGET_DESKTOP" || ! "$TARGET_DESKTOP" =~ ^[0-9]+$ ]]; then
     exec "$BROWSER_BIN" --new-window "$URL"
 fi
 
-# Use flock for concurrent invocation safety — if another instance is already
+# Use flock for concurrent invocation safety. If another instance is already
 # doing the move-poll, just open the browser directly
 LOCK_FILE="/tmp/open-browser-move.lock"
 exec 9>"$LOCK_FILE"

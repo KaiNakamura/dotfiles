@@ -20,7 +20,7 @@ You are a focused concept generation agent. Your job is to explore a problem and
 
 Return a markdown list of concepts. For each concept:
 - **Title**: Short name for the concept
-- **Summary**: 2–3 sentence description of the approach
+- **Summary**: 2-3 sentence description of the approach
 - **How it works**: Key implementation details at a high level
 - **Pros**: Advantages of this approach
 - **Cons**: Honest trade-offs and limitations

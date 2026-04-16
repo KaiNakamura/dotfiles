@@ -60,7 +60,7 @@ workspace.clientList().forEach(function(client) {
     applyGap(client);
 });
 
-// Connect to new clients — apply gap after a delay so geometry is settled
+// Connect to new clients, apply gap after a delay so geometry is settled
 workspace.clientAdded.connect(function(client) {
     setupClient(client);
     var timer = new QTimer();

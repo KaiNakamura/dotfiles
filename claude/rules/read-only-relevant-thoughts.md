@@ -1,4 +1,4 @@
-# Reading Only Relevant Files From .thoughts
+# Reading Only Relevant Project Files
 
 - Use `log.md` as an index: its entries describe what each artifact covers, so you can judge relevance without opening the file
 - Read artifacts that are relevant to your current task, skip ones that aren't

@@ -15,11 +15,11 @@ You are working as part of an autonomous engineering pipeline. Your "user" is th
 
 ## Steps
 
-1. **Bootstrap.** Verify `.thoughts/problem.md` exists. If not, stop and ask the user to run `/problem` first.
+1. **Bootstrap.** Verify `problem.md` exists. If not, stop and ask the user to run `/problem` first. Also read the hub file (`{project-name}.md`) to get repo paths and project context.
 
 2. **Decision loop.** Repeat:
 
-   a. **Assess state.** Read `.thoughts/iterations.md`, `.thoughts/iteration-NN/log.md`, and relevant artifacts. Decide what action would be most valuable right now.
+   a. **Assess state.** Read `iterations.md`, `iteration-NN/log.md`, and relevant artifacts. Decide what action would be most valuable right now.
 
    Available actions:
    - **understand**: Research the problem or a specific sub-question
@@ -35,9 +35,10 @@ You are working as part of an autonomous engineering pipeline. Your "user" is th
       [Worker Framing]
 
       CONTEXT:
-      Problem: [contents of .thoughts/problem.md]
+      Problem: [contents of problem.md]
       Current iteration: [NN]
       Iteration log: [contents of log.md]
+      Code repos: [paths from hub file body]
 
       SKILL INSTRUCTIONS:
       [Contents of {action}/SKILL.md, front matter stripped]
@@ -63,8 +64,8 @@ You are working as part of an autonomous engineering pipeline. Your "user" is th
 
 ## Success Criteria
 
-- The problem described in `.thoughts/problem.md` is addressed
-- Actions that ran have artifacts in `.thoughts/iteration-NN/` and entries in `log.md`
+- The problem described in `problem.md` is addressed
+- Actions that ran have artifacts in `iteration-NN/` and entries in `log.md`
 - The orchestrator did not get stuck
 
 ## Guidelines
