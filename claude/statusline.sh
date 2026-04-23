@@ -44,9 +44,9 @@ if [ -n "$used_pct" ]; then
   used_int=$(printf "%.0f" "$used_pct")
 
   # Pick color based on percentage
-  if [ "$used_int" -ge 90 ]; then
+  if [ "$used_int" -ge 80 ]; then
     bar_color="$COLOR_RED"
-  elif [ "$used_int" -ge 70 ]; then
+  elif [ "$used_int" -ge 40 ]; then
     bar_color="$COLOR_YELLOW"
   else
     bar_color="$COLOR_GREEN"
