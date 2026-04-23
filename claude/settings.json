@@ -28,6 +28,10 @@
   },
   "model": "sonnet",
   "effortLevel": "medium",
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh"
+  },
   "hooks": {
     "PreToolUse": [
       {
