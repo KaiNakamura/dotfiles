@@ -23,6 +23,10 @@ cp "$WORKDIR/keybindings.json" ~/.claude/keybindings.json
 # Copy CLAUDE.md
 cp "$WORKDIR/CLAUDE.md" ~/.claude/CLAUDE.md
 
+# Copy statusline script
+cp "$WORKDIR/statusline.sh" ~/.claude/statusline.sh
+chmod +x ~/.claude/statusline.sh
+
 # Create target directories
 mkdir -p ~/.claude/rules
 mkdir -p ~/.claude/skills
