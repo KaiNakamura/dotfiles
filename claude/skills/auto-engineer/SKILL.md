@@ -1,5 +1,5 @@
 ---
-name: auto
+name: auto-engineer
 description: Run the engineering design process autonomously across multiple iterations
 ---
 
