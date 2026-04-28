@@ -76,3 +76,6 @@ eval "$(/home/kai/.local/share/cyvvy/bin/direnv hook zsh)"
 
 # For gws CLI
 export PATH="$(npm prefix -g)/bin:$PATH"
+
+# Claude Code: workaround for #49273 (defaultMode: "auto" parsed but not honored)
+alias claude='claude --permission-mode auto'

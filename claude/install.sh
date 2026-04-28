@@ -14,8 +14,13 @@ WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Install plugins
 "$WORKDIR/install-plugins.sh"
 
-# Copy settings.json
-cp "$WORKDIR/settings.json" ~/.claude/settings.json
+# Copy settings.json (use profile-specific version if available)
+source "$(dirname "$0")/../lib/profile.sh"
+settings_source="$WORKDIR/settings.json.${DOTFILES_PROFILE}"
+if [[ ! -f "$settings_source" ]]; then
+    settings_source="$WORKDIR/settings.json"
+fi
+cp "$settings_source" ~/.claude/settings.json
 
 # Copy keybindings.json
 cp "$WORKDIR/keybindings.json" ~/.claude/keybindings.json
