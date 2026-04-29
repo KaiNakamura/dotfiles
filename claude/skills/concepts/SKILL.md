@@ -25,7 +25,7 @@ Structure your output following [template.md](template.md).
     - Optionally: a specific angle to look at if useful (e.g., simple/easy-to-understand, elegant/creative/outside-the-box, pre-existing/tried-and-true, reliable/robust, etc.)
 6. Wait for all agents to return their concepts
 7. Synthesize results into `iteration-NN/concepts/concepts-NN-topic.md` at the next version number (include a short kebab-case topic in the filename):
-    - Group concepts by design decision (if there is only one design decision a single group is fine)
+    - Most times there is only one main decision to make concepts but, but if there are multiple, group concepts by design decision
     - Rank concepts within each decision from most to least recommended (each decision gets its own recommendation)
     - Preserve each concept's pros/cons from the generators, but feel free to add additional commentary appropriately
 8. Append a one-line entry to `iteration-NN/log.md` describing what concepts were generated and linking to the artifact
