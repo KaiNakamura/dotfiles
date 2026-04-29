@@ -1,0 +1,42 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
+    "DISABLE_TELEMETRY": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit(~/repos/thoughts/**)",
+      "Write(~/repos/thoughts/**)",
+      "Edit(.thoughts/**)",
+      "Write(.thoughts/**)",
+      "Bash",
+      "WebSearch",
+      "WebFetch"
+    ],
+    "ask": [
+      "Read(~/.aws/**)",
+      "Read(~/.kube/**)",
+      "Edit(~/.aws/**)",
+      "Edit(~/.kube/**)",
+      "Write(~/.aws/**)",
+      "Write(~/.kube/**)"
+    ]
+  },
+  "model": "sonnet",
+  "effortLevel": "medium",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/ask-dangerous-commands.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

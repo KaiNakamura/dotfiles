@@ -39,6 +39,26 @@ INSTALL_ORDER=(
     "earlyoom"
 )
 
+# Subset for headless Coder workspaces (no GUI, bash login shell).
+# Roadgnar's KaiNakamura branch shim runs `./install.sh --profile coder` so
+# this list is what runs there; bootstrapping brew is the shim's job.
+INSTALL_ORDER_CODER=(
+    "git-config"
+    "claude"
+    "vim"
+    "zoxide"
+    "bat"
+    "btop"
+    "delta"
+    "eza"
+    "fd"
+    "fzf"
+    "tldr"
+    "aws"
+    "worktrunk"
+    "nvim"
+)
+
 # Function to print colored output
 print_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -178,6 +198,9 @@ main() {
         # Use provided modules as arguments
         modules=("$@")
         print_info "Installing specified modules in provided order: ${modules[*]}"
+    elif [[ "$profile" == "coder" ]]; then
+        modules=("${INSTALL_ORDER_CODER[@]}")
+        print_info "Installing Coder subset: ${modules[*]}"
     else
         # Use default installation order
         modules=("${INSTALL_ORDER[@]}")
