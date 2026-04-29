@@ -1,0 +1,15 @@
+[core]
+	editor = vim
+	excludesFile = ~/.gitignore_global
+[url "ssh://git@github.com"]
+	insteadOf = https://github.com
+[init]
+	defaultBranch = main
+[pull]
+	rebase = false
+[pager]
+	branch = false
+[delta]
+	navigate = true
+	side-by-side = true
+	line-numbers = true

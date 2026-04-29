@@ -44,6 +44,7 @@ INSTALL_ORDER=(
 # this list is what runs there; bootstrapping brew is the shim's job.
 INSTALL_ORDER_CODER=(
     "git-config"
+    "bash"
     "claude"
     "vim"
     "zoxide"
