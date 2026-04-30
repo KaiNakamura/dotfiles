@@ -57,6 +57,6 @@ chmod +x ~/.claude/hooks/*.sh
 cp -r "$WORKDIR/scripts/"* ~/.claude/scripts/
 chmod +x ~/.claude/scripts/*.sh
 
-# Compose output style from tracked skill list
-mapfile -t _skills < <(grep -v '^\s*#' "$WORKDIR/output-style-skills.txt" | grep -v '^\s*$')
-"$HOME/.claude/scripts/compose-output-style.sh" "${_skills[@]}"
+# Compose output style from tracked sources list
+mapfile -t _sources < <(grep -v '^\s*#' "$WORKDIR/output-style-sources.txt" | grep -v '^\s*$')
+"$HOME/.claude/scripts/compose-output-style.sh" "${_sources[@]}"

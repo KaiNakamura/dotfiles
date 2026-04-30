@@ -1,4 +1,0 @@
-# Skills to compose into the default output style.
-# One skill name per line. Order matters -- skills are concatenated in order.
-# Re-run install.sh (or ~/.claude/scripts/compose-output-style.sh) after changes.
-caveman

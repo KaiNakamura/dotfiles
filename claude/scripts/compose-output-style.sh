@@ -1,26 +1,30 @@
 #!/usr/bin/env bash
-# Compose ~/.claude/output-styles/default.md from skill sources.
+# Compose ~/.claude/output-styles/default.md from arbitrary .md sources.
 #
-# Usage: compose-output-style.sh SKILL [SKILL ...]
+# Usage: compose-output-style.sh PATH [PATH ...]
 #
-# Each SKILL is a name under ~/.claude/skills/NAME/SKILL.md.
-# YAML frontmatter is stripped from each skill before inclusion.
+# Each PATH is relative to ~/.claude/. Examples:
+#   skills/caveman/SKILL.md
+#   rules/only-use-typeable-characters.md
 #
-# Re-run any time skills change. Output takes effect on next session.
+# YAML frontmatter (if present) is stripped from each source before inclusion.
+#
+# Re-run any time sources change. Output takes effect on next session.
 
 set -euo pipefail
 
-SKILLS_DIR="$HOME/.claude/skills"
-OUTPUT_FILE="$HOME/.claude/output-styles/default.md"
+CLAUDE_DIR="$HOME/.claude"
+OUTPUT_FILE="$CLAUDE_DIR/output-styles/default.md"
 
 if [[ $# -eq 0 ]]; then
-    echo "Usage: $(basename "$0") SKILL [SKILL ...]" >&2
+    echo "Usage: $(basename "$0") PATH [PATH ...]" >&2
     exit 1
 fi
 
 mkdir -p "$(dirname "$OUTPUT_FILE")"
 
 # Strip YAML frontmatter (content between opening --- and closing ---)
+# No-op for files without frontmatter.
 strip_frontmatter() {
     awk '
         /^---$/ && !in_front && !done { in_front=1; next }
@@ -39,10 +43,10 @@ keep-coding-instructions: true
 
 EOF
 
-    for name in "$@"; do
-        src="$SKILLS_DIR/$name/SKILL.md"
+    for relpath in "$@"; do
+        src="$CLAUDE_DIR/$relpath"
         if [[ ! -f "$src" ]]; then
-            echo "Error: skill '$name' not found at $src" >&2
+            echo "Error: source not found at $src" >&2
             exit 1
         fi
         strip_frontmatter < "$src"
