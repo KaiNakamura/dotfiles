@@ -15,6 +15,10 @@ else
     rm -f "$TMP_TAR"
 fi
 
+# Make nvim available on PATH via ~/.local/bin
+mkdir -p "$HOME/.local/bin"
+ln -sf /opt/nvim-linux-x86_64/bin/nvim "$HOME/.local/bin/nvim"
+
 # Setup kai.nvim config
 REPO_DIR="$HOME/repos/kai.nvim"
 CONFIG_DIR="$HOME/.config/nvim"
@@ -25,7 +29,11 @@ mkdir -p "$HOME/repos"
 # Clone or update kai.nvim repo
 if [ ! -d "$REPO_DIR" ]; then
     echo "Cloning kai.nvim..."
-    git clone https://github.com/KaiNakamura/kai.nvim.git "$REPO_DIR"
+    git -c "url.https://github.com/KaiNakamura/.insteadOf=https://github.com/KaiNakamura/" \
+      clone https://github.com/KaiNakamura/kai.nvim.git "$REPO_DIR"
+    git -C "$REPO_DIR" config \
+      "url.https://github.com/KaiNakamura/.insteadOf" \
+      "https://github.com/KaiNakamura/"
 else
     echo "Updating kai.nvim..."
     cd "$REPO_DIR"
