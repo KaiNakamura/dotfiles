@@ -168,6 +168,18 @@ function historyPush(win, dir) {
     _history.push({ window: win, arrivedVia: dir });
 }
 
+// Returns the screen containing point (x, y), or the first screen as fallback.
+function getScreenAtPoint(x, y) {
+    var screens = api.getScreens();
+    for (var i = 0; i < screens.length; i++) {
+        var g = api.getScreenGeo(screens[i]);
+        if (x >= g.x && x < g.x + g.width && y >= g.y && y < g.y + g.height) {
+            return screens[i];
+        }
+    }
+    return screens.length > 0 ? screens[0] : null;
+}
+
 function switchDirection(dir) {
     print("[HJKL] === switchDirection(" + dir + ") ===");
     print("[HJKL] _navigatingTo was: " + winName(_navigatingTo));
@@ -179,16 +191,32 @@ function switchDirection(dir) {
     _movingWindow = null;
 
     var active = api.getActive();
-    if (!active) return;
-    print("[HJKL] active: " + winName(active) + " on screen " + api.getScreen(active));
-    var ag = api.getGeometry(active);
-    var ac = centerOf(ag);
+    var ag, ac, activeScreen;
+    var bootstrapped = false;
+
+    if (!active || !isSwitchable(active)) {
+        // No valid active window: use cursor position as the navigation anchor.
+        // This lets directional passes find windows relative to where the cursor is,
+        // rather than relative to a bootstrap window that may be on the wrong screen.
+        var cursor = workspace.cursorPos;
+        ag = { x: cursor.x, y: cursor.y, width: 0, height: 0 };
+        ac = { x: cursor.x, y: cursor.y };
+        activeScreen = getScreenAtPoint(cursor.x, cursor.y);
+        active = null;
+        bootstrapped = true;
+        print("[HJKL] switchDirection: no active window, cursor anchor at (" + cursor.x + "," + cursor.y + ")");
+    } else {
+        print("[HJKL] active: " + winName(active) + " on screen " + api.getScreen(active));
+        ag = api.getGeometry(active);
+        ac = centerOf(ag);
+        activeScreen = api.getScreen(active);
+    }
+
     var d = directions[dir];
-    var activeScreen = api.getScreen(active);
 
     // --- Pass 1: Intra-screen strict edge-adjacency ---
     var intra = findBestStrict(active, ag, ac, d, function(win) {
-        return api.getScreen(win) === activeScreen;
+        return activeScreen !== null && api.getScreen(win) === activeScreen;
     });
     if (intra) {
         print("[HJKL] PASS 1 (intra-screen): " + winName(intra));
@@ -196,8 +224,8 @@ function switchDirection(dir) {
         return;
     }
 
-    // --- Pass 2: Cross-screen history backtrack ---
-    if (_history.length > 0) {
+    // --- Pass 2: Cross-screen history backtrack (skip when bootstrapped -- no prior window) ---
+    if (!bootstrapped && _history.length > 0) {
         var top = _history[_history.length - 1];
         print("[HJKL] Pass 2 check: dir=" + dir + " opposites[arrivedVia]=" + opposites[top.arrivedVia] + " switchable=" + isSwitchable(top.window));
         if (dir === opposites[top.arrivedVia] && isSwitchable(top.window)) {
@@ -207,14 +235,13 @@ function switchDirection(dir) {
             warpToScreenCenter(api.getScreen(top.window));
             return;
         }
-    } else {
+    } else if (!bootstrapped) {
         print("[HJKL] Pass 2: history empty, skipping");
     }
 
     // --- Pass 3: Cross-screen last-focused preference ---
-    // If crossing to a screen where we previously had a focused window, prefer it
     var crossStrict = findBestStrict(active, ag, ac, d, function(win) {
-        return api.getScreen(win) !== activeScreen;
+        return activeScreen === null || api.getScreen(win) !== activeScreen;
     });
     if (crossStrict) {
         var targetScreen = api.getScreen(crossStrict);
@@ -224,7 +251,7 @@ function switchDirection(dir) {
         if (lastWin && lastWin !== crossStrict && isSwitchable(lastWin)
                 && api.getScreen(lastWin) === targetScreen) {
             print("[HJKL] PASS 3 (last-focused): " + winName(lastWin));
-            historyPush(active, dir);
+            if (!bootstrapped) historyPush(active, dir);
             doActivate(lastWin);
             warpToScreenCenter(targetScreen);
             return;
@@ -235,7 +262,7 @@ function switchDirection(dir) {
     var cross = crossStrict;
     if (cross) {
         print("[HJKL] PASS 4 (cross-screen strict): " + winName(cross));
-        historyPush(active, dir);
+        if (!bootstrapped) historyPush(active, dir);
         doActivate(cross);
         warpToScreenCenter(api.getScreen(cross));
         return;
@@ -243,11 +270,11 @@ function switchDirection(dir) {
 
     // --- Pass 5: Cross-screen cone fallback ---
     var cone = findBestCone(active, ac, d, function(win) {
-        return api.getScreen(win) !== activeScreen;
+        return activeScreen === null || api.getScreen(win) !== activeScreen;
     });
     if (cone) {
         print("[HJKL] PASS 5 (cone): " + winName(cone));
-        historyPush(active, dir);
+        if (!bootstrapped) historyPush(active, dir);
         doActivate(cone);
         warpToScreenCenter(api.getScreen(cone));
         return;
@@ -365,6 +392,14 @@ registerShortcut("HJKLMoveRight", "HJKL Move Window Right", "Meta+Shift+L", func
     moveDirection("right");
 });
 
+function onDesktopChanged() {
+    try {
+        _history = [];
+        _moveHistory = [];
+        print("[HJKL] onDesktopChanged: cleared history");
+    } catch(e) { print(e); }
+}
+
 // Signal connections for history invalidation
 function onWindowActivated(win) {
     try {
@@ -414,7 +449,9 @@ if (isPlasma6) {
     workspace.windowActivated.connect(onWindowActivated);
     workspace.screensChanged.connect(onScreensChanged);
     workspace.windowRemoved.connect(onWindowRemoved);
+    workspace.currentDesktopChanged.connect(onDesktopChanged);
 } else {
     workspace.clientActivated.connect(onWindowActivated);
     workspace.numberScreensChanged.connect(onScreensChanged);
+    workspace.currentDesktopChanged.connect(onDesktopChanged);
 }
