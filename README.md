@@ -75,28 +75,18 @@ Some other settings you may want to configure:
 
 ## First-time Coder workspace setup
 
-The cyvl-dev Coder workspace boots with a roadgnar service-account JWT injected
-into git/gh. That covers `roadgnar/*` repos but not personal `KaiNakamura/*`
-repos. To clone private personal repos (e.g. the thoughts vault) from inside a
-fresh workspace, run once:
+Coder workspaces ship with a service-account token wired into `gh` for the
+work org. To clone personal `KaiNakamura/*` repos, authenticate your personal
+GitHub account once:
 
 ```bash
 gh auth login -p ssh
-```
-
-This launches GitHub's device flow, prints a URL + code for you to open in
-your local browser, and uploads an SSH key to your GitHub account. Then:
-
-```bash
 gwc KaiNakamura/thoughts ~/repos/thoughts
 ```
 
-A `gh()` shell wrapper (auto-loaded only inside Coder workspaces, gated by
-`CODER=true`) routes `gh auth *` and any `gh` invocation referencing
-`KaiNakamura/*` (including via cwd's git origin) through a separate config dir
-at `~/.config/gh-personal/`. Everything else uses the default workspace gh.
-Plain `gh` and `gwc` just work, no special commands to remember. On local
-machines the wrapper is a no-op.
+A `gh()` wrapper (loaded only when `CODER=true`) routes `gh auth *` and any
+`gh` call referencing `KaiNakamura/*` through a personal config dir; everything
+else falls through to the default. No-op on local machines.
 
 ## TODO
 

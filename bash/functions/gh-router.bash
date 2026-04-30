@@ -1,6 +1,6 @@
-# gh routing: send KaiNakamura/* traffic to a personal gh config dir, leave
-# everything else on the default workspace gh (which uses GH_TOKEN with the
-# roadgnar service-account JWT injected by the cyvl-dev template).
+# gh routing: send KaiNakamura/* traffic and `gh auth *` through a personal
+# gh config dir; let everything else fall through to the default workspace gh
+# (which authenticates as a service account via GH_TOKEN).
 #
 # Active only inside a Coder workspace; on local machines this file no-ops.
 #
