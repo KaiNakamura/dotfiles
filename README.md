@@ -73,6 +73,30 @@ Some other settings you may want to configure:
 - Wallpaper & Splash Screen
 - Display Configuration
 
+## First-time Coder workspace setup
+
+The cyvl-dev Coder workspace boots with a roadgnar service-account JWT injected
+into git/gh. That covers `roadgnar/*` repos but not personal `KaiNakamura/*`
+repos. To clone private personal repos (e.g. the thoughts vault) from inside a
+fresh workspace, run once:
+
+```bash
+gh_personal_login
+```
+
+This launches GitHub's device flow against a separate gh config dir
+(`~/.config/gh-personal/`), prints a URL + code for you to open in your local
+browser, and uploads an SSH key to your GitHub account. Then:
+
+```bash
+gwc KaiNakamura/thoughts ~/repos/thoughts
+```
+
+The `gh()` wrapper auto-routes any `gh` invocation that references
+`KaiNakamura/*` (including via cwd's git origin) through the personal config
+dir; everything else uses the default workspace gh. No need to remember
+separate commands -- plain `gh` and `gwc` work transparently.
+
 ## TODO
 
 - [ ] Install broken because Go required for dotool!
