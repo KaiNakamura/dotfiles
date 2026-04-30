@@ -37,6 +37,9 @@ mkdir -p ~/.claude/rules
 mkdir -p ~/.claude/skills
 mkdir -p ~/.claude/agents
 mkdir -p ~/.claude/hooks
+mkdir -p ~/.claude/scripts
+mkdir -p ~/.claude/output-styles
+mkdir -p ~/.claude/output-style-modules
 
 # Copy rules directory (overwrites existing files)
 cp -r "$WORKDIR/rules/"* ~/.claude/rules/
@@ -50,3 +53,15 @@ cp -r "$WORKDIR/agents/"* ~/.claude/agents/
 # Copy hooks directory (overwrites existing files)
 cp -r "$WORKDIR/hooks/"* ~/.claude/hooks/
 chmod +x ~/.claude/hooks/*.sh
+
+# Copy scripts directory (overwrites existing files)
+cp -r "$WORKDIR/scripts/"* ~/.claude/scripts/
+chmod +x ~/.claude/scripts/*.sh
+
+# Copy output-styles directory (overwrites existing files)
+cp -r "$WORKDIR/output-styles/"* ~/.claude/output-styles/
+
+# Copy output-style-modules directory if non-empty
+if compgen -G "$WORKDIR/output-style-modules/*" > /dev/null 2>&1; then
+    cp -r "$WORKDIR/output-style-modules/"* ~/.claude/output-style-modules/
+fi
