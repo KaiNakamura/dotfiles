@@ -75,18 +75,23 @@ Some other settings you may want to configure:
 
 ## First-time Coder workspace setup
 
-Coder workspaces ship with a service-account token wired into `gh` for the
-work org. To clone personal `KaiNakamura/*` repos, authenticate your personal
+For Coder workspaces that ship with a service-account token wired into `gh` for
+the work org. To clone personal `KaiNakamura/*` repos, authenticate personal
 GitHub account once:
 
-```bash
+```sh
 gh auth login -p ssh
-gwc KaiNakamura/thoughts ~/repos/thoughts
 ```
 
 A `gh()` wrapper (loaded only when `CODER=true`) routes `gh auth *` and any
 `gh` call referencing `KaiNakamura/*` through a personal config dir; everything
 else falls through to the default. No-op on local machines.
+
+Then you can clone repos as needed within Coder instances:
+
+```sh
+gwc KaiNakamura/thoughts ~/repos/thoughts
+```
 
 ## TODO
 
