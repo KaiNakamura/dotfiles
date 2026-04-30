@@ -37,6 +37,8 @@ mkdir -p ~/.claude/rules
 mkdir -p ~/.claude/skills
 mkdir -p ~/.claude/agents
 mkdir -p ~/.claude/hooks
+mkdir -p ~/.claude/scripts
+mkdir -p ~/.claude/output-styles
 
 # Copy rules directory (overwrites existing files)
 cp -r "$WORKDIR/rules/"* ~/.claude/rules/
@@ -50,3 +52,11 @@ cp -r "$WORKDIR/agents/"* ~/.claude/agents/
 # Copy hooks directory (overwrites existing files)
 cp -r "$WORKDIR/hooks/"* ~/.claude/hooks/
 chmod +x ~/.claude/hooks/*.sh
+
+# Copy scripts directory (overwrites existing files)
+cp -r "$WORKDIR/scripts/"* ~/.claude/scripts/
+chmod +x ~/.claude/scripts/*.sh
+
+# Compose output style from tracked sources list
+mapfile -t _sources < <(grep -v '^\s*#' "$WORKDIR/output-style-sources.txt" | grep -v '^\s*$')
+"$HOME/.claude/scripts/compose-output-style.sh" "${_sources[@]}"
