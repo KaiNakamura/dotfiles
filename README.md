@@ -73,6 +73,26 @@ Some other settings you may want to configure:
 - Wallpaper & Splash Screen
 - Display Configuration
 
+## First-time Coder workspace setup
+
+For Coder workspaces that ship with a service-account token wired into `gh` for
+the work org. To clone personal `KaiNakamura/*` repos, authenticate personal
+GitHub account once:
+
+```sh
+gh auth login -p ssh
+```
+
+A `gh()` wrapper (loaded only when `CODER=true`) routes `gh auth *` and any
+`gh` call referencing `KaiNakamura/*` through a personal config dir; everything
+else falls through to the default. No-op on local machines.
+
+Then you can clone repos as needed within Coder instances:
+
+```sh
+gwc KaiNakamura/thoughts ~/repos/thoughts
+```
+
 ## TODO
 
 - [ ] Install broken because Go required for dotool!
