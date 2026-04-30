@@ -15,6 +15,10 @@ else
     rm -f "$TMP_TAR"
 fi
 
+# Make nvim available on PATH via ~/.local/bin
+mkdir -p "$HOME/.local/bin"
+ln -sf /opt/nvim-linux-x86_64/bin/nvim "$HOME/.local/bin/nvim"
+
 # Setup kai.nvim config
 REPO_DIR="$HOME/repos/kai.nvim"
 CONFIG_DIR="$HOME/.config/nvim"
