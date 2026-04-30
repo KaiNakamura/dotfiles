@@ -25,7 +25,11 @@ mkdir -p "$HOME/repos"
 # Clone or update kai.nvim repo
 if [ ! -d "$REPO_DIR" ]; then
     echo "Cloning kai.nvim..."
-    git clone https://github.com/KaiNakamura/kai.nvim.git "$REPO_DIR"
+    git -c "url.https://github.com/KaiNakamura/.insteadOf=https://github.com/KaiNakamura/" \
+      clone https://github.com/KaiNakamura/kai.nvim.git "$REPO_DIR"
+    git -C "$REPO_DIR" config \
+      "url.https://github.com/KaiNakamura/.insteadOf" \
+      "https://github.com/KaiNakamura/"
 else
     echo "Updating kai.nvim..."
     cd "$REPO_DIR"
