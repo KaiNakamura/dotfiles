@@ -150,13 +150,7 @@ function findBestCone(active, ac, d, screenFilter) {
     return best;
 }
 
-function winName(w) {
-    if (!w) return "null";
-    return w.caption || w.resourceClass || "?";
-}
-
 function doActivate(win) {
-    print("[HJKL] doActivate: " + winName(win) + " on screen " + api.getScreen(win));
     _navigatingTo = win;
     api.setActive(win);
 }
@@ -181,12 +175,6 @@ function getScreenAtPoint(x, y) {
 }
 
 function switchDirection(dir) {
-    print("[HJKL] === switchDirection(" + dir + ") ===");
-    print("[HJKL] _navigatingTo was: " + winName(_navigatingTo));
-    print("[HJKL] history len: " + _history.length);
-    for (var h = 0; h < _history.length; h++) {
-        print("[HJKL]   history[" + h + "]: " + winName(_history[h].window) + " via " + _history[h].arrivedVia);
-    }
     _navigatingTo = null;
     _movingWindow = null;
 
@@ -204,9 +192,7 @@ function switchDirection(dir) {
         activeScreen = getScreenAtPoint(cursor.x, cursor.y);
         active = null;
         bootstrapped = true;
-        print("[HJKL] switchDirection: no active window, cursor anchor at (" + cursor.x + "," + cursor.y + ")");
     } else {
-        print("[HJKL] active: " + winName(active) + " on screen " + api.getScreen(active));
         ag = api.getGeometry(active);
         ac = centerOf(ag);
         activeScreen = api.getScreen(active);
@@ -219,7 +205,6 @@ function switchDirection(dir) {
         return activeScreen !== null && api.getScreen(win) === activeScreen;
     });
     if (intra) {
-        print("[HJKL] PASS 1 (intra-screen): " + winName(intra));
         doActivate(intra);
         return;
     }
@@ -227,16 +212,12 @@ function switchDirection(dir) {
     // --- Pass 2: Cross-screen history backtrack (skip when bootstrapped -- no prior window) ---
     if (!bootstrapped && _history.length > 0) {
         var top = _history[_history.length - 1];
-        print("[HJKL] Pass 2 check: dir=" + dir + " opposites[arrivedVia]=" + opposites[top.arrivedVia] + " switchable=" + isSwitchable(top.window));
         if (dir === opposites[top.arrivedVia] && isSwitchable(top.window)) {
-            print("[HJKL] PASS 2 (history backtrack): " + winName(top.window));
             _history.pop();
             doActivate(top.window);
             warpToScreenCenter(api.getScreen(top.window));
             return;
         }
-    } else if (!bootstrapped) {
-        print("[HJKL] Pass 2: history empty, skipping");
     }
 
     // --- Pass 3: Cross-screen last-focused preference ---
@@ -247,10 +228,8 @@ function switchDirection(dir) {
         var targetScreen = api.getScreen(crossStrict);
         var screenKey = String(targetScreen);
         var lastWin = _lastOnScreen[screenKey];
-        print("[HJKL] Pass 3: crossStrict=" + winName(crossStrict) + " lastOnScreen[" + screenKey + "]=" + winName(lastWin));
         if (lastWin && lastWin !== crossStrict && isSwitchable(lastWin)
                 && api.getScreen(lastWin) === targetScreen) {
-            print("[HJKL] PASS 3 (last-focused): " + winName(lastWin));
             if (!bootstrapped) historyPush(active, dir);
             doActivate(lastWin);
             warpToScreenCenter(targetScreen);
@@ -261,7 +240,6 @@ function switchDirection(dir) {
     // --- Pass 4: Cross-screen strict edge-adjacency ---
     var cross = crossStrict;
     if (cross) {
-        print("[HJKL] PASS 4 (cross-screen strict): " + winName(cross));
         if (!bootstrapped) historyPush(active, dir);
         doActivate(cross);
         warpToScreenCenter(api.getScreen(cross));
@@ -273,13 +251,11 @@ function switchDirection(dir) {
         return activeScreen === null || api.getScreen(win) !== activeScreen;
     });
     if (cone) {
-        print("[HJKL] PASS 5 (cone): " + winName(cone));
         if (!bootstrapped) historyPush(active, dir);
         doActivate(cone);
         warpToScreenCenter(api.getScreen(cone));
         return;
     }
-    print("[HJKL] No target found");
 }
 
 var NEAR_MAX_THRESHOLD = 10;
@@ -396,35 +372,25 @@ function onDesktopChanged() {
     try {
         _history = [];
         _moveHistory = [];
-        print("[HJKL] onDesktopChanged: cleared history");
-    } catch(e) { print(e); }
+    } catch(e) {}
 }
 
-// Signal connections for history invalidation
 function onWindowActivated(win) {
     try {
         if (!win) return;
         var screenKey = String(api.getScreen(win));
-        print("[HJKL] onWindowActivated: " + winName(win) + " screen=" + screenKey
-            + " _navigatingTo=" + winName(_navigatingTo) + " _movingWindow=" + winName(_movingWindow));
-        // Always track last-focused window per screen
         _lastOnScreen[screenKey] = win;
-        // Only clear navigation history on unexpected activations
-        if (_navigatingTo || _movingWindow) {
-            print("[HJKL]   -> guarded, history preserved (len=" + _history.length + ")");
-            return;
-        }
-        print("[HJKL]   -> CLEARING history (was len=" + _history.length + ")");
+        if (_navigatingTo || _movingWindow) return;
         _history = [];
         _moveHistory = [];
-    } catch(e) { print(e); }
+    } catch(e) {}
 }
 
 function onScreensChanged() {
     try {
         _history = [];
         _moveHistory = [];
-    } catch(e) { print(e); }
+    } catch(e) {}
 }
 
 function onWindowRemoved(win) {
@@ -438,11 +404,10 @@ function onWindowRemoved(win) {
         _moveHistory = _moveHistory.filter(function(entry) {
             return entry.window !== win;
         });
-        // Clean up last-on-screen entries for this window
         for (var key in _lastOnScreen) {
             if (_lastOnScreen[key] === win) delete _lastOnScreen[key];
         }
-    } catch(e) { print(e); }
+    } catch(e) {}
 }
 
 if (isPlasma6) {
