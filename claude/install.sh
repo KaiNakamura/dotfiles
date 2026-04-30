@@ -39,7 +39,6 @@ mkdir -p ~/.claude/agents
 mkdir -p ~/.claude/hooks
 mkdir -p ~/.claude/scripts
 mkdir -p ~/.claude/output-styles
-mkdir -p ~/.claude/output-style-modules
 
 # Copy rules directory (overwrites existing files)
 cp -r "$WORKDIR/rules/"* ~/.claude/rules/
@@ -58,10 +57,6 @@ chmod +x ~/.claude/hooks/*.sh
 cp -r "$WORKDIR/scripts/"* ~/.claude/scripts/
 chmod +x ~/.claude/scripts/*.sh
 
-# Copy output-styles directory (overwrites existing files)
-cp -r "$WORKDIR/output-styles/"* ~/.claude/output-styles/
-
-# Copy output-style-modules directory if non-empty
-if compgen -G "$WORKDIR/output-style-modules/*" > /dev/null 2>&1; then
-    cp -r "$WORKDIR/output-style-modules/"* ~/.claude/output-style-modules/
-fi
+# Compose output style from tracked skill list
+mapfile -t _skills < <(grep -v '^\s*#' "$WORKDIR/output-style-skills.txt" | grep -v '^\s*$')
+"$HOME/.claude/scripts/compose-output-style.sh" "${_skills[@]}"
