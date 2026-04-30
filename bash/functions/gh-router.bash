@@ -2,10 +2,18 @@
 # everything else on the default workspace gh (which uses GH_TOKEN with the
 # roadgnar service-account JWT injected by the cyvl-dev template).
 #
-# One-time per fresh workspace: run `gh_personal_login` to do the device-flow
-# auth + SSH key upload into ~/.config/gh-personal/.
+# Active only inside a Coder workspace; on local machines this file no-ops.
+#
+# One-time per fresh workspace: `gh auth login -p ssh` (auto-routed personal).
+
+[ "${CODER:-}" = "true" ] || return 0
 
 gh() {
+  if [ "${1:-}" = "auth" ]; then
+    GH_CONFIG_DIR="$HOME/.config/gh-personal" GH_TOKEN= command gh "$@"
+    return $?
+  fi
+
   local arg prev=""
   local personal=0
 
@@ -38,9 +46,4 @@ gh() {
   else
     command gh "$@"
   fi
-}
-
-gh_personal_login() {
-  GH_CONFIG_DIR="$HOME/.config/gh-personal" GH_TOKEN= command gh auth login \
-    --hostname github.com --git-protocol ssh
 }

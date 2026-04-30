@@ -81,21 +81,22 @@ repos. To clone private personal repos (e.g. the thoughts vault) from inside a
 fresh workspace, run once:
 
 ```bash
-gh_personal_login
+gh auth login -p ssh
 ```
 
-This launches GitHub's device flow against a separate gh config dir
-(`~/.config/gh-personal/`), prints a URL + code for you to open in your local
-browser, and uploads an SSH key to your GitHub account. Then:
+This launches GitHub's device flow, prints a URL + code for you to open in
+your local browser, and uploads an SSH key to your GitHub account. Then:
 
 ```bash
 gwc KaiNakamura/thoughts ~/repos/thoughts
 ```
 
-The `gh()` wrapper auto-routes any `gh` invocation that references
-`KaiNakamura/*` (including via cwd's git origin) through the personal config
-dir; everything else uses the default workspace gh. No need to remember
-separate commands -- plain `gh` and `gwc` work transparently.
+A `gh()` shell wrapper (auto-loaded only inside Coder workspaces, gated by
+`CODER=true`) routes `gh auth *` and any `gh` invocation referencing
+`KaiNakamura/*` (including via cwd's git origin) through a separate config dir
+at `~/.config/gh-personal/`. Everything else uses the default workspace gh.
+Plain `gh` and `gwc` just work, no special commands to remember. On local
+machines the wrapper is a no-op.
 
 ## TODO
 
