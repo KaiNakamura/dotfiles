@@ -1,6 +1,8 @@
 # gh routing: send KaiNakamura/* traffic and `gh auth *` through a personal
-# gh config dir; let everything else fall through to the default workspace gh
-# (which authenticates as a service account via GH_TOKEN).
+# gh config dir, with GH_TOKEN and GITHUB_TOKEN both cleared so gh uses the
+# personal config's stored auth (not the workspace's work-account env tokens).
+# Everything else falls through to the default workspace gh (work service
+# account via GH_TOKEN/GITHUB_TOKEN).
 #
 # Active only inside a Coder workspace; on local machines this file no-ops.
 #
@@ -10,7 +12,7 @@
 
 gh() {
   if [ "${1:-}" = "auth" ]; then
-    GH_CONFIG_DIR="$HOME/.config/gh-personal" GH_TOKEN= command gh "$@"
+    GH_CONFIG_DIR="$HOME/.config/gh-personal" GH_TOKEN= GITHUB_TOKEN= command gh "$@"
     return $?
   fi
 
@@ -42,7 +44,7 @@ gh() {
   fi
 
   if [ "$personal" -eq 1 ]; then
-    GH_CONFIG_DIR="$HOME/.config/gh-personal" GH_TOKEN= command gh "$@"
+    GH_CONFIG_DIR="$HOME/.config/gh-personal" GH_TOKEN= GITHUB_TOKEN= command gh "$@"
   else
     command gh "$@"
   fi
