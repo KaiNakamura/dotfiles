@@ -3,6 +3,8 @@
 	excludesFile = ~/.gitignore_global
 [url "ssh://git@github.com"]
 	insteadOf = https://github.com
+[url "https://github.com/"]
+	insteadOf = https://github.com/
 [init]
 	defaultBranch = main
 [pull]
