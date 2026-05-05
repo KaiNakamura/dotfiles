@@ -56,12 +56,12 @@ Different machines can have different configurations (e.g., work vs home). Set a
 echo "work" > ~/.dotfiles-profile
 ```
 
-Available profiles: `home` (default), `work`
+Available profiles: `home` (default), `work`, `coder`
 
 ### What profiles affect
 
 - **Default browser**: `home` = Firefox, `work` = Chrome (in `kde/settings.sh` and `kde/open-browser/open-browser.sh`)
-- **Starship prompt**: Uses `starship.work.toml` if it exists and profile is `work`
+- **Starship prompt**: `starship/install.sh` copies `starship.<profile>.toml` to `~/.config/starship.toml` when it exists, else falls back to `starship.toml`.
 
 ### Machine-specific shell config
 
