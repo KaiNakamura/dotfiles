@@ -5,6 +5,15 @@
 	insteadOf = https://github.com
 [url "https://github.com/"]
 	insteadOf = https://github.com/
+# Owner-scoped SSH redirects: outrank cyvl's broad rewrites for our owners.
+# Keeps plugin clones (folke/, neovim/, etc.) on the existing identity-bypass
+# HTTPS path so lazy.nvim install behavior is unchanged.
+[url "ssh://git@github.com/KaiNakamura/"]
+	insteadOf = https://github.com/KaiNakamura/
+	insteadOf = git@github.com:KaiNakamura/
+[url "ssh://git@github.com/roadgnar/"]
+	insteadOf = https://github.com/roadgnar/
+	insteadOf = git@github.com:roadgnar/
 [init]
 	defaultBranch = main
 [pull]
