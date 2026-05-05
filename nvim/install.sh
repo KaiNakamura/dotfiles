@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # Install ripgrep
 brew install ripgrep
@@ -26,19 +27,28 @@ CONFIG_DIR="$HOME/.config/nvim"
 # Ensure repos directory exists
 mkdir -p "$HOME/repos"
 
-# Clone or update kai.nvim repo
+# Clone or update kai.nvim repo.
+#
+# kai.nvim is public, so anonymous HTTPS to github.com works without creds.
+# The workspace's global ~/.gitconfig pulls in .gitconfig.coder, which stacks
+# insteadOf rules (cyvl proxy bypass + owner-scoped SSH redirects). Past iters
+# tried to beat those rules with longer-prefix escape hatches; round-6 ended up
+# tying iter-04's rule and the SSH redirect won, breaking the clone. Instead of
+# entering that competition, isolate this one git process from the global rule
+# stack: GIT_CONFIG_GLOBAL=/dev/null (and SYSTEM for safety) means git sees no
+# insteadOf rules at all and uses the URL literally. Future changes to
+# .gitconfig.coder cannot affect this clone.
 if [ ! -d "$REPO_DIR" ]; then
     echo "Cloning kai.nvim..."
-    git -c "url.https://github.com/KaiNakamura/.insteadOf=https://github.com/KaiNakamura/" \
-      clone https://github.com/KaiNakamura/kai.nvim.git "$REPO_DIR"
-    git -C "$REPO_DIR" config \
-      "url.https://github.com/KaiNakamura/.insteadOf" \
-      "https://github.com/KaiNakamura/"
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+      git clone https://github.com/KaiNakamura/kai.nvim.git "$REPO_DIR"
 else
     echo "Updating kai.nvim..."
     cd "$REPO_DIR"
-    git checkout master
-    git pull origin master
+    # Same isolation as the clone branch: keep update immune to global rewrites
+    # so re-runs of the dotfiles install never depend on auth state.
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null git checkout master
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null git pull origin master
     cd - > /dev/null
 fi
 
