@@ -1,0 +1,48 @@
+# Get editor completions based on the config schema
+"$schema" = 'https://starship.rs/config-schema.json'
+
+format = """
+$hostname\
+$directory\
+$git_branch\
+$git_commit\
+$git_state\
+$git_metrics\
+$git_status\
+$python\
+$kubernetes\
+$terraform\
+$aws\
+$line_break\
+$character\
+"""
+
+# Inserts a blank line between shell prompts
+add_newline = true
+
+[hostname]
+ssh_only   = false
+ssh_symbol = ''
+
+# Disable the package module, hiding it from the prompt completely
+[package]
+disabled = true
+
+[terraform]
+format = '[$symbol$workspace]($style) '
+
+[kubernetes]
+disabled = false
+format   = '[⎈ $context \($namespace\)](blue) '
+
+[aws]
+expiration_symbol = 'Creds Expired!'
+format            = '[$symbol($profile )(\($region\) )(\[$duration\] )]($style) '
+
+[python]
+format = '[$symbol$version (\($virtualenv\) )]($style)'
+
+[directory]
+truncate_to_repo = false
+truncation_length = 4  # set to 0 to show full path
+

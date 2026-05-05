@@ -45,6 +45,7 @@ INSTALL_ORDER=(
 INSTALL_ORDER_CODER=(
     "git-config"
     "bash"
+    "starship"
     "claude"
     "vim"
     "zoxide"
