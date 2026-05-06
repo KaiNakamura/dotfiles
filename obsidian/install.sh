@@ -1,0 +1,122 @@
+#!/bin/bash
+# obsidian module: builds + runs an obsidianless-based Docker container
+# so the Obsidian CLI (`obsidian orphans total`, etc.) works on a headless
+# Coder box without a display. Upstream: https://github.com/lucastraba/obsidianless
+#
+# Depends on the `docker/` module being installed first.
+#
+# Why `sudo docker` during install: the docker/ module does `usermod -aG
+# docker` but the new group isn't active in the current shell (supplementary
+# groups are read at login). Rather than re-exec under `sg` or punt the user
+# to relogin, every install-time docker call uses `sudo docker`. The socket
+# is root:docker 0660 -> sudo bypasses the group entirely. The user-facing
+# wrapper at ~/.local/bin/obsidian uses plain `docker exec` since by the
+# time it's invoked interactively the user has relogged.
+
+set -e
+
+OBSIDIAN_VERSION="1.12.7"
+
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VAULT_HOST="${OBSIDIAN_VAULT_HOST:-$HOME/repos/thoughts}"
+VAULT_NAME="${OBSIDIAN_VAULT_NAME:-thoughts}"
+CONTAINER_NAME="${OBSIDIAN_CONTAINER_NAME:-obsidian}"
+IMAGE_NAME="${OBSIDIAN_IMAGE_NAME:-obsidianless}"
+CONFIG_DIR="$HOME/.config/obsidianless"
+
+if ! command -v docker >/dev/null 2>&1; then
+    echo "obsidian: ERROR - docker not found; the docker/ module must run first" >&2
+    exit 1
+fi
+
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
+echo "obsidian: building $IMAGE_NAME (version=$OBSIDIAN_VERSION uid=$HOST_UID gid=$HOST_GID)"
+sudo docker build \
+    --build-arg "OBSIDIAN_VERSION=$OBSIDIAN_VERSION" \
+    --build-arg "OBSIDIAN_UID=$HOST_UID" \
+    --build-arg "OBSIDIAN_GID=$HOST_GID" \
+    -t "$IMAGE_NAME" \
+    "$MODULE_DIR"
+
+# Seed config dir with vault entry + cli toggle.
+mkdir -p "$CONFIG_DIR"
+if [[ ! -f "$CONFIG_DIR/obsidian.json" ]]; then
+    cat >"$CONFIG_DIR/obsidian.json" <<EOF
+{
+  "vaults": {
+    "$VAULT_NAME": {
+      "path": "/vault/$VAULT_NAME",
+      "ts": 1710000000000,
+      "open": true
+    }
+  },
+  "cli": true
+}
+EOF
+fi
+
+# (Re)start the container.
+if sudo docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
+    sudo docker rm -f "$CONTAINER_NAME" >/dev/null
+fi
+
+if [[ ! -d "$VAULT_HOST" ]]; then
+    echo "obsidian: vault host path $VAULT_HOST does not exist; container started without vault mount"
+fi
+
+echo "obsidian: starting $CONTAINER_NAME"
+sudo docker run -d \
+    --restart unless-stopped \
+    --name "$CONTAINER_NAME" \
+    -v "$VAULT_HOST:/vault/$VAULT_NAME" \
+    -v "$CONFIG_DIR:/home/obsidian/.config/obsidian" \
+    "$IMAGE_NAME" >/dev/null
+
+# Install user-facing wrapper. Plain `docker exec` (no sudo, no sg).
+# Users invoke this in a post-relogin shell where the docker group is active.
+mkdir -p "$HOME/.local/bin"
+cat >"$HOME/.local/bin/obsidian" <<'WRAPPER'
+#!/usr/bin/env bash
+# obsidianless wrapper: run Obsidian CLI inside the long-running `obsidian`
+# container. Plain `docker exec` works once the user has relogged after
+# the docker module added them to the docker group. If the current shell
+# pre-dates the group change, fall back to `sg docker -c` so the wrapper
+# is usable from same-session callers (e.g., Claude Code's vault-health
+# hook firing inside the install shell).
+CONTAINER_NAME="${OBSIDIAN_CONTAINER_NAME:-obsidian}"
+if docker info >/dev/null 2>&1; then
+    exec docker exec -e DISPLAY=:99 "$CONTAINER_NAME" /opt/obsidian/obsidian --no-sandbox "$@" \
+        2> >(grep -v "ERROR:dbus/bus.cc" >&2)
+elif id -nG "$USER" 2>/dev/null | tr ' ' '\n' | grep -qx docker \
+     || getent group docker 2>/dev/null | grep -qw "$USER"; then
+    exec sg docker -c "docker exec -e DISPLAY=:99 $CONTAINER_NAME /opt/obsidian/obsidian --no-sandbox$(printf ' %q' "$@")" \
+        2> >(grep -v "ERROR:dbus/bus.cc" >&2)
+else
+    echo "obsidian: ERROR - $USER not in docker group; install docker module first" >&2
+    exit 1
+fi
+WRAPPER
+chmod +x "$HOME/.local/bin/obsidian"
+
+# Wait for container to be Up. Don't probe via `docker exec obsidian
+# version`: with cli:true in obsidian.json, that subcommand causes the
+# long-running Obsidian process to exit, putting the container into a
+# restart loop. We rely on `--restart unless-stopped` + container-state
+# check; first wrapper invocation will trigger the natural restart cycle
+# if needed. Vault indexing happens lazily inside the container.
+echo -n "obsidian: waiting for container to be Up"
+for _ in $(seq 1 30); do
+    state=$(sudo docker inspect --format='{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null || echo "missing")
+    if [[ "$state" == "running" ]]; then
+        echo
+        echo "obsidian: container running (image=$IMAGE_NAME, version=$OBSIDIAN_VERSION)"
+        echo "obsidian: invoke via ~/.local/bin/obsidian (e.g., obsidian orphans total)"
+        exit 0
+    fi
+    echo -n "."
+    sleep 1
+done
+echo
+echo "obsidian: WARNING - container not running after 30s; check 'sudo docker logs $CONTAINER_NAME'"
+exit 0
