@@ -14,8 +14,12 @@ no display.
 
 - Image `obsidianless` built locally from this directory's `Dockerfile`,
   pinned to `OBSIDIAN_VERSION` (top of `install.sh`).
-- Container `obsidian`, `--restart unless-stopped`, vault bind-mounted
-  at `/vault/$VAULT_NAME`, config dir at `/home/obsidian/.config/obsidian`.
+- Container `obsidian`, `--restart unless-stopped`. The vault's parent
+  directory (e.g. `~/repos/`) is bind-mounted at `/vault/`, so the
+  vault lives at `/vault/<basename>` inside the container. Parent-mount
+  rather than leaf-mount means the vault can be cloned after install
+  and appear live in the container without restart. Config dir at
+  `/home/obsidian/.config/obsidian`.
 - Wrapper `~/.local/bin/obsidian` that proxies to `docker exec` into the
   long-running container.
 

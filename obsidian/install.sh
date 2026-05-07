@@ -20,6 +20,13 @@ OBSIDIAN_VERSION="1.12.7"
 MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VAULT_HOST="${OBSIDIAN_VAULT_HOST:-$HOME/repos/thoughts}"
 VAULT_NAME="${OBSIDIAN_VAULT_NAME:-thoughts}"
+# Mount the parent of the vault rather than the vault itself. The vault is
+# cloned interactively after install (private repo, see iter-07), so binding
+# the leaf path at install time auto-creates an empty root-owned dir and
+# shadows the later clone. Parent is pre-created here and the vault appears
+# live inside the container the moment the user runs `gh repo clone ...`.
+VAULT_PARENT="$(dirname "$VAULT_HOST")"
+VAULT_BASENAME="$(basename "$VAULT_HOST")"
 CONTAINER_NAME="${OBSIDIAN_CONTAINER_NAME:-obsidian}"
 IMAGE_NAME="${OBSIDIAN_IMAGE_NAME:-obsidianless}"
 CONFIG_DIR="$HOME/.config/obsidianless"
@@ -39,14 +46,16 @@ sudo docker build \
     -t "$IMAGE_NAME" \
     "$MODULE_DIR"
 
-# Seed config dir with vault entry + cli toggle.
+# Seed config dir with vault entry + cli toggle. Vault path inside the
+# container resolves through the parent bind mount: /vault/<basename>.
+# Always (re)write so re-runs pick up path changes (e.g. mount-strategy
+# migration from /vault/$VAULT_NAME to /vault/$VAULT_BASENAME).
 mkdir -p "$CONFIG_DIR"
-if [[ ! -f "$CONFIG_DIR/obsidian.json" ]]; then
-    cat >"$CONFIG_DIR/obsidian.json" <<EOF
+cat >"$CONFIG_DIR/obsidian.json" <<EOF
 {
   "vaults": {
     "$VAULT_NAME": {
-      "path": "/vault/$VAULT_NAME",
+      "path": "/vault/$VAULT_BASENAME",
       "ts": 1710000000000,
       "open": true
     }
@@ -54,22 +63,25 @@ if [[ ! -f "$CONFIG_DIR/obsidian.json" ]]; then
   "cli": true
 }
 EOF
-fi
 
 # (Re)start the container.
 if sudo docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
     sudo docker rm -f "$CONTAINER_NAME" >/dev/null
 fi
 
+# Pre-create the parent so the bind mount resolves to a real inode. The
+# vault leaf may or may not exist yet; if absent, it'll appear live when
+# the user clones it.
+mkdir -p "$VAULT_PARENT"
 if [[ ! -d "$VAULT_HOST" ]]; then
-    echo "obsidian: vault host path $VAULT_HOST does not exist; container started without vault mount"
+    echo "obsidian: vault $VAULT_HOST not yet present; will appear in container once cloned"
 fi
 
 echo "obsidian: starting $CONTAINER_NAME"
 sudo docker run -d \
     --restart unless-stopped \
     --name "$CONTAINER_NAME" \
-    -v "$VAULT_HOST:/vault/$VAULT_NAME" \
+    -v "$VAULT_PARENT:/vault" \
     -v "$CONFIG_DIR:/home/obsidian/.config/obsidian" \
     "$IMAGE_NAME" >/dev/null
 
