@@ -59,6 +59,8 @@ INSTALL_ORDER_CODER=(
     "aws"
     "worktrunk"
     "nvim"
+    "docker"
+    "obsidian"
 )
 
 # Function to print colored output
