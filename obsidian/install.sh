@@ -81,6 +81,7 @@ echo "obsidian: starting $CONTAINER_NAME"
 sudo docker run -d \
     --restart unless-stopped \
     --name "$CONTAINER_NAME" \
+    -e "OBSIDIAN_VAULT_PATH=/vault/$VAULT_BASENAME" \
     -v "$VAULT_PARENT:/vault" \
     -v "$CONFIG_DIR:/home/obsidian/.config/obsidian" \
     "$IMAGE_NAME" >/dev/null
@@ -96,18 +97,47 @@ cat >"$HOME/.local/bin/obsidian" <<'WRAPPER'
 # pre-dates the group change, fall back to `sg docker -c` so the wrapper
 # is usable from same-session callers (e.g., Claude Code's vault-health
 # hook firing inside the install shell).
+#
+# Self-heal: if the call returns "Vault not found" (Obsidian process opened
+# its config before the vault directory existed and didn't auto-rescan),
+# restart the container and retry once. Belt-and-suspenders alongside the
+# entrypoint vault-wait, mostly for legacy containers that started under
+# the old entrypoint.
 CONTAINER_NAME="${OBSIDIAN_CONTAINER_NAME:-obsidian}"
-if docker info >/dev/null 2>&1; then
-    exec docker exec -e DISPLAY=:99 "$CONTAINER_NAME" /opt/obsidian/obsidian --no-sandbox "$@" \
-        2> >(grep -v "ERROR:dbus/bus.cc" >&2)
-elif id -nG "$USER" 2>/dev/null | tr ' ' '\n' | grep -qx docker \
-     || getent group docker 2>/dev/null | grep -qw "$USER"; then
-    exec sg docker -c "docker exec -e DISPLAY=:99 $CONTAINER_NAME /opt/obsidian/obsidian --no-sandbox$(printf ' %q' "$@")" \
-        2> >(grep -v "ERROR:dbus/bus.cc" >&2)
-else
-    echo "obsidian: ERROR - $USER not in docker group; install docker module first" >&2
-    exit 1
+
+run_in_container() {
+    if docker info >/dev/null 2>&1; then
+        docker exec -e DISPLAY=:99 "$CONTAINER_NAME" /opt/obsidian/obsidian --no-sandbox "$@" \
+            2> >(grep -v "ERROR:dbus/bus.cc" >&2)
+    elif id -nG "$USER" 2>/dev/null | tr ' ' '\n' | grep -qx docker \
+         || getent group docker 2>/dev/null | grep -qw "$USER"; then
+        sg docker -c "docker exec -e DISPLAY=:99 $CONTAINER_NAME /opt/obsidian/obsidian --no-sandbox$(printf ' %q' "$@")" \
+            2> >(grep -v "ERROR:dbus/bus.cc" >&2)
+    else
+        echo "obsidian: ERROR - $USER not in docker group; install docker module first" >&2
+        return 1
+    fi
+}
+
+restart_container() {
+    if docker info >/dev/null 2>&1; then
+        docker restart "$CONTAINER_NAME" >/dev/null
+    else
+        sudo docker restart "$CONTAINER_NAME" >/dev/null
+    fi
+}
+
+OUT=$(run_in_container "$@" 2>&1)
+RC=$?
+if [[ "$OUT" == *"Vault not found"* ]]; then
+    echo "obsidian: vault not loaded; restarting container and retrying" >&2
+    restart_container
+    sleep 2
+    OUT=$(run_in_container "$@" 2>&1)
+    RC=$?
 fi
+printf '%s\n' "$OUT"
+exit "$RC"
 WRAPPER
 chmod +x "$HOME/.local/bin/obsidian"
 
