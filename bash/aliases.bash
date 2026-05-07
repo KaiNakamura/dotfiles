@@ -39,6 +39,13 @@ alias la='eza -a --group-directories-first --icons'
 alias ll='eza -al --group-directories-first --icons'
 alias lt='eza -a --tree --level=1 --group-directories-first --icons'
 
+# k9s: open across all namespaces by default. k9s has no global config knob
+# for default namespace (issue derailed/k9s#2665, closed not-planned); the
+# per-cluster state file is seeded with namespace.active=default on first
+# connect. Aliasing to `-A` covers every cluster the moment it's first
+# accessed and is the maintainer-recommended workaround.
+alias k9s='k9s -A'
+
 # Wire alias completion (only in interactive shells where complete_alias is loaded)
 if declare -F _complete_alias >/dev/null 2>&1; then
   for _a in g gs ga gm gam gb gp gpo gpu gc gl gw gf wts wtl wtc wtr la ll lt; do
