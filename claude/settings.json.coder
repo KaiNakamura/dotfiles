@@ -22,10 +22,17 @@
       "Edit(~/.kube/**)",
       "Write(~/.aws/**)",
       "Write(~/.kube/**)"
-    ]
+    ],
+    "defaultMode": "auto"
   },
   "model": "sonnet",
   "effortLevel": "medium",
+  "skipAutoPermissionPrompt": true,
+  "teammateMode": "auto",
+  "editorMode": "vim",
+  "enabledPlugins": {
+    "caveman@caveman": true
+  },
   "hooks": {
     "PreToolUse": [
       {
