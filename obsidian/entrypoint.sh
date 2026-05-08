@@ -10,19 +10,26 @@ sleep 2
 # Forward CDP port to 0.0.0.0 so the host can reach it for IPC/CLI.
 socat TCP-LISTEN:9223,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:9222 &
 
-# Wait for the vault to exist before starting Obsidian. The host bind-mounts
-# the vault's parent (e.g. ~/repos -> /vault), but the vault itself may be
-# cloned interactively by the user after this container is already running.
-# Obsidian opens the vault once at startup and does not auto-rescan, so
-# launching it before the vault appears means the CLI returns "Vault not
-# found" until restart. Sleeping here keeps the container in "starting"
-# until the vault is real, then exec's Obsidian which loads the vault for
-# its lifetime.
+# Wait for the vault clone to complete before starting Obsidian. The host
+# bind-mounts the vault's parent (e.g. ~/repos -> /vault), but the vault
+# itself may be cloned interactively by the user after this container is
+# already running. Obsidian opens the vault once at startup and does not
+# auto-rescan, so launching it before the vault appears means the CLI
+# returns "Vault not found" until restart.
+#
+# Poll for `.git/HEAD` rather than just the vault dir: `gh repo clone`
+# creates the target dir empty, then fetches objects, then runs the
+# working-tree checkout. Tripping on the empty dir lets Obsidian boot
+# mid-clone and write tracked `.obsidian/*.json` config files, which
+# collides with git's checkout ("Untracked working tree file ... would
+# be overwritten by merge"). `.git/HEAD` proves the repo is initialized;
+# the 2s grace sleep covers the working-tree checkout phase that follows.
 if [[ -n "${OBSIDIAN_VAULT_PATH:-}" ]]; then
-    while [[ ! -d "$OBSIDIAN_VAULT_PATH" ]]; do
-        echo "obsidian: waiting for vault at $OBSIDIAN_VAULT_PATH ..."
+    while [[ ! -f "$OBSIDIAN_VAULT_PATH/.git/HEAD" ]]; do
+        echo "obsidian: waiting for vault clone at $OBSIDIAN_VAULT_PATH ..."
         sleep 5
     done
+    sleep 2
     echo "obsidian: vault present at $OBSIDIAN_VAULT_PATH; starting"
 fi
 
