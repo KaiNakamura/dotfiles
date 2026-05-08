@@ -7,11 +7,55 @@ var _history = [];
 var _moveHistory = [];
 var _navigatingTo = null;
 var _movingWindow = null;
-var _lastOnScreen = {};   // screen → last-focused window on that screen
+var _activationOrder = {}; // winKey -> monotonic tick of last activation (z-order proxy)
+var _activationTick = 0;
+var _idCounter = 0;
 var opposites = { left: "right", right: "left", up: "down", down: "up" };
+
+function winKey(win) {
+    if (!win) return null;
+    if (win.internalId) return String(win.internalId);
+    if (win.__hjklId) return win.__hjklId;
+    win.__hjklId = "h" + (++_idCounter);
+    return win.__hjklId;
+}
+
+function stampActivation(win) {
+    var k = winKey(win);
+    if (k === null) return;
+    _activationOrder[k] = ++_activationTick;
+    print("[hjkl] activated key=" + k + " tick=" + _activationTick + " caption=" + (win.caption || ""));
+}
+
+function activationTick(win) {
+    var k = winKey(win);
+    if (k === null) return 0;
+    return _activationOrder[k] || 0;
+}
 
 // Version shim: normalize Plasma 5/6 API differences
 var isPlasma6 = (typeof workspace.windowList === "function");
+try {
+    var _stackProbe = workspace.stackingOrder;
+    print("[hjkl] probe: workspace.stackingOrder type=" + (typeof _stackProbe)
+        + " length=" + (_stackProbe && _stackProbe.length !== undefined ? _stackProbe.length : "n/a"));
+} catch(e) {
+    print("[hjkl] probe: workspace.stackingOrder threw " + e);
+}
+try {
+    var _wsKeys = [];
+    for (var _k in workspace) _wsKeys.push(_k);
+    print("[hjkl] probe: workspace keys = " + _wsKeys.sort().join(","));
+} catch(e) { print("[hjkl] probe: workspace keys threw " + e); }
+try {
+    var _wins = (typeof workspace.windowList === "function") ? workspace.windowList() : [];
+    if (_wins.length > 0) {
+        var _w0 = _wins[0];
+        var _wKeys = [];
+        for (var _kk in _w0) _wKeys.push(_kk);
+        print("[hjkl] probe: window[0] keys = " + _wKeys.sort().join(","));
+    }
+} catch(e) { print("[hjkl] probe: window keys threw " + e); }
 var api = isPlasma6
     ? { getActive:   function()  { return workspace.activeWindow; },
         setActive:   function(w) { workspace.activeWindow = w; },
@@ -103,6 +147,7 @@ function findBestStrict(active, ag, ac, d, screenFilter) {
     var best = null;
     var bestEdge = 0;
     var bestPerp = Infinity;
+    var bestTick = -1;
 
     for (var i = 0; i < windows.length; i++) {
         var win = windows[i];
@@ -115,12 +160,23 @@ function findBestStrict(active, ag, ac, d, screenFilter) {
         var edge = d.nearestEdge(cg);
         var cc = centerOf(cg);
         var perp = d.perpDistance(cc, ac);
+        var tick = activationTick(win);
 
-        if (best === null || d.pickBest(edge, bestEdge)
-                || (edge === bestEdge && perp < bestPerp)) {
+        var replace = false;
+        if (best === null) replace = true;
+        else if (d.pickBest(edge, bestEdge)) replace = true;
+        else if (edge === bestEdge && perp < bestPerp) replace = true;
+        else if (edge === bestEdge && perp === bestPerp && tick > bestTick) {
+            replace = true;
+            print("[hjkl] strict tiebreak: chose key=" + winKey(win) + " tick=" + tick
+                + " over key=" + winKey(best) + " tick=" + bestTick);
+        }
+
+        if (replace) {
             best = win;
             bestEdge = edge;
             bestPerp = perp;
+            bestTick = tick;
         }
     }
     return best;
@@ -131,6 +187,7 @@ function findBestCone(active, ac, d, screenFilter) {
     var windows = api.getWindows();
     var best = null;
     var bestDist = Infinity;
+    var bestTick = -1;
 
     for (var i = 0; i < windows.length; i++) {
         var win = windows[i];
@@ -142,9 +199,21 @@ function findBestCone(active, ac, d, screenFilter) {
         if (!d.inCone(cc, ac)) continue;
 
         var dist = Math.abs(cc.x - ac.x) + Math.abs(cc.y - ac.y);
-        if (dist < bestDist) {
+        var tick = activationTick(win);
+
+        var replace = false;
+        if (best === null) replace = true;
+        else if (dist < bestDist) replace = true;
+        else if (dist === bestDist && tick > bestTick) {
+            replace = true;
+            print("[hjkl] cone tiebreak: chose key=" + winKey(win) + " tick=" + tick
+                + " over key=" + winKey(best) + " tick=" + bestTick);
+        }
+
+        if (replace) {
             best = win;
             bestDist = dist;
+            bestTick = tick;
         }
     }
     return best;
@@ -198,64 +267,60 @@ function switchDirection(dir) {
         activeScreen = api.getScreen(active);
     }
 
+    print("[hjkl] switchDirection dir=" + dir
+        + " active=" + (active ? winKey(active) : "null")
+        + " activeScreen=" + String(activeScreen)
+        + " bootstrapped=" + bootstrapped);
+
     var d = directions[dir];
 
-    // --- Pass 1: Intra-screen strict edge-adjacency ---
+    // Intra-screen strict edge-adjacency
     var intra = findBestStrict(active, ag, ac, d, function(win) {
         return activeScreen !== null && api.getScreen(win) === activeScreen;
     });
     if (intra) {
+        print("[hjkl] -> intra key=" + winKey(intra) + " tick=" + activationTick(intra));
         doActivate(intra);
         return;
     }
 
-    // --- Pass 2: Cross-screen history backtrack (skip when bootstrapped -- no prior window) ---
+    // Cross-screen history backtrack (skip when bootstrapped -- no prior window)
     if (!bootstrapped && _history.length > 0) {
         var top = _history[_history.length - 1];
         if (dir === opposites[top.arrivedVia] && isSwitchable(top.window)) {
             _history.pop();
+            print("[hjkl] -> backtrack key=" + winKey(top.window));
             doActivate(top.window);
             warpToScreenCenter(api.getScreen(top.window));
             return;
         }
     }
 
-    // --- Pass 3: Cross-screen last-focused preference ---
-    var crossStrict = findBestStrict(active, ag, ac, d, function(win) {
+    // Cross-screen strict edge-adjacency (activation-order tiebreaker handles overlap)
+    var cross = findBestStrict(active, ag, ac, d, function(win) {
         return activeScreen === null || api.getScreen(win) !== activeScreen;
     });
-    if (crossStrict) {
-        var targetScreen = api.getScreen(crossStrict);
-        var screenKey = String(targetScreen);
-        var lastWin = _lastOnScreen[screenKey];
-        if (lastWin && lastWin !== crossStrict && isSwitchable(lastWin)
-                && api.getScreen(lastWin) === targetScreen) {
-            if (!bootstrapped) historyPush(active, dir);
-            doActivate(lastWin);
-            warpToScreenCenter(targetScreen);
-            return;
-        }
-    }
-
-    // --- Pass 4: Cross-screen strict edge-adjacency ---
-    var cross = crossStrict;
     if (cross) {
         if (!bootstrapped) historyPush(active, dir);
+        print("[hjkl] -> cross-strict key=" + winKey(cross) + " tick=" + activationTick(cross));
         doActivate(cross);
         warpToScreenCenter(api.getScreen(cross));
         return;
     }
 
-    // --- Pass 5: Cross-screen cone fallback ---
+    // Cross-screen cone fallback
     var cone = findBestCone(active, ac, d, function(win) {
         return activeScreen === null || api.getScreen(win) !== activeScreen;
     });
     if (cone) {
         if (!bootstrapped) historyPush(active, dir);
+        print("[hjkl] -> cross-cone key=" + winKey(cone) + " tick=" + activationTick(cone));
         doActivate(cone);
         warpToScreenCenter(api.getScreen(cone));
         return;
     }
+
+    print("[hjkl] -> no candidate found");
 }
 
 var NEAR_MAX_THRESHOLD = 10;
@@ -378,8 +443,7 @@ function onDesktopChanged() {
 function onWindowActivated(win) {
     try {
         if (!win) return;
-        var screenKey = String(api.getScreen(win));
-        _lastOnScreen[screenKey] = win;
+        stampActivation(win);
         if (_navigatingTo || _movingWindow) return;
         _history = [];
         _moveHistory = [];
@@ -404,9 +468,8 @@ function onWindowRemoved(win) {
         _moveHistory = _moveHistory.filter(function(entry) {
             return entry.window !== win;
         });
-        for (var key in _lastOnScreen) {
-            if (_lastOnScreen[key] === win) delete _lastOnScreen[key];
-        }
+        var k = winKey(win);
+        if (k !== null && _activationOrder.hasOwnProperty(k)) delete _activationOrder[k];
     } catch(e) {}
 }
 
