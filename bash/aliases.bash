@@ -20,6 +20,7 @@ alias gc='git checkout'
 alias gl='git log'
 alias gw='git worktree'
 alias gf='git fetch'
+alias gd='git diff'
 
 # Worktrunk
 alias wts='wt switch'
@@ -48,7 +49,7 @@ alias k9s='k9s -A'
 
 # Wire alias completion (only in interactive shells where complete_alias is loaded)
 if declare -F _complete_alias >/dev/null 2>&1; then
-  for _a in g gs ga gm gam gb gp gpo gpu gc gl gw gf wts wtl wtc wtr la ll lt; do
+  for _a in g gs ga gm gam gb gp gpo gpu gc gl gw gf gd wts wtl wtc wtr la ll lt; do
     complete -F _complete_alias "$_a"
   done
   unset _a
