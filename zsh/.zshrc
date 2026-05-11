@@ -32,9 +32,10 @@ alias gpu="git pull origin"
 alias gc="git checkout"
 alias gl="git log"
 alias gw="git worktree"
-# Redundant with oh-my-zsh git plugin (which also defines gf=git fetch),
-# kept here for parity with bash aliases and so it works without omz.
+# Redundant with oh-my-zsh git plugin (which also defines these),
+# kept here for parity with bash aliases and so they work without omz.
 alias gf="git fetch"
+alias gd="git diff"
 
 # Clone a repo as bare + .bare pattern for worktree workflow
 # Usage: gwc owner/repo [directory]
