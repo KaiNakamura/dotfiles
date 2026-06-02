@@ -34,8 +34,7 @@ Create a new project in the Obsidian thoughts vault with full scaffolding.
      - Body: the one-line description
      - Then add the wiki-link to the hub
    - List all repo links under a `Repos:` heading in the hub body
-6. Append a line to `~/repos/thoughts/README.md` under the `## Projects` heading: `- [slug](projects/<group-path>/<slug>/<slug>.md): one-line problem summary`
-7. Output the full path so user can `cd` to it
+6. Output the full path so user can `cd` to it
 
 ## Success Criteria
 

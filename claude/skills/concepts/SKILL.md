@@ -7,6 +7,8 @@ Your task is to generate separate concepts for each open design decision in the 
 
 For each design decision, propose multiple potential approaches with pros/cons and let the user weigh in on the final decisoin. Rank recommendations within each decision from best to worst and keep explanations high-level. Expect some back-and-forth conversation with the user as they ask questions about proposed solutions and shape it into a final plan. Be sure to let the user make the important decisions, your job is to present options and recommendations but let the user shape ideas as they see fit.
 
+By default, assume there is *one* main design decision. Only if explicitly stated, or for some other good reason split into multiple discrete decision points.
+
 Structure your output following [template.md](template.md).
 
 ## Steps
@@ -25,7 +27,7 @@ Structure your output following [template.md](template.md).
     - Optionally: a specific angle to look at if useful (e.g., simple/easy-to-understand, elegant/creative/outside-the-box, pre-existing/tried-and-true, reliable/robust, etc.)
 6. Wait for all agents to return their concepts
 7. Synthesize results into `iteration-NN/concepts/concepts-NN-topic.md` at the next version number (include a short kebab-case topic in the filename):
-    - Most times there is only one main decision to make concepts but, but if there are multiple, group concepts by design decision
+    - Almost always, there is only one main decision to make concepts, but in the rare case there are multiple, group concepts by design decision
     - Rank concepts within each decision from most to least recommended (each decision gets its own recommendation)
     - Preserve each concept's pros/cons from the generators, but feel free to add additional commentary appropriately
 8. Append a one-line entry to `iteration-NN/log.md` describing what concepts were generated and linking to the artifact
@@ -42,4 +44,5 @@ Structure your output following [template.md](template.md).
 
 - You have access to the `concept-generator` agent: generates several concepts with independent web and code research tools
 - Keep concepts at a high level, there is a separate `/plan` skill that the user can call later to make a more detailed plan
+- Default to one main design decision unless there is a good reason to divide into multiple separate decision points
 - Always let the user make the decisions, your job is to assist and present options
