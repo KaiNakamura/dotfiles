@@ -93,6 +93,29 @@ Then you can clone repos as needed within Coder instances:
 gwc KaiNakamura/thoughts ~/repos/thoughts
 ```
 
+## Local Coder server
+
+The `coder-server` module turns a machine into a self-hosted
+[Coder](https://coder.com) control plane (workspaces run as Docker containers
+on that host, reachable over the personal tailnet). It belongs to no profile
+and must be installed explicitly on the server machine:
+
+```bash
+# Prerequisites: tailscale installed and logged in
+./install.sh tailscale
+sudo tailscale up
+
+# Stand up the server (pulls in docker and coder modules automatically)
+./install.sh coder-server
+```
+
+Other machines get the `coder` client module from the normal install and
+connect with:
+
+```bash
+coder login http://<server-tailnet-name>:3000
+```
+
 ## TODO
 
 - [ ] Install broken because Go required for dotool!

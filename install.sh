@@ -37,6 +37,8 @@ INSTALL_ORDER=(
     "tldr"
     "aws"
     "earlyoom"
+    "tailscale"
+    "coder"
 )
 
 # Subset for headless Coder workspaces (no GUI, bash login shell).
