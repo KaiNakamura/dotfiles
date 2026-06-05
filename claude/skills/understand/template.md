@@ -1,5 +1,8 @@
 # Understanding [NN]: [Descriptive Title]
 
+## User Request (verbatim)
+<!-- The user's prompt, copied verbatim as a blockquote -->
+
 ## [Section headings are flexible -- use whatever organizes your findings]
 
 <!-- CONSTRAINTS:

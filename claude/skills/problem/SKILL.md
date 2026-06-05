@@ -61,7 +61,6 @@ tags: [project]
 
 - `.thoughts/problem.md` exists with user's exact words
 - For new projects: vault entry scaffolded at `~/repos/thoughts/projects/{group}/{slug}/`
-- After vault writes: `obsidian orphans total` stays at 1 (README.md only)
 
 ## Guidelines
 

@@ -20,6 +20,7 @@ Structure your output following [template.md](template.md).
     - If your task requires context beyond these files, consult `log.md` to identify other relevant artifacts by their descriptions and slugs
 3. Do NOT spawn agents by default. Work directly unless the user explicitly requests it via natural language (e.g., 'agent team of 3', 'use an agent team'). When spawning agents, planning benefits from code-searchers (implementation details), web-searchers (best practices), and critics (risks and gaps). Include repo paths and context from the hub file body so agents know where source code lives.
 4. Create a new `iteration-NN/plan/plan-NN-topic.md` file at the next version number (include a short kebab-case topic in the filename)
+    - Copy the user's prompt verbatim into a "User Request (verbatim)" blockquote section at the top of the artifact, right after the title
 5. Append a one-line entry to `iteration-NN/log.md` describing what was planned and linking to the artifact
 
 ## Success Criteria

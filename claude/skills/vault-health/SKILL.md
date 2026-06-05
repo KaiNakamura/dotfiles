@@ -1,10 +1,10 @@
 ---
 name: vault-health
-description: Audit the Obsidian thoughts vault for orphans, unresolved links, isolated hubs, and structural issues
+description: Audit the Obsidian thoughts vault for orphans, unresolved links, isolated hubs, and structural issues, fixing what can be safely fixed
 argument-hint: ""
 ---
 
-Audit the Obsidian thoughts vault and surface anything that looks off. No vault files are modified.
+Audit the Obsidian thoughts vault, fix anything that can be safely fixed, and report the rest. Safe fixes are mechanical ones: broken link formats, missing tags, unresolved links with an obvious intended target, missing structural stubs. Anything requiring judgment gets reported back so the user can provide guidance for how to fix properly.
 
 Vault path: `~/repos/thoughts/` (hardcoded, single vault).
 
@@ -39,13 +39,13 @@ Run `obsidian unresolved total`, expect 0
 - If there are any, run `obsidian unresolved verbose format=json` to find the sources and targets.
 - If some are false positives (e.g., a bbox string like `[[x1, x2], [y1, y2]]`) wrap in inline code so they get ignored
 
-### Report
+### Fix and Report
 
-Share what you found across checks. For each area, note whether things look clean or call out what seems off. For things that look intentional, briefly mention them so it's clear they were checked. For anything genuinely problematic, describe it clearly enough that it's easy to fix in a follow-up.
+Fix the safely fixable issues found across checks, then share what was done and what remains. For each area, note whether things look clean, what was fixed, or what seems off. For things that look intentional, briefly mention them so it's clear they were checked. For anything that needs judgment, describe it clearly enough that the user can decide what to do.
 
 ## Success Criteria
 
-- All checks run and findings reported
-- Anything that looks like a real issue is surfaced with enough context to act on
-- Intentional edge cases (like repos with no external codebase) are noted so they don't get flagged repeatedly
-- No vault files modified
+- All checks run
+- Safely fixable issues are fixed, with the fixes summarized back to the user
+- Anything needing judgment is surfaced with enough context to act on, not guessed at
+- Intentional edge cases (like projects with no external codebase) are noted so they don't get flagged repeatedly

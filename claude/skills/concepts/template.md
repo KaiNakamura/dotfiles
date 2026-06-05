@@ -1,5 +1,8 @@
 # Concepts [NN]: [Topic]
 
+## User Request (verbatim)
+<!-- The user's prompt, copied verbatim as a blockquote -->
+
 ## Context
 <!-- 2-4 sentences: What are we generating concepts for? -->
 

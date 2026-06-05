@@ -24,6 +24,7 @@ Structure your output following [template.md](template.md).
     - If the hub file links to related projects, consider whether those projects have relevant findings. Read their hub files if the research question would benefit from cross-project context. Use judgment: don't read unrelated projects.
 5. Wait for all agents to complete and collect their text summaries (skip if working directly)
 6. Synthesize all summaries into `iteration-NN/understanding/understanding-NN-topic.md` (include a short kebab-case topic in the filename)
+    - Copy the user's prompt verbatim into a "User Request (verbatim)" blockquote section at the top of the artifact, right after the title
 7. Append a one-line entry to `iteration-NN/log.md` describing what was researched and linking to the artifact
 8. Ask follow-up questions for clarification if anything remains unclear
 9. Clean up the team when done

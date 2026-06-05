@@ -19,6 +19,7 @@ Structure your implementation summary following [template.md](template.md).
     - If parts of the plan are missing or underdefined and a key decision needs to be made, immediately stop and consult the user
     - If you realize part of the plan is incorrect or won't work, immediately stop and explain the issue back to the user
 5. Create a new `iteration-NN/implementation/implementation-NN-topic.md` file at the next version number (include a short kebab-case topic in the filename)
+    - Copy the user's prompt verbatim into a "User Request (verbatim)" blockquote section at the top of the artifact, right after the title
 6. Append a one-line entry to `iteration-NN/log.md` describing what was implemented and linking to the artifact
 
 ## Success Criteria
