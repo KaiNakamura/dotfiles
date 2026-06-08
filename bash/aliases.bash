@@ -28,6 +28,9 @@ alias wtl='wt list'
 alias wtc='wt switch --create'
 alias wtr='wt remove'
 
+# tailscale
+alias ts='tailscale'
+
 # zoxide
 alias cd='z'
 
@@ -49,7 +52,7 @@ alias k9s='k9s -A'
 
 # Wire alias completion (only in interactive shells where complete_alias is loaded)
 if declare -F _complete_alias >/dev/null 2>&1; then
-  for _a in g gs ga gm gam gb gp gpo gpu gc gl gw gf gd wts wtl wtc wtr la ll lt; do
+  for _a in g gs ga gm gam gb gp gpo gpu gc gl gw gf gd wts wtl wtc wtr la ll lt ts; do
     complete -F _complete_alias "$_a"
   done
   unset _a

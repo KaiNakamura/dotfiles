@@ -60,6 +60,9 @@ alias wtr="wt remove"
 alias k="kubectl"
 alias kx="kubectx"
 
+# tailscale
+alias ts="tailscale"
+
 # For Cursor (and probably other apps) to not be slow on wayland
 export ELECTRON_OZONE_PLATFORM_HINT=auto
 
