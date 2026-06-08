@@ -105,8 +105,35 @@ and must be installed explicitly on the server machine:
 ./install.sh tailscale
 sudo tailscale up
 
-# Stand up the server (pulls in docker and coder modules automatically)
+# Stand up the server (pulls in docker, coder, and ollama modules
+# automatically; also pulls the local coding model)
 ./install.sh coder-server
+```
+
+It also brings up a local model server: the `ollama` module installs the
+ollama runtime bound to the tailnet IP, and `coder-server` pulls the coding
+model (default `qwen2.5-coder:14b`, with `qwen2.5-coder:7b` as a lighter
+fallback) and records the endpoint + default model in `/etc/coder.d/coder.env`
+(`LOCAL_CODER_OLLAMA_URL`, `LOCAL_CODER_MODEL`).
+
+The `ollama` module can also be installed on its own (runtime only, no model):
+
+```bash
+./install.sh ollama
+```
+
+### Local-coder workspace template
+
+`coder-template/` is a Coder workspace template (Terraform) for a plain CPU
+Docker workspace that runs Claude Code against the local ollama model over the
+tailnet. It clones `KaiNakamura/dotfiles` and runs `./install.sh --profile
+coder` on start, and pre-sets Claude Code's Anthropic-compatible API env vars
+to point at ollama. Push it to the server (set `ollama_url` to the desktop's
+tailnet endpoint):
+
+```bash
+coder login http://<server-tailnet-name>:3000
+coder templates push local-coder -d ./coder-template
 ```
 
 Other machines get the `coder` client module from the normal install and
