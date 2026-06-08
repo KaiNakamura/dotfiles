@@ -24,6 +24,7 @@ INSTALL_ORDER=(
     "kitty"
     "nvim"
     "vim"
+    "go"
     "kde"
     "cursor-ai"
     "claude"
