@@ -65,7 +65,13 @@ INSTALL_ORDER_CODER=(
     "worktrunk"
     "nvim"
     "docker"
-    "obsidian"
+    # TODO: obsidian is omitted here. Its module builds/runs an obsidianless
+    # Docker container for the headless Obsidian CLI, but a Coder workspace is
+    # itself a container with no Docker daemon (Docker-in-Docker fails). Add it
+    # back once the obsidian module gains a native backend (install the Obsidian
+    # AppImage + Xvfb directly, no nested Docker) selected when no daemon is
+    # reachable. Until then, vault-health/Obsidian CLI is unavailable in coder
+    # workspaces (Claude can still read/write vault files directly).
 )
 
 # Function to print colored output
