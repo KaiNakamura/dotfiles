@@ -33,21 +33,22 @@ DEFAULT_MODEL="qwen2.5-coder:14b"
 (cd ../coder && bash install.sh)
 (cd ../ollama && bash install.sh)
 
-# Derive access URL from the tailnet hostname
+# Derive access URL from the tailnet IP (not DNS name: Docker containers can't
+# resolve Tailscale hostnames without extra DNS config, so using the IP makes
+# agent init scripts work inside containers without additional setup).
 if ! command -v tailscale >/dev/null 2>&1; then
     echo "coder-server: tailscale not installed. Run \`./install.sh tailscale\` first." >&2
     exit 1
 fi
 
-dns_name="$(tailscale status --json 2>/dev/null \
-    | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null || true)"
+ts_ip="$(tailscale ip -4 2>/dev/null | head -1 || true)"
 
-if [[ -z "$dns_name" ]]; then
+if [[ -z "$ts_ip" ]]; then
     echo "coder-server: not on a tailnet. Run \`sudo tailscale up\` first." >&2
     exit 1
 fi
 
-access_url="http://${dns_name}:3000"
+access_url="http://${ts_ip}:3000"
 echo "coder-server: access URL will be $access_url"
 
 # Configure the server. The deb package's coder.service reads env vars from
@@ -68,7 +69,6 @@ set_env_var CODER_HTTP_ADDRESS "0.0.0.0:3000"
 
 # The ollama module bound the server to the tailnet IP. Workspaces reach it
 # there; local clients (including the pulls below) must target the same address.
-ts_ip="$(tailscale ip -4 2>/dev/null | head -1 || true)"
 if [[ -z "$ts_ip" ]]; then
     echo "coder-server: could not derive tailnet IP for ollama; skipping model pull." >&2
 else
