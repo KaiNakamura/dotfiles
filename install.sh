@@ -42,15 +42,18 @@ INSTALL_ORDER=(
     "coder"
 )
 
-# Subset for headless Coder workspaces (no GUI, bash login shell).
+# Subset for headless Coder workspaces (no GUI, zsh login shell).
 # `brew` runs first because most tool modules below install via Homebrew, which
 # is absent on the base image; the brew module bootstraps it and the parent
 # sources its shellenv (see install loop) so later modules can use `brew`.
+# `zsh` installs oh-my-zsh + the dotfiles .zshrc and chsh's the coder user to
+# zsh, so `coder ssh` lands in the familiar prompt (starship/aliases/zoxide).
 INSTALL_ORDER_CODER=(
     "brew"
     "git-config"
-    "bash"
+    "zsh"
     "starship"
+    "node"
     "claude"
     "vim"
     "zoxide"
