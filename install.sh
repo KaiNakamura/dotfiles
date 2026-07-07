@@ -43,9 +43,11 @@ INSTALL_ORDER=(
 )
 
 # Subset for headless Coder workspaces (no GUI, bash login shell).
-# Roadgnar's KaiNakamura branch shim runs `./install.sh --profile coder` so
-# this list is what runs there; bootstrapping brew is the shim's job.
+# `brew` runs first because most tool modules below install via Homebrew, which
+# is absent on the base image; the brew module bootstraps it and the parent
+# sources its shellenv (see install loop) so later modules can use `brew`.
 INSTALL_ORDER_CODER=(
+    "brew"
     "git-config"
     "bash"
     "starship"
@@ -235,6 +237,11 @@ main() {
         echo ""
         if install_module "$module"; then
             successful_modules+=("$module")
+            # The brew module installs Homebrew in a subshell; pull its shellenv
+            # into this process so subsequent brew-based modules find `brew`.
+            if [[ "$module" == "brew" ]] && [[ -x "/home/linuxbrew/.linuxbrew/bin/brew" ]]; then
+                eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+            fi
         else
             failed_modules+=("$module")
             print_error "Stopping installation due to failure"
