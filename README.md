@@ -128,12 +128,15 @@ The `ollama` module can also be installed on its own (runtime only, no model):
 Docker workspace that runs Claude Code against the local ollama model over the
 tailnet. It clones `KaiNakamura/dotfiles` and runs `./install.sh --profile
 coder` on start, and pre-sets Claude Code's Anthropic-compatible API env vars
-to point at ollama. Push it to the server (set `ollama_url` to the desktop's
-tailnet endpoint):
+to point at ollama. Push it to the server, and set `ollama_url` to the desktop's
+tailnet endpoint (the `ollama_url` template variable becomes `ANTHROPIC_BASE_URL`
+inside the workspace; it must be the host's tailnet IP, not `localhost` or
+`host.docker.internal`, because ollama binds to the tailnet IP only):
 
 ```sh
 coder login http://<server-tailnet-ip>:3000
-coder templates push local-coder -d ./coder-template
+coder templates push local-coder -d ./coder-template \
+    --variable ollama_url=http://$(tailscale ip -4 | head -1):11434
 ```
 
 Other machines get the `coder` client module from the normal install and
