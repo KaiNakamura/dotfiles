@@ -57,6 +57,7 @@ INSTALL_ORDER_CODER=(
     "claude"
     "vim"
     "zoxide"
+    "gh"
     "bat"
     "btop"
     "delta"
@@ -67,6 +68,7 @@ INSTALL_ORDER_CODER=(
     "aws"
     "worktrunk"
     "nvim"
+    "tmux"
     "docker"
     # TODO: obsidian is omitted here. Its module builds/runs an obsidianless
     # Docker container for the headless Obsidian CLI, but a Coder workspace is
