@@ -133,8 +133,11 @@ pre_install() {
         sudo -v
     fi
     
-    # Start sudo keep-alive in background
-    keep_sudo_alive &
+    # Start sudo keep-alive in background. Detach its stdio from the script's
+    # pipes: otherwise it holds stdout/stderr open after the script exits, which
+    # makes wrappers that wait on those pipes (e.g. Coder's startup_script
+    # runner) time out and kill the process, flagging the run as errored.
+    keep_sudo_alive </dev/null >/dev/null 2>&1 &
     SUDO_PID=$!
     
     # Create necessary directories

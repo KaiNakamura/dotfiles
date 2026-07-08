@@ -1,3 +1,12 @@
+# Fall back to a widely-available TERM when the client's terminfo isn't present
+# in this environment. e.g. `coder ssh` from kitty forwards TERM=xterm-kitty,
+# which minimal container images lack, breaking zle key handling (backspace,
+# arrows). Guarded by infocmp so native terminals (kitty desktop) keep their
+# own TERM untouched.
+if ! infocmp "$TERM" >/dev/null 2>&1; then
+    export TERM=xterm-256color
+fi
+
 export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH
 
 # Oh My Zsh
