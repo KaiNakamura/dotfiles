@@ -29,6 +29,10 @@
   "skipAutoPermissionPrompt": true,
   "teammateMode": "auto",
   "editorMode": "vim",
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh"
+  },
   "enabledPlugins": {
     "caveman@caveman": true
   },

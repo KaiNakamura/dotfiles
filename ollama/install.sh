@@ -17,6 +17,15 @@
 
 set -e
 
+# Context window (tokens) the server allocates per request. Ollama defaults to
+# 4096, which silently truncates from the start when exceeded, no error. Claude
+# Code sends a large system prompt + tool schemas + multi-turn history and needs
+# ~64K+ tokens; at 4096 it loses the actual request and the model hallucinates.
+# 65536 = 64K (2^16) is the recommended floor. Raising this grows KV-cache VRAM
+# ~linearly, keep in mind on a 12GB card. Do not exceed the served model's
+# native context (e.g. qwen2.5-coder is 32K-native).
+OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-65536}"
+
 # Install the engine (idempotent). The official script creates the `ollama`
 # systemd service and the `ollama` system user.
 if command -v ollama >/dev/null 2>&1; then
@@ -50,7 +59,8 @@ fi
 if command -v systemctl >/dev/null 2>&1; then
     drop_in_dir="/etc/systemd/system/ollama.service.d"
     sudo mkdir -p "$drop_in_dir"
-    printf '[Service]\nEnvironment="OLLAMA_HOST=%s:11434"\n' "$bind_addr" \
+    printf '[Service]\nEnvironment="OLLAMA_HOST=%s:11434"\nEnvironment="OLLAMA_CONTEXT_LENGTH=%s"\n' \
+        "$bind_addr" "$OLLAMA_CONTEXT_LENGTH" \
         | sudo tee "$drop_in_dir/override.conf" >/dev/null
     sudo systemctl daemon-reload
     sudo systemctl enable --now ollama

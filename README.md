@@ -111,9 +111,11 @@ sudo tailscale up
 ```
 
 It also brings up a local model server: the `ollama` module installs the
-ollama runtime bound to the tailnet IP, and `coder-server` pulls the coding
-model (default `qwen2.5-coder:14b`, with `qwen2.5-coder:7b` as a lighter
-fallback) and records the endpoint + default model in `/etc/coder.d/coder.env`
+ollama runtime bound to the tailnet IP (with a 64K context window, needed for
+Claude Code's large prompts), and `coder-server` pulls the coding model
+(default `glm-4.7-flash`, a 30B-A3B MoE that drives Claude Code's agentic
+tool-calling well; it CPU-offloads on a 12GB card but only 3B params are active)
+and records the endpoint + default model in `/etc/coder.d/coder.env`
 (`LOCAL_CODER_OLLAMA_URL`, `LOCAL_CODER_MODEL`).
 
 The `ollama` module can also be installed on its own (runtime only, no model):

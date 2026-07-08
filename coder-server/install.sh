@@ -25,8 +25,12 @@ set -e
 # coder-template/main.tf (Terraform can't read coder.env at push time).
 # Consolidate to a single source of truth later, e.g. a push wrapper that reads
 # coder.env and passes `--variable`. Fine while the model rarely changes.
-MODELS=("qwen2.5-coder:14b" "qwen2.5-coder:7b")
-DEFAULT_MODEL="qwen2.5-coder:14b"
+# glm-4.7-flash (30B-A3B MoE): the model that actually drives Claude Code well.
+# Non-fatal caveat: ~19GB, so it CPU-offloads on a 12GB card (tolerable, only 3B
+# active). Small non-thinking coder models (qwen2.5-coder) were tested and could
+# not hold agentic tool-calling even with a 64K context, so they are not served.
+MODELS=("glm-4.7-flash")
+DEFAULT_MODEL="glm-4.7-flash"
 
 # Dependencies (idempotent)
 (cd ../docker && bash install.sh)
@@ -111,5 +115,5 @@ echo "  3. Push the local-coder workspace template:"
 echo "       coder login $access_url"
 echo "       coder templates push local-coder -d ./coder-template"
 echo "  4. Create a workspace from the local-coder template; Claude Code in it"
-echo "     talks to ollama (model: ${DEFAULT_MODEL:-qwen2.5-coder:14b}) over the tailnet."
+echo "     talks to ollama (model: ${DEFAULT_MODEL:-glm-4.7-flash}) over the tailnet."
 echo "  5. From other machines: coder login $access_url"

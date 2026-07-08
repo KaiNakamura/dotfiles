@@ -61,7 +61,7 @@ data "coder_parameter" "model" {
   display_name = "Local model"
   description  = "Ollama model Claude Code uses (must be pulled on the host). Matches LOCAL_CODER_MODEL from coder-server."
   type         = "string"
-  default      = "qwen2.5-coder:14b"
+  default      = "glm-4.7-flash"
   mutable      = true
   order        = 1
 }
