@@ -141,6 +141,39 @@ exit "$RC"
 WRAPPER
 chmod +x "$HOME/.local/bin/obsidian"
 
+# Second name for the same wrapper. On a desktop box the native app owns
+# /usr/bin/obsidian and our wrapper shadows it (~/.local/bin is earlier in
+# PATH), so `obsidian-cli` gives an unambiguous handle and `/usr/bin/obsidian`
+# still launches the GUI. The `obsidian` name stays because the vault-health
+# rule in ~/.claude/rules/ calls it by that name.
+ln -sf "$HOME/.local/bin/obsidian" "$HOME/.local/bin/obsidian-cli"
+
+NATIVE_OBSIDIAN=""
+for candidate in /usr/bin/obsidian /usr/local/bin/obsidian /snap/bin/obsidian; do
+    if [[ -x "$candidate" ]]; then
+        NATIVE_OBSIDIAN="$candidate"
+        break
+    fi
+done
+
+print_post_install_notes() {
+    # The shell that ran the installer very likely has `obsidian` already
+    # resolved to the native app (zsh/bash cache command paths on first use),
+    # so the freshly written wrapper is invisible to it until the hash is
+    # cleared. Symptom: `obsidian` prints "Your Obsidian installer is out of
+    # date" / "Command line interface is not enabled", which is the GUI app
+    # talking, not this container.
+    echo "obsidian: run 'hash -r' (or open a new shell) before calling obsidian;"
+    echo "obsidian:   the current shell may still have it hashed to an older path"
+    if [[ -n "$NATIVE_OBSIDIAN" ]]; then
+        echo "obsidian: NOTE - native app detected at $NATIVE_OBSIDIAN."
+        echo "obsidian:   ~/.local/bin/obsidian shadows it on PATH. Use 'obsidian-cli'"
+        echo "obsidian:   for the container CLI and '$NATIVE_OBSIDIAN' to launch the GUI."
+        echo "obsidian:   This module targets headless Coder boxes; on a desktop the"
+        echo "obsidian:   native app can do CLI directly via Settings > General > Advanced."
+    fi
+}
+
 # Wait for container to be Up. Don't probe via `docker exec obsidian
 # version`: with cli:true in obsidian.json, that subcommand causes the
 # long-running Obsidian process to exit, putting the container into a
@@ -154,6 +187,7 @@ for _ in $(seq 1 30); do
         echo
         echo "obsidian: container running (image=$IMAGE_NAME, version=$OBSIDIAN_VERSION)"
         echo "obsidian: invoke via ~/.local/bin/obsidian (e.g., obsidian orphans total)"
+        print_post_install_notes
         exit 0
     fi
     echo -n "."

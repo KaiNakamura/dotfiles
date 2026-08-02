@@ -21,7 +21,32 @@ no display.
   and appear live in the container without restart. Config dir at
   `/home/obsidian/.config/obsidian`.
 - Wrapper `~/.local/bin/obsidian` that proxies to `docker exec` into the
-  long-running container.
+  long-running container, plus an `obsidian-cli` symlink to the same
+  wrapper.
+
+## Gotcha: stale command hash
+
+Shells cache command paths on first use. If you installed from a shell
+that had already run the native `obsidian`, that shell keeps resolving
+to `/usr/bin/obsidian` and you get the GUI app's complaints instead of
+the CLI:
+
+```
+Your Obsidian installer is out of date. ...
+Command line interface is not enabled. Please turn it on in Settings > General > Advanced.
+```
+
+Fix: `hash -r`, or open a new shell. Confirm with `type obsidian` ->
+should be `~/.local/bin/obsidian`.
+
+## Gotcha: desktop machines
+
+This module is Coder-only (it is in `INSTALL_ORDER_CODER`, not
+`INSTALL_ORDER`). If you install it by hand on a desktop that has the
+native app, `~/.local/bin/obsidian` shadows `/usr/bin/obsidian` for all
+terminal invocations. Use `obsidian-cli` for the container CLI and
+`/usr/bin/obsidian` to launch the GUI. The installer prints a warning
+when it detects a native binary.
 
 ## Why `sudo docker` during install
 
