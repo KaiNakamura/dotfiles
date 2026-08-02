@@ -19,6 +19,12 @@ alias nvz="nvim ~/.zshrc"
 # Starship
 eval "$(starship init zsh)"
 
+# Explorer
+e() {
+  local target="${1:-.}"
+  command xdg-open "$target" </dev/null >/dev/null 2>&1 &!
+}
+
 # Git Aliases
 alias g="git"
 alias gs="git status"
