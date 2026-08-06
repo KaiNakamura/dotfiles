@@ -3,4 +3,4 @@
 # Frontmatter (if any) is stripped before inclusion.
 # Re-run install.sh (or ~/.claude/scripts/compose-output-style.sh) after changes.
 skills/caveman/SKILL.md
-rules/only-use-typeable-characters.md
+style/only-use-typeable-characters.md

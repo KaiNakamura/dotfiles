@@ -3,33 +3,12 @@ name: plan
 description: Create a detailed implementation plan based on the chosen concept
 ---
 
-Your task is to create an implementation plan based on the user's request. The plan will be provided to another agent for implementation. Your job is only to plan, you should not make any code changes.
+Turn a chosen direction into something another agent can execute without guessing.
 
-Expect some back-and-forth conversation with the user as they ask questions about proposed plan and shape it into a final version. Your plan should start out at a rough high-level and become more detailed as the user helps fill in more details. Be sure to let the user make the important decisions, your job is to present options and recommendations but let the user shape the plan as they see fit.
+Start rough and high level, then get specific as the user shapes it. Expect back-and-forth; the first version is a starting point, not a deliverable. Where you had to make a call the user has not made, say what you decided and why, so they can overrule it.
 
-Structure your output following [template.md](template.md).
+Name the files that change and what changes in them. A step that could be read two ways is not finished.
 
-## Steps
+The user makes the decisions. Recommend, do not decide for them.
 
-1. Determine the current iteration (highest `iteration-NN/` directory)
-2. Read these thoughts:
-    - `problem.md`: Problem statement
-    - The most recent understanding file (highest NN) matching `iteration-NN/understanding/understanding-*.md`
-    - The most recent concepts file (highest NN) matching `iteration-NN/concepts/concepts-*.md`
-    - Any thoughts explicitly specified by the user via `$ARGUMENTS`
-    - If your task requires context beyond these files, consult `log.md` to identify other relevant artifacts by their descriptions and slugs
-3. Do NOT spawn agents by default. Work directly unless the user explicitly requests it via natural language (e.g., 'agent team of 3', 'use an agent team'). When spawning agents, planning benefits from code-searchers (implementation details), web-searchers (best practices), and critics (risks and gaps). Include repo paths and context from the hub file body so agents know where source code lives.
-4. Create a new `iteration-NN/plan/plan-NN-topic.md` file at the next version number (include a short kebab-case topic in the filename)
-    - Copy the user's prompt verbatim into a "User Request (verbatim)" blockquote section at the top of the artifact, right after the title
-5. Append a one-line entry to `iteration-NN/log.md` describing what was planned and linking to the artifact
-
-## Success Criteria
-
-- `iteration-NN/plan/plan-NN-topic.md` created in current iteration
-- No code files have been changed
-
-## Guidelines
-
-- Read relevant documentation and resources online to understand what may be the best way to approach the problem
-- Start out with high-level ideas and let the user guide you to fill out specifics
-- Always let the user make the decisions, your job is to assist
+Write no code. This is planning.

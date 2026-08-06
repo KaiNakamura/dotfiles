@@ -39,12 +39,22 @@ mkdir -p ~/.claude/agents
 mkdir -p ~/.claude/hooks
 mkdir -p ~/.claude/scripts
 mkdir -p ~/.claude/output-styles
+mkdir -p ~/.claude/style
+mkdir -p ~/.claude/vault-template
 
 # Copy rules directory (overwrites existing files)
 cp -r "$WORKDIR/rules/"* ~/.claude/rules/
 
 # Copy skills directory (overwrites existing files)
 cp -r "$WORKDIR/skills/"* ~/.claude/skills/
+
+# Copy style directory (overwrites existing files)
+# Composed into the output style, NOT auto-loaded like rules/
+cp -r "$WORKDIR/style/"* ~/.claude/style/
+
+# Copy vault template (overwrites existing files)
+# Reference material only, never copied into a vault by the installer
+cp -r "$WORKDIR/vault-template/"* ~/.claude/vault-template/
 
 # Copy agents directory (overwrites existing files)
 cp -r "$WORKDIR/agents/"* ~/.claude/agents/

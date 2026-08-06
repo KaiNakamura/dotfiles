@@ -1,6 +1,15 @@
-# Shared Thoughts Context
+# Thoughts Vault
 
-Shared context between agents lives in a centralized Obsidian vault at `~/repos/thoughts/`. Claude is launched from a project folder within the vault. Be selective when reading artifacts. Use `log.md` entries and artifact slugs to judge relevance before reading full files.
+This file describes how this vault is laid out. It is the one place that describes it. Skills that write here carry intent only and get their structure from this file, so read it before writing.
+
+Shared context between agents lives in a centralized Obsidian vault at `~/repos/thoughts/`. Claude is usually launched from a project folder within the vault.
+
+## Reading Selectively
+
+Read what is relevant to the task and skip what is not. Loading every artifact in a project crowds out room to work.
+
+- Use `log.md` as an index. Its entries describe what each artifact covers, so relevance can be judged without opening the file.
+- When in doubt, read it. A missed piece of context costs more than an unnecessary read.
 
 ## Obsidian Basics
 
@@ -85,6 +94,45 @@ Hub files may contain wiki-links to related projects. When these links are relev
 - Log/progress: `[[{slug}/iteration-01/log|log]]`, `[[{slug}/iteration-01/progress|progress]]`
 - Artifact (in log entries): `[[understanding-01-topic]]`, `[[plan-01-topic]]`
 
+## Creating a Project
+
+A new project lives at `projects/{group}/{slug}/`, where `{group}` can be nested any depth and is asked for rather than guessed. It starts with:
+
+- `{slug}.md` -- the hub:
+  ```markdown
+  ---
+  tags: [project]
+  ---
+  - [[{slug}/problem|problem]]
+  - [[{slug}/iterations|iterations]]
+
+  Repos:
+  - [[repos/{org}/{name}|{name}]]
+  ```
+- `problem.md` -- nav backlink `[[{slug}/{slug}|{slug}]]`, then `# Problem`, then the user's statement
+- `iterations.md` -- header `# Iterations`
+- `iteration-01/` -- see Starting an Iteration below
+
+Then add a line to the vault's `README.md` under `## Projects`:
+
+```
+- [{slug}](projects/{group}/{slug}/{slug}.md): one-line problem summary
+```
+
+## Repo Notes
+
+Repos are their own notes under `repos/{org}/{name}.md`, so several projects can link the same repo and the durable facts about it live in one place.
+
+```markdown
+---
+tags: [repo]
+github: https://github.com/{org}/{name}
+---
+One line on what this repo is.
+```
+
+Local paths are hints, not facts. Repos usually sit at `~/repos/{name}/`, sometimes at a worktree nested inside. A stale hint costs a `git worktree list`, not a failure, so infer and adapt rather than trusting the note.
+
 ## Artifact Versioning
 
 Artifact files are named `type-NN-topic.md` where `NN` is a zero-padded version number and `topic` is a short kebab-case description (e.g., `understanding-01-skill-config.md`). The `NN` number is the primary version identifier, the topic suffix is for human scannability when browsing the directory.
@@ -94,6 +142,26 @@ Artifact files are named `type-NN-topic.md` where `NN` is a zero-padded version 
 - To determine the next version: list existing files, take highest `NN`, add 1. If none exist, start at `01`.
 - To find the latest file of a type, glob for the prefix (e.g., `understanding-*.md`) and take the highest `NN`
 
+## Writing Artifacts
+
+Each phase of work writes one artifact into the current iteration. The skill decides what to say; this file decides where it goes and what shape it takes.
+
+| Phase | Artifact |
+|---|---|
+| Problem definition | `problem.md` at the project root (static, outside iterations) |
+| Understanding | `iteration-NN/understanding/understanding-NN-topic.md` |
+| Concepts | `iteration-NN/concepts/concepts-NN-topic.md` |
+| Plan | `iteration-NN/plan/plan-NN-topic.md` |
+| Implementation | `iteration-NN/implementation/implementation-NN-topic.md` |
+| Checkpoint | `iteration-NN/progress.md` (overwritten, not versioned) |
+
+Shapes for each of these live in `templates/` next to this file. Follow the template for the artifact being written.
+
+Two conventions apply to every artifact:
+
+- **The user's words are preserved verbatim.** Copy the prompt that prompted the artifact into a `## User Request (verbatim)` blockquote at the top, unedited. The user's own wording carries authority that a paraphrase loses.
+- **The log gets an entry.** Append one line to `iteration-NN/log.md` describing what happened, linking the artifact if there was one. See Iteration Log below.
+
 ## Iteration Detection
 
 The project directory is divided into subdirectories based on the current iteration (e.g., `iteration-NN/`). A difficult problem may require multiple iterations. For example, maybe we understood the problem, came up with concepts, made a plan, but the implementation didn't work. We would then re-evaluate and begin a new iteration.
@@ -101,6 +169,16 @@ The project directory is divided into subdirectories based on the current iterat
 The current iteration directory is always the highest number. If there are no iteration directories, this must be the first iteration (i.e., `iteration-01/`).
 
 An agent will never need to read information from a previous iteration. The only necessary cross-iteration information is captured in the `iterations.md` file.
+
+### Starting an Iteration
+
+Create `iteration-NN/` at the next number, containing:
+
+- `log.md` -- header `# Iteration NN Log` and a first entry saying why this iteration exists
+- `progress.md` -- following `templates/progress.md`
+- Empty phase dirs: `understanding/`, `concepts/`, `plan/`, `implementation/`
+
+If there was a previous iteration, append its summary to `iterations.md` first, following `templates/iterations.md`. That summary is what stops the next attempt from repeating the last one, so it needs the diagnosis and not just the outcome.
 
 ## Iteration Log
 
