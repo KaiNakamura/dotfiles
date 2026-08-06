@@ -1,2 +1,2 @@
 # Problem Statement
-<!-- Place the exact query the user provided here with no modifications -->
+<!-- The user's exact words, no modifications. Long and messy is fine. -->

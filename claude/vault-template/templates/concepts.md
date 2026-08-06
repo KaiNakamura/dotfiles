@@ -4,18 +4,20 @@
 <!-- The user's prompt, copied verbatim as a blockquote -->
 
 ## Context
-<!-- 2-4 sentences: What are we generating concepts for? -->
+<!-- 2-4 sentences: what are we deciding, and why is it a real choice? -->
 
 ## Decision [N]: [One-line description]
-<!-- Repeat for each open design decision -->
+<!-- Usually there is only one. Repeat only if the decision genuinely is several. -->
 
-### Concept [A-Z]: [One-line summary] <!-- Brief description of the approach, label each concept with uppercase letters (A, B, C, etc.) not numbers. Letters reset per decision. -->
+### Concept [A-Z]: [One-line summary]
+<!-- A few sentences on the approach. Each concept is a whole path, not a sub-choice.
+Label with uppercase letters (A, B, C), not numbers. Letters reset per decision. -->
 
 #### Pros
 <!-- 2-4 bullets -->
 
 #### Cons
-<!-- 2-4 bullets. Only include genuine downsides -- do NOT fabricate cons to fill space -->
+<!-- 2-4 bullets. Genuine downsides only, never padding. -->
 
 ### Recommendation
-<!-- Rank concepts within this decision. State which is recommended and why. -->
+<!-- Rank the concepts. Say which one and why. -->

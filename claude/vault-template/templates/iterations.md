@@ -1,5 +1,5 @@
 # Iterations
 
 ## Iteration [NN]: [One line summary]
-<!-- Bulleted list: What was tried, what happened, and why we're moving on.
-Write whatever is most useful for the next agent to avoid repeating mistakes. -->
+<!-- Bulleted list: what was tried, what happened, why we're moving on.
+The diagnosis is the point. Whatever stops the next attempt from repeating this one. -->

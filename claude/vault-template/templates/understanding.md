@@ -3,17 +3,10 @@
 ## User Request (verbatim)
 <!-- The user's prompt, copied verbatim as a blockquote -->
 
-## [Section headings are flexible -- use whatever organizes your findings]
-
-<!-- CONSTRAINTS:
-- DO NOT propose solutions, fixes, or implementation approaches
-- DO NOT include a "Recommendations" or "Next Steps" section
-- Focus exclusively on describing what IS, not what SHOULD BE
-- Include specific file paths with line numbers where relevant
--->
+## [Headings are flexible -- whatever organizes the findings]
+<!-- Describe what IS, not what should be. No solutions, no fixes, no recommendations, no next steps.
+Cite file paths with line numbers so the next reader can check you. -->
 
 ## Open Questions
-<!-- If necessary, end with numbered open questions for the user to answer
-- DO NOT include questions that you could easily answer yourself
-- Only include questions for the user about open-ended questions with no "right" answer (e.g., an important design choice)
--->
+<!-- Only questions the user alone can settle, like an open-ended design choice.
+Skip anything you could answer yourself. Omit the section if there are none. -->
