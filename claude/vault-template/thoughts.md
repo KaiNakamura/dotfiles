@@ -160,7 +160,7 @@ Shapes for each of these live in `templates/` next to this file. Follow the temp
 
 Three conventions apply to every artifact:
 
-- **Artifacts are written to be read fast.** Short sentences. Say the thing, then stop. No preamble, no restating the request, no summarizing what you just wrote. A reader gets the point line by line instead of decoding paragraphs. Keep the reasoning on the page though: this gets read cold, with nobody around to ask.
+- **Artifacts are written for someone scanning, not studying.** Same brevity the conversation gets: no preamble, no restating the request, no summary of what was just written. If a line carries neither a fact nor a reason, cut it. Keep the reasoning though, since this gets read cold with nobody around to ask.
 - **The user's words are preserved verbatim.** Copy the prompt that prompted the artifact into a `## User Request (verbatim)` blockquote at the top, unedited. The user's own wording carries authority that a paraphrase loses.
 - **The log gets an entry.** Append one line to `iteration-NN/log.md` describing what happened, linking the artifact if there was one. See Iteration Log below.
 
