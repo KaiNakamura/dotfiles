@@ -8,6 +8,6 @@ Your task is to implement a plan provided by the user. Carefully analyze the pla
 
 If at any point you get stuck following the plan, you should immediately stop and ask the user how they would like to proceed. You shouldn't deviate from the plan without approval from the user. If parts of the plan are missing or underdefined and a key decision needs to be made, or if you realize part of the plan is incorrect or won't work, immediately stop and explain the issue back to the user. Deviating quietly is the failure mode here: the user chose this plan, and they need to know the moment reality disagreed with it.
 
-If no plan is provided, immediately stop and ask the user to run `/plan` first.
+If no plan is provided, ask the user if they would like to run `/plan` first. Sometimes the solution may be straightforward enough to implement directly.
 
 Record what actually changed, including anything you had to do differently and why.

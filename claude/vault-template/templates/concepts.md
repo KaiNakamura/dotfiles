@@ -4,20 +4,21 @@
 <!-- The user's prompt, copied verbatim as a blockquote -->
 
 ## Context
-<!-- 2-4 sentences: what are we deciding, and why is it a real choice? -->
+<!-- 1-3 sentences: what are we deciding, and why is it a real choice? -->
 
-## Decision [N]: [One-line description]
-<!-- Usually there is only one. Repeat only if the decision genuinely is several. -->
+## [The decision, in one line]
+<!-- Usually there is only one. Add a second `##` section only if the decision genuinely is several. -->
 
-### Concept [A-Z]: [One-line summary]
-<!-- A few sentences on the approach. Each concept is a whole path, not a sub-choice.
-Label with uppercase letters (A, B, C), not numbers. Letters reset per decision. -->
+**A. [One-line summary]** -- [a few sentences on the approach. Each concept is a whole path, not a sub-choice.
+Label with uppercase letters, reset per decision.]
 
-#### Pros
-<!-- 2-4 bullets -->
+- Good: [the real advantages]
+- Bad: [genuine downsides only, never padding]
 
-#### Cons
-<!-- 2-4 bullets. Genuine downsides only, never padding. -->
+**B. [One-line summary]** -- [...]
 
-### Recommendation
-<!-- Rank the concepts. Say which one and why. -->
+- Good:
+- Bad:
+
+## Recommendation
+<!-- Which one and why, in a few lines. Rank the others only if the ranking says something. -->
