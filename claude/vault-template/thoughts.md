@@ -9,6 +9,7 @@ Shared context between agents lives in a centralized Obsidian vault at `~/repos/
 Read what is relevant to the task and skip what is not. Loading every artifact in a project crowds out room to work.
 
 - Use `log.md` as an index. Its entries describe what each artifact covers, so relevance can be judged without opening the file.
+- Read the log before the artifacts it points at, and take its verdict over an artifact's own confidence. An artifact records what was believed when it was written; the log records what happened after.
 - When in doubt, read it. A missed piece of context costs more than an unnecessary read.
 
 ## Obsidian Basics
@@ -194,3 +195,9 @@ Example:
 - User clarified mouse should center on screen, not window
 - Generated 5 concepts for cursor warp, [[concepts-01-cursor-warp]]
 ```
+
+### Correcting the Record
+
+Work goes wrong. Premises turn out false, decisions reverse, sometimes a whole stretch dies at once. A correction only counts if it lands where the next reader already looks, which is the log. What makes it worth writing is naming what is dead specifically enough that nobody rebuilds it.
+
+Fixing the artifact itself is fine. Deleting one is not: the record is more useful honest than tidy.
