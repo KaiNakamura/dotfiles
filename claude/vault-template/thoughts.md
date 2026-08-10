@@ -10,7 +10,7 @@ Read what is relevant to the task and skip what is not. Loading every note in a 
 
 - Use `log.md` as an index. Its entries describe what each note covers, so relevance can be judged without opening the file.
 - Read the log before the notes it points at, and take its verdict over a note's own confidence. A note records what was believed when it was written; the log records what happened after.
-- When in doubt, read it. A missed piece of context costs more than an unnecessary read.
+- When in doubt, read it. A missed piece of context costs more than an unnecessary read. The exception is orienting at the start of a session, where the cost runs the other way: read the least that lets you hold the thread, and pull the rest when a task actually needs it.
 
 ## Obsidian Basics
 

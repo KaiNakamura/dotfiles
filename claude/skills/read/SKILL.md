@@ -1,14 +1,14 @@
 ---
 name: read
-description: Read specified project files and summarize them to load context into the session
+description: Load the current project context so the session is ready to work
 ---
 
-Read specified files from shared thoughts to familiarize yourself with the current context.
+Get up to speed on the current work so you are ready for whatever comes next.
 
-Load what is relevant to where things stand: what the problem is, what has been decided, what happened most recently. Read selectively rather than exhaustively so you don't bloat your context window with irrelevant information, and always read anything the user names.
+What this skill produces is a primed agent, not a report. Read enough to hold the thread and start work, then stop. Pull the rest later, when a task actually needs it. This runs at the start of nearly every session, so speed counts. Always read anything the user names.
 
-Based on what you learned, output a brief summary covering where the work currently stands, the key decisions made so far, and what the likely next step is. Note related projects linked from this one without automatically reading them. Name any artifacts the user might want to read for deeper context rather than reading them all yourself, so they can ask for the ones they want.
+Then confirm, in one or two sentences, where the work left off and what is next. That is the entire output. No headings, no lists, no rundown of decisions, no menu of files to read. The user has the vault open and will ask for more if they want it.
 
-If it is ambiguous which thread of work this session is about, propose one. That proposal holds for the rest of the conversation unless the user redirects it.
+One exception: if it is ambiguous which thread of work this session is about, say which one you picked. That proposal holds for the rest of the conversation unless the user redirects it.
 
 This skill only reads. Change nothing.
