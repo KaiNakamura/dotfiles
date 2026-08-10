@@ -12,13 +12,13 @@
 **A. [One-line summary]** -- [a few sentences on the approach. Each concept is a whole path, not a sub-choice.
 Label with uppercase letters, reset per decision.]
 
-- Good: [the real advantages]
-- Bad: [genuine downsides only, never padding]
+- Pros: [the real advantages]
+- Cons: [genuine downsides only, never padding]
 
 **B. [One-line summary]** -- [...]
 
-- Good:
-- Bad:
+- Pros:
+- Cons:
 
 ## Recommendation
 <!-- Which one and why, in a few lines. Rank the others only if the ranking says something. -->
