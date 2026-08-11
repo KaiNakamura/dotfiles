@@ -119,6 +119,8 @@ For non-note entries: `- {what happened or was decided}`
 - Generated 5 concepts for cursor warp, [[02-concepts-cursor-warp]]
 ```
 
+One sentence on one line. An entry records what happened, not what the thing is: the note or head it points at already holds the content, and an entry that duplicates them goes stale where nobody thinks to look for it.
+
 ### Correcting the Record
 
 Work goes wrong. Premises turn out false, decisions reverse, sometimes a whole stretch dies at once. A correction only counts if it lands where the next reader already looks, which is the log. What makes it worth writing is naming what is dead specifically enough that nobody rebuilds it.
@@ -163,9 +165,9 @@ That is the only place the parent tracks its children. Everything else about a c
 
 ## Iterating
 
-Sometimes an approach turns out wrong and the work needs reframing against the original problem. That is a marker, not a structural event: a log entry naming what failed and why, and a rewritten current state in the head. Work continues in the same node. It does not create a sibling node, a new directory, or a new numbering sequence.
+Sometimes an approach turns out wrong, sometimes the work just moves to a genuinely different step, and either way it gets reframed against the original problem. That is a marker, not a structural event: a log entry giving the reason, and a rewritten current state in the head. Work continues in the same node. It does not create a sibling node, a new directory, or a new numbering sequence.
 
-The diagnosis is the whole point. A record that says the approach was abandoned without saying what was wrong with it costs a reader time and tells them not to repeat a mistake it never named.
+Where an approach died, the diagnosis is the whole point. A record that says the approach was abandoned without saying what was wrong with it costs a reader time and tells them not to repeat a mistake it never named. Where nothing died, say so by not saying it.
 
 ## Knowledge
 
