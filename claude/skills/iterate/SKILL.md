@@ -1,27 +1,11 @@
 ---
 name: iterate
-description: Start a new iteration when the current approach needs rethinking
+description: Start a new iteration when the approach needs rethinking or the work moves to a new step
 argument-hint: "[reason for iterating]"
 ---
 
-Start a new iteration for the current task.
+Reframe the current task against the original problem.
 
-When updating `iterations.md`, structure each iteration entry following [template.md](template.md).
+Something was wrong, did not work, or the work has moved to a genuinely different step. Capture the reason we need to reiterate, and where something was wrong, say plainly what it was and what was learned from it. Our goal is to guide new agents so they don't repeat the same mistakes. Then reset where things stand and carry on in place.
 
-## Steps
-
-1. Determine the current iteration (highest `iteration-NN/` directory)
-2. If there are no previous iterations, create `iteration-01/` and skip to step 4
-3. Otherwise, if there are previous iterations:
-   - Append a summary to `iterations.md` that captures the reason we need to reiterate. Our goal is to guide new agents so they don't repeat the same mistakes.
-   - Create new iteration directory: `iteration-NN/` (next number)
-4. Create `iteration-NN/log.md` with header `# Iteration [NN] Log` and an initial entry describing why this iteration was started
-5. Create `iteration-NN/progress.md` following the checkpoint [template.md](../checkpoint/template.md)
-
-## Success Criteria
-
-- `iterations.md` updated with summary of previous iteration (if any)
-- New iteration directory created at `iteration-NN/`
-- `iteration-NN/log.md` created with initial entry
-- `iteration-NN/progress.md` created with context summary
-- No other files or directories have been modified
+Where an approach died, the diagnosis is the whole point. A record that says the approach is being rethought without saying what failed is worse than nothing: it costs a reader time and tells them not to repeat a mistake it never named. Where nothing died, say so by not saying it.

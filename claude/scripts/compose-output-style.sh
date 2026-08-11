@@ -5,7 +5,7 @@
 #
 # Each PATH is relative to ~/.claude/. Examples:
 #   skills/caveman/SKILL.md
-#   rules/only-use-typeable-characters.md
+#   style/only-use-typeable-characters.md
 #
 # YAML frontmatter (if present) is stripped from each source before inclusion.
 #
