@@ -15,6 +15,7 @@ export PATH="/home/kai/.pixi/bin:$PATH"
 alias v="vim"
 alias nv="nvim"
 alias nvz="nvim ~/.zshrc"
+alias nvzl="nvim ~/.zshrc.local"
 
 # Starship
 eval "$(starship init zsh)"
