@@ -1,0 +1,63 @@
+#!/bin/bash
+# Print one line per managed window: pid, virtual desktop, window class, caption.
+#
+# A virtual desktop of -1 means the window is on all of them.
+#
+# KWin has no read API on the session bus, so the only way to ask it anything is
+# to inject a script, run it, and read what it printed out of the journal. That
+# is the same round trip open-browser.sh makes, including the unique token,
+# because journalctl is a shared log and a fixed marker would match old runs.
+
+set -u
+
+command -v qdbus >/dev/null 2>&1 || exit 1
+
+TOKEN="KWINWL_$$_$(date +%s%N)"
+SCRIPT_FILE=$(mktemp /tmp/kwin-window-list-XXXXXX.js) || exit 1
+chmod 600 "$SCRIPT_FILE"
+
+# Plasma 5 names these clientList/desktop; Plasma 6 renamed them windowList and
+# moved the desktop onto an array. Ask which one this compositor speaks rather
+# than assuming, the way kde/kwin-scripts/hjkl-edge-guard does.
+cat > "$SCRIPT_FILE" << EOF
+var plasma6 = (typeof workspace.windowList === "function");
+var ws = plasma6 ? workspace.windowList() : workspace.clientList();
+var out = [];
+for (var i = 0; i < ws.length; i++) {
+    var w = ws[i];
+    var desktop = -1;
+    if (plasma6) {
+        if (w.desktops && w.desktops.length === 1) desktop = w.desktops[0].x11DesktopNumber;
+    } else if (!w.onAllDesktops) {
+        desktop = w.desktop;
+    }
+    out.push([w.pid, desktop, w.resourceClass, w.caption].join("\t"));
+}
+console.info("$TOKEN" + "\n" + out.join("\n"));
+EOF
+
+SCRIPT_NAME="kwin-window-list-$$"
+SCRIPT_ID=$(qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \
+    "$SCRIPT_FILE" "$SCRIPT_NAME" 2>/dev/null)
+if [[ ! "$SCRIPT_ID" =~ ^[0-9]+$ ]]; then
+    rm -f "$SCRIPT_FILE"
+    exit 1
+fi
+
+qdbus org.kde.KWin "/$SCRIPT_ID" org.kde.kwin.Script.run > /dev/null 2>&1
+
+# The journal is written asynchronously, so a first read can miss the line.
+journalctl --sync 2>/dev/null
+for _retry in 1 2 3; do
+    RESULT=$(journalctl --since "30 sec ago" --no-pager -o cat 2>/dev/null \
+        | sed -n "/$TOKEN/,\$p" | tail -n +2)
+    [[ -n "$RESULT" ]] && break
+    sleep 0.1
+done
+
+qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript \
+    "$SCRIPT_NAME" > /dev/null 2>&1
+rm -f "$SCRIPT_FILE"
+
+[[ -z "${RESULT:-}" ]] && exit 1
+printf '%s\n' "$RESULT" | sed 's/^js: //'

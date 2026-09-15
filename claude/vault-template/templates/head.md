@@ -1,6 +1,14 @@
 ---
 status: todo
 tags: [project]
+description: [one line, what this is]
+# Optional, for a node with code behind it. Delete what does not apply.
+repo: [org]/[name]
+branch: [branch]
+links:
+  # Keys are yours to pick and mean nothing to any tool: linear, issue, pr, doc.
+  # Values are whole URLs.
+  [key]: [url]
 ---
 # [Title]
 
@@ -19,4 +27,5 @@ Describe now. The log already holds how it got here. -->
 
 ## Repos
 
-<!-- Wiki-links to repo notes, plus branch and worktree path. All hints. -->
+<!-- Wiki-link to the repo note, plus anything the frontmatter has no room for:
+a second repo, which worktree was in use. All hints. -->

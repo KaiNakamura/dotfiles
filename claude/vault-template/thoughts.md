@@ -65,20 +65,35 @@ Nothing hand-maintains a summary across children. A rollup is derived by walking
 
 Named after its directory, so `c9-bugsmash/c9-bugsmash.md`. Obsidian disambiguates by path when a name collides with one under `knowledge/`.
 
-Frontmatter carries status, and optionally `tags: [project]` for graph coloring:
+Frontmatter carries status, a one-line description, and where the work touches the world:
 
 ```yaml
 ---
 status: in-progress
 tags: [project]
+description: Pitstop satellite spoke "Delete all anchors" hangs forever
+repo: roadgnar/platform
+branch: kai/satellite-dev-stack
+links:
+  linear: https://linear.app/cyvlai/issue/CYV-5580
+  pr: https://github.com/roadgnar/platform/pull/1609
 ---
 ```
 
-Status vocabulary is `todo`, `in-progress`, `blocked`, `deferred`, `done`, `canceled`. It is open-ended. Something one-off like `waiting-on-casey` is fine and is shown as written, never treated as an error.
+Status vocabulary is `todo`, `in-progress`, `blocked`, `deferred`, `done`, `canceled`. Anything else still shows as written rather than erroring, but reach for the closest of the six instead of coining one: work waiting on a person is `blocked`, not `waiting-on-casey`.
+
+Everything after `tags` is optional, and describes a node that has code behind it:
+
+- `repo:` is `{org}/{name}`, naming a note at `repos/{org}/{name}.md` and nothing else.
+- `branch:` is the branch the work sits on, not a path.
+- `repos:` replaces that pair when the work touches more than one repo, one `{org}/{name}: {branch}` line each, branch omitted where there is not one yet. The first is the primary, and anything needing a single destination goes there. Writing `repo:`/`branch:` means a list of one and stays the normal way to write a node with a single repo.
+- `links:` keys are chosen by whoever writes the node and carry no meaning to anything reading them, so a project tracked in GitHub issues writes `issue:` exactly as one in Linear writes `linear:`. Values are whole URLs.
+
+The local checkout path is deliberately not a field. It differs per machine, so it is derived from the repo note plus the branch rather than written down and left to go stale.
 
 The body holds two things that are edited differently. The problem statement is written once and revised only when the problem itself changes. Current state is overwritten every time the node is checkpointed, and describes now rather than history, because the log already has history.
 
-The body also carries pointers: repo as a wiki-link to its note under `repos/`, plus branch and worktree path. All three are hints. If a path is not there, use judgment (`git worktree list`, `ls`) to find the real one. A stale hint costs a lookup, not a failure, so infer and adapt rather than trusting or correcting it.
+The body also carries a `## Repos` section: every repo the head names, as wiki-links to their notes under `repos/`, plus whatever the frontmatter has no room for, such as which worktree was in use or what each repo is for here. The frontmatter is where a repo is declared; the body is prose about them. A stale line there costs a lookup, not a failure, so infer and adapt rather than trusting or correcting it.
 
 ## Note Naming
 
@@ -136,6 +151,15 @@ A node lives wherever it belongs in the tree, which is asked for rather than gue
   ---
   status: todo
   tags: [project]
+  description: {one line, what this is}
+  repo: {org}/{name}          # if there is code
+  branch: {branch}            # once there is one
+  # or, for work spanning repos, in place of both:
+  # repos:
+  #   {org}/{name}: {branch}  # the first is the primary
+  #   {org}/{other}:
+  links:                      # keys are yours to pick
+    linear: {url}
   ---
   # {Title}
 
@@ -199,7 +223,7 @@ github: https://github.com/{org}/{name}
 One line on what this repo is.
 ```
 
-Repos usually sit at `~/repos/{name}/`, sometimes at a worktree nested inside. As with the hints in a node head, a stale local path is not a failure.
+Repos usually sit at `~/repos/{name}/`, sometimes at a worktree nested inside, which is why a node declares a branch rather than a path. A repo that lives somewhere else adds `path:` to its note, and that is the only place a local path is ever written down.
 
 ## Links
 
