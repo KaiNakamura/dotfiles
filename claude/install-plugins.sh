@@ -9,7 +9,4 @@ expose_plugin_skill() {
     ln -sfn "$path/skills/$skill_name/SKILL.md" "$HOME/.claude/skills/$skill_name/SKILL.md"
 }
 
-# caveman: always-on terse communication mode (hooks + bundled SKILL.md)
-claude plugin marketplace add JuliusBrussee/caveman
-claude plugin install caveman@caveman
-expose_plugin_skill caveman@caveman caveman
+# No plugins are currently installed.

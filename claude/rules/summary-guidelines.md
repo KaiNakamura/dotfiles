@@ -1,6 +1,0 @@
-# Summary Guidelines
-
-- Keep summaries under 500 words but include all critical information
-- Use bullet points and structured formatting for quick scanning
-- Include specific file paths and line numbers where relevant
-- Reference external documentation using `@filename` syntax rather than copying content

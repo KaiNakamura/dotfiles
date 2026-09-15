@@ -1,0 +1,195 @@
+#!/bin/bash
+# thw - the workspace side of `th`.
+#
+#   thw                     pick a node and switch to the desktop it is on
+#   thw <slug>              switch to that node's desktop
+#   thw open [slug] [desk]  open a terminal in that node, on that desktop
+#   thw free                print the first desktop with nothing on it
+#
+# `th agents` knows which node each running agent is working in; it deliberately
+# knows nothing about windows, so that it still works over ssh on a box with no
+# display. This is the other half, and it is machine-specific on purpose: KDE,
+# KWin, virtual desktops.
+#
+# The pieces stay separate so that the policy is yours rather than the tool's:
+# "set me up somewhere empty" is `thw open foo $(thw free)`, which a person and
+# an agent can both compose. Nothing here decides where a node ought to live.
+#
+# The join between an agent and a window is the pid. An agent is a grandchild of
+# the terminal that owns the window, so its own pid never appears in the window
+# list; walking up /proc from the agent until a pid does appear is what connects
+# the two.
+
+set -uo pipefail
+
+WINDOW_LIST="$(dirname "$(readlink -f "$0")")/kwin-window-list"
+
+for tool in jq fzf qdbus; do
+    if ! command -v "$tool" > /dev/null 2>&1; then
+        echo "thw needs $tool" >&2
+        exit 1
+    fi
+done
+
+usage() {
+    sed -n '3,7p' "$(readlink -f "$0")" | sed 's/^# \?//'
+}
+
+# --- windows -----------------------------------------------------------------
+
+declare -A desktop_of
+windows_loaded=""
+
+load_windows() {
+    [[ -n "$windows_loaded" ]] && return
+    windows_loaded=1
+    local pid desktop
+    while IFS=$'\t' read -r pid desktop _class _caption; do
+        [[ -n "${pid:-}" ]] && desktop_of[$pid]=$desktop
+    done < <("$WINDOW_LIST" 2>/dev/null)
+}
+
+# The desktop of the nearest ancestor of $1 that owns a window.
+desktop_for() {
+    load_windows
+    local pid=$1
+    for _hop in 1 2 3 4 5 6 7 8; do
+        [[ -z "$pid" || "$pid" == "0" || "$pid" == "1" ]] && break
+        if [[ -n "${desktop_of[$pid]:-}" ]]; then
+            echo "${desktop_of[$pid]}"
+            return
+        fi
+        # Field 4 of /proc/<pid>/stat is the parent. The comm field before it
+        # can contain spaces and parentheses, so cut after the last ')'.
+        pid=$(sed 's/.*) //' "/proc/$pid/stat" 2>/dev/null | cut -d' ' -f2)
+    done
+    echo "-"
+}
+
+go_to_desktop() {
+    local desktop=$1
+    if [[ "$desktop" == "-" || "$desktop" == "-1" ]]; then
+        echo "that window is not on a single desktop" >&2
+        return 1
+    fi
+    [[ "$desktop" == "$(qdbus org.kde.KWin /KWin currentDesktop)" ]] && return 0
+    qdbus org.kde.KWin /KWin setCurrentDesktop "$desktop" > /dev/null
+}
+
+# --- nodes -------------------------------------------------------------------
+
+# The node the current directory is in, if any. A node directory holds a head
+# file named after itself, which is the vault's own rule for what a node is.
+node_here() {
+    local dir=$PWD
+    while [[ "$dir" != "$HOME" && "$dir" != "/" ]]; do
+        [[ -f "$dir/$(basename "$dir").md" ]] && { echo "$dir"; return; }
+        dir=$(dirname "$dir")
+    done
+}
+
+# --- agents ------------------------------------------------------------------
+
+agents_json() {
+    local agents
+    agents=$(th agents --json 2>/dev/null)
+    if [[ -z "$agents" || "$agents" == "[]" ]]; then
+        echo "no agents running" >&2
+        return 1
+    fi
+    printf '%s' "$agents"
+}
+
+# One line per agent: pid, slug, then the text to show. The node you are
+# standing in sorts to the top, so the cursor starts on it without hiding
+# anything else the way a pre-filled search would.
+agent_rows() {
+    local agents=$1 here_slug=$2 pid slug status idle desktop
+    while IFS=$'\t' read -r pid slug status idle; do
+        desktop=$(desktop_for "$pid")
+        [[ "$desktop" == "-1" ]] && desktop="all"
+        printf '%s\t%s\t%-32s %-12s %10s  desktop %s\n' \
+            "$pid" "$slug" "$slug" "$status" "$idle" "$desktop"
+    done < <(jq -r '.[] | [
+        .pid,
+        (.slug // .cwd),
+        (.status // "-"),
+        (if .idle_seconds == null then "?"
+         elif .idle_seconds < 60 then "\(.idle_seconds)s idle"
+         elif .idle_seconds < 3600 then "\(.idle_seconds / 60 | floor)m idle"
+         else "\(.idle_seconds / 3600 | floor)h idle" end)
+    ] | @tsv' <<< "$agents") \
+        | awk -F'\t' -v here="$here_slug" \
+            '$2 == here { print; next } { rest = rest $0 "\n" } END { printf "%s", rest }'
+}
+
+# --- commands ----------------------------------------------------------------
+
+cmd_pick() {
+    local agents here here_slug rows selected
+    agents=$(agents_json) || exit 0
+    here=$(node_here)
+    here_slug=$([[ -n "$here" ]] && basename "$here")
+    rows=$(agent_rows "$agents" "$here_slug")
+
+    selected=$(fzf --delimiter=$'\t' --with-nth=3.. \
+        --header="enter switches desktop" --height=40% --reverse <<< "$rows")
+    [[ -z "$selected" ]] && exit 0
+    go_to_desktop "$(desktop_for "${selected%%$'\t'*}")"
+}
+
+cmd_go() {
+    local query=$1 agents pid
+    agents=$(agents_json) || exit 1
+    pid=$(jq -r --arg q "$query" \
+        'map(select((.slug // "") | contains($q))) | .[0].pid // empty' <<< "$agents")
+    if [[ -z "$pid" ]]; then
+        echo "no agent in a node matching \"$query\". thw open $query starts one." >&2
+        exit 1
+    fi
+    go_to_desktop "$(desktop_for "$pid")"
+}
+
+cmd_open() {
+    local target=${1:-} desktop=${2:-} dir
+    if [[ -n "$target" ]]; then
+        dir=$(th path --no-cd "$target") || exit 1
+    else
+        dir=$(node_here)
+        if [[ -z "$dir" ]]; then
+            echo "not in a node. thw open <slug> says which one." >&2
+            exit 1
+        fi
+    fi
+    [[ -n "$desktop" ]] && { go_to_desktop "$desktop" || exit 1; }
+    kitty --detach --directory "$dir"
+}
+
+# A desktop with no window on it. A window on all desktops does not count as
+# occupying one, since by definition it is on every desktop.
+cmd_free() {
+    load_windows
+    local count occupied="" pid desktop n
+    count=$(qdbus org.kde.KWin /VirtualDesktopManager count)
+    for pid in "${!desktop_of[@]}"; do
+        desktop=${desktop_of[$pid]}
+        [[ "$desktop" == "-1" ]] && continue
+        occupied+=" $desktop "
+    done
+    for ((n = 1; n <= count; n++)); do
+        if [[ "$occupied" != *" $n "* ]]; then
+            echo "$n"
+            return 0
+        fi
+    done
+    echo "every desktop has a window on it" >&2
+    return 1
+}
+
+case "${1:-}" in
+    "")          cmd_pick ;;
+    open)        shift; cmd_open "$@" ;;
+    free)        cmd_free ;;
+    -h | --help) usage ;;
+    *)           cmd_go "$1" ;;
+esac

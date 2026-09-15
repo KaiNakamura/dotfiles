@@ -1,30 +1,14 @@
 ---
 name: read
-description: Read specified project files and summarize them to load context into the session
+description: Load the current project context so the session is ready to work
 ---
 
-Read specified files from shared thoughts to familiarize yourself with the current context.
+Get up to speed on the current work so you are ready for whatever comes next.
 
-## Steps
+What this skill produces is a primed agent, not a report. Read enough to hold the thread and start work, then stop. Pull the rest later, when a task actually needs it. This runs at the start of nearly every session, so speed counts. Always read anything the user names.
 
-1. Determine the current iteration (highest `iteration-NN/` directory)
-2. Read these thoughts:
-    - `{project-name}.md`: Project hub (glob for `*.md` at project root whose stem matches the folder name)
-    - `problem.md`: Problem statement
-    - `iterations.md`: Cross-iteration summary
-    - `iteration-NN/log.md`: Chronological narrative of the iteration
-    - `iteration-NN/progress.md`: Progress summary for the current iteration
-    - Any thoughts explicitly specified by the user via `$ARGUMENTS`
-3. Check the hub file for wiki-links to other projects. If any exist, note them in the summary output (e.g., "This project links to: X, Y, Z"). Do not automatically read them.
-4. Based on what you learned, output a brief summary covering:
-   - Where the iteration currently stands (what phase, what was last done)
-   - Key decisions made so far
-   - What the likely next step is
-   - Related projects linked from the hub file (if any)
-   - Any artifacts the user might want to read for deeper context (reference by name from log entries)
+Then confirm, in one or two sentences, where the work left off and what is next. That is the entire output. No headings, no lists, no rundown of decisions, no menu of files to read. The user has the vault open and will ask for more if they want it.
 
-## Success Criteria
+One exception: if it is ambiguous which thread of work this session is about, say which one you picked. That proposal holds for the rest of the conversation unless the user redirects it.
 
-- You have loaded relevant context without unnecessarily bloating the context window
-- User receives a summary confirming context was loaded
-- No files or directories have been modified
+This skill only reads. Change nothing.

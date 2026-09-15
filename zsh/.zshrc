@@ -62,6 +62,22 @@ alias wtl="wt list"
 alias wtc="wt switch --create"
 alias wtr="wt remove"
 
+# Thoughts vault CLI. The eval defines the `th` shell function that wraps the
+# binary, and is not optional: a process cannot cd its parent shell, so `th
+# vault` and `th project` hand the destination back through it. Guarded because
+# th is installed from source rather than by a package manager, so unlike wt
+# above it may genuinely be absent.
+command -v th > /dev/null 2>&1 && eval "$(th shell zsh)"
+alias ths="th status"
+alias thsa="th status --all"
+alias thp="th project"
+alias thr="th repo"
+alias tha="th agents"
+alias thv="th vault"
+alias tho="th open"
+alias thd="th doctor"
+alias thda="th doctor --all"
+
 # k8s
 alias k="kubectl"
 alias kx="kubectx"
