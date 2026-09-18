@@ -26,7 +26,12 @@ if ! command -v cargo > /dev/null 2>&1; then
 fi
 
 echo "  Installing: th"
-cargo install --git "$TH_REPO"
+# Fetch through the git CLI rather than cargo's bundled libgit2. The git-config
+# module rewrites https://github.com/KaiNakamura/ to ssh:// so our own repos
+# bypass the Coder git proxy, and libgit2 can only offer an ssh-agent for that,
+# which a non-interactive install shell does not have. The git CLI reads
+# ~/.ssh/ directly and authenticates.
+CARGO_NET_GIT_FETCH_WITH_CLI=true cargo install --git "$TH_REPO"
 
 # The helpers below drive KWin over D-Bus, so they are meaningless anywhere
 # else. th is already in by this point and works without them.
