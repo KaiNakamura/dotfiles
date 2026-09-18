@@ -38,6 +38,7 @@ INSTALL_ORDER=(
     "tldr"
     "aws"
     "earlyoom"
+    "zmx"
 )
 
 # Subset for headless Coder workspaces (no GUI, bash login shell).
@@ -62,6 +63,7 @@ INSTALL_ORDER_CODER=(
     "nvim"
     "docker"
     "obsidian"
+    "zmx"
 )
 
 # Function to print colored output
