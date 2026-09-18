@@ -13,13 +13,20 @@ WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET_BIN="$HOME/.local/bin"
 TH_REPO="https://github.com/KaiNakamura/th"
 
-if command -v cargo > /dev/null 2>&1; then
-    echo "  Installing: th"
-    cargo install --git "$TH_REPO"
-else
-    echo "Note: cargo is not on PATH, so th itself was skipped. Install Rust,"
-    echo "then: cargo install --git $TH_REPO"
+# Rust is this module's prerequisite the way brew is elsewhere, so install it
+# rather than skipping: an explicit `./install.sh th` bypasses the profile
+# ordering, so nothing else is going to put cargo there first. rustup is left to
+# amend the shell profiles itself, since which one is in play differs per box
+# (the Coder workspaces source their bash init from another repo entirely).
+if ! command -v cargo > /dev/null 2>&1; then
+    echo "  Installing: rust (prerequisite for th)"
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    # shellcheck disable=SC1091
+    . "$HOME/.cargo/env"
 fi
+
+echo "  Installing: th"
+cargo install --git "$TH_REPO"
 
 # The helpers below drive KWin over D-Bus, so they are meaningless anywhere
 # else. th is already in by this point and works without them.
