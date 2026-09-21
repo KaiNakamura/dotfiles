@@ -12,6 +12,7 @@ No dependencies. Python 3.8+.
 """
 
 import argparse
+import concurrent.futures
 import json
 import os
 import re
@@ -55,8 +56,10 @@ DEFAULT_PORT = 8788
 STALE_SECONDS = 15 * 60   # an agent quiet longer than this stops pulsing
 CACHE_SECONDS = 1.5       # how long a `th` read is reused across requests
 DESKTOP_SECONDS = 20      # how long a desktop lookup is reused; see Desktops
-DETAIL_LOG_LINES = 12     # how much of a node's trail the detail panel shows
-DETAIL_BODY_CHARS = 2400  # a head can run to 20k; the panel is a glance, not a read
+DETAIL_LOG_LINES = 12     # how much of a node's trail the project page shows
+DETAIL_BODY_CHARS = 2400  # a head can run to 20k; the page is a glance, not a read
+LINK_SECONDS = 60         # how long a fetched link card is reused; see LinkCards
+LINK_WORKERS = 6          # how many of one node's links are fetched at once
 
 
 # --------------------------------------------------------------------------
@@ -474,6 +477,295 @@ def read_detail(vault, node_path, slug):
     return {"body": body, "log": log, "notes": notes}
 
 
+# --------------------------------------------------------------------------
+# Link cards
+#
+# A node's `links:` are the only place it names the world outside the vault, and
+# until now they were rendered as bare URLs. A link card is that same URL with
+# whatever its own service will tell us about it.
+#
+# Two rules hold this together. The first is that recognising a link and
+# fetching it are separate: `classify_link` is pure string work and always
+# succeeds, so every link gets a card even when nothing can be fetched for it.
+# The second is that no fetch happens on the board's rebuild path. The board
+# polls every 2s and `gh` takes over a second, so these are asked for by the
+# project page after it has already drawn, and cached.
+
+GITHUB_PR = re.compile(r"^https?://github\.com/([^/]+)/([^/]+)/pull/(\d+)")
+GITHUB_ISSUE = re.compile(r"^https?://github\.com/([^/]+)/([^/]+)/issues/(\d+)")
+GITHUB_REPO = re.compile(r"^https?://github\.com/([^/]+)/([^/]+)/?$")
+SLACK_MSG = re.compile(
+    r"^https?://([a-z0-9-]+)\.slack\.com/archives/([A-Z0-9]+)/p(\d{10})(\d{6})")
+SLACK_CHAN = re.compile(r"^https?://([a-z0-9-]+)\.slack\.com/archives/([A-Z0-9]+)")
+LINEAR_ISSUE = re.compile(r"^https?://linear\.app/([^/]+)/issue/([A-Za-z0-9]+-\d+)")
+
+
+SLACK_STATE = os.path.expanduser("~/.config/Slack/storage/root-state.json")
+_slack_team = []
+
+
+def slack_team():
+    """The workspace id the Slack desktop app is signed in to, or None.
+
+    A `slack://` deep link needs a team id and a permalink does not carry one,
+    so it has to come from somewhere. The app writes it into its own state file,
+    which is the only place on this machine that knows it, and reading that is
+    cheaper and more honest than asking for it to be pasted into a config.
+    """
+    if _slack_team:
+        return _slack_team[0]
+    team = None
+    try:
+        with open(SLACK_STATE, encoding="utf-8") as fh:
+            team = (json.load(fh).get("workspacesMeta") or {}).get(
+                "selectedWorkspaceId")
+    except (OSError, ValueError):
+        pass
+    _slack_team.append(team)
+    return team
+
+
+def classify_link(key, url):
+    """What kind of thing a link points at, from the URL alone.
+
+    The vault deliberately gives `links:` keys no meaning -- 14 different names
+    across the 31 links in this vault -- so the key is a label to show and never
+    something to match on. The host is what decides the card.
+    """
+    card = {"key": key, "url": url, "kind": "other",
+            "host": re.sub(r"^https?://", "", url).split("/")[0]}
+    m = GITHUB_PR.match(url)
+    if m:
+        card.update(kind="github-pr", repo="%s/%s" % (m.group(1), m.group(2)),
+                    number=int(m.group(3)), live=True)
+        return card
+    m = GITHUB_ISSUE.match(url)
+    if m:
+        card.update(kind="github-issue", repo="%s/%s" % (m.group(1), m.group(2)),
+                    number=int(m.group(3)), live=True)
+        return card
+    m = GITHUB_REPO.match(url)
+    if m:
+        card.update(kind="github-repo", repo="%s/%s" % (m.group(1), m.group(2)))
+        return card
+    m = SLACK_MSG.match(url)
+    if m:
+        # The permalink's `p1788200434373329` is the message ts with its dot
+        # removed. Putting it back is what every Slack API call wants, and it
+        # is also how two links to the same thread are recognised as one.
+        card.update(kind="slack-thread", workspace=m.group(1),
+                    channel=m.group(2), ts="%s.%s" % (m.group(3), m.group(4)))
+        slack_app_url(card)
+        return card
+    m = SLACK_CHAN.match(url)
+    if m:
+        card.update(kind="slack-channel", workspace=m.group(1), channel=m.group(2))
+        slack_app_url(card)
+        return card
+    m = LINEAR_ISSUE.match(url)
+    if m:
+        card.update(kind="linear-issue", team=m.group(1), issue=m.group(2).upper())
+        return card
+    return card
+
+
+def slack_app_url(card):
+    """The `slack://` form of a Slack link, when the team id is known.
+
+    Only the channel is addressable this way. Slack's deep-link docs describe
+    `channel` and `user` targets and nothing for a single message, so the card
+    offers the channel in the app and the permalink in the browser rather than
+    guessing at a message parameter that no primary source describes.
+    """
+    team = slack_team()
+    if team:
+        card["app_url"] = "slack://channel?team=%s&id=%s" % (team, card["channel"])
+    return card
+
+
+def gh_json(args):
+    """One `gh` call, returning parsed JSON or raising RuntimeError.
+
+    `gh` is used rather than the REST API because it already holds Kai's token
+    in the system keyring; adding an API client here would mean a second copy of
+    that credential and a place for it to go stale.
+    """
+    try:
+        out = run(["gh"] + args, timeout=20)
+    except (RuntimeError, OSError) as e:
+        raise RuntimeError(str(e))
+    try:
+        return json.loads(out)
+    except json.JSONDecodeError:
+        raise RuntimeError("gh returned something that is not json")
+
+
+CHECK_FIELDS = ("number,title,state,isDraft,reviewDecision,mergeable,"
+                "statusCheckRollup,reviewRequests,updatedAt,additions,deletions,"
+                "changedFiles,headRefName,baseRefName,comments,url")
+
+
+def pr_stage(pr, checks):
+    """One line for where a PR actually is.
+
+    The order is the order the facts override each other, not the order they are
+    read. A merged PR does not care that its checks are red; a draft is not
+    awaiting review however many reviewers are on it; and a red build outranks
+    an approval, because the approval was given against a build that has since
+    changed.
+    """
+    if pr.get("state") == "MERGED":
+        return "merged"
+    if pr.get("state") == "CLOSED":
+        return "closed"
+    if pr.get("isDraft"):
+        return "draft"
+    if checks["failed"]:
+        return "CI failing"
+    if checks["pending"]:
+        return "CI running"
+    decision = pr.get("reviewDecision") or ""
+    if decision == "CHANGES_REQUESTED":
+        return "changes requested"
+    if decision == "APPROVED":
+        if pr.get("mergeable") == "CONFLICTING":
+            return "approved, conflicts"
+        return "approved, ready to merge"
+    if pr.get("reviewRequests"):
+        return "awaiting review"
+    if pr.get("mergeable") == "CONFLICTING":
+        return "conflicts"
+    return "open, no reviewer"
+
+
+# Which stages are a call for attention, which are fine, and which are neither.
+# The page colours on this rather than on the raw state, so one word decides it.
+STAGE_TONE = {
+    "CI failing": "bad", "changes requested": "bad", "conflicts": "bad",
+    "approved, conflicts": "bad",
+    "CI running": "warn", "awaiting review": "warn", "open, no reviewer": "warn",
+    "approved, ready to merge": "good", "merged": "good",
+    "draft": "mute", "closed": "mute",
+}
+
+
+def fetch_github_pr(card):
+    pr = gh_json(["pr", "view", str(card["number"]), "--repo", card["repo"],
+                  "--json", CHECK_FIELDS])
+    checks = {"passed": 0, "failed": 0, "pending": 0, "skipped": 0}
+    failing = []
+    for c in pr.get("statusCheckRollup") or []:
+        # A CheckRun reports status + conclusion; a StatusContext only a state.
+        # Normalising both to one word here keeps the page from knowing which
+        # kind of check GitHub happened to return.
+        if c.get("__typename") == "StatusContext":
+            got = (c.get("state") or "").upper()
+            name = c.get("context") or "status"
+        else:
+            name = c.get("name") or "check"
+            got = ((c.get("conclusion") or "") if c.get("status") == "COMPLETED"
+                   else "PENDING").upper()
+        if got in ("SUCCESS", "NEUTRAL"):
+            checks["passed"] += 1
+        elif got in ("FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"):
+            checks["failed"] += 1
+            if len(failing) < 6:
+                failing.append(name)
+        elif got in ("SKIPPED",):
+            checks["skipped"] += 1
+        else:
+            checks["pending"] += 1
+    stage = pr_stage(pr, checks)
+    reviewers = []
+    for r in pr.get("reviewRequests") or []:
+        reviewers.append(r.get("login") or r.get("name") or r.get("slug") or "?")
+    return {
+        "title": pr.get("title"), "state": pr.get("state"),
+        "draft": pr.get("isDraft"), "review": pr.get("reviewDecision"),
+        "mergeable": pr.get("mergeable"), "updated": pr.get("updatedAt"),
+        "branch": pr.get("headRefName"), "base": pr.get("baseRefName"),
+        "adds": pr.get("additions"), "dels": pr.get("deletions"),
+        # `gh` returns every comment body under this field. The page wants how
+        # many, and shipping the bodies would put a PR's whole discussion into
+        # a payload that is polled.
+        "files": pr.get("changedFiles"), "comments": len(pr.get("comments") or []),
+        "checks": checks, "failing": failing, "reviewers": reviewers,
+        "stage": stage, "tone": STAGE_TONE.get(stage, "mute"),
+    }
+
+
+def fetch_github_issue(card):
+    it = gh_json(["issue", "view", str(card["number"]), "--repo", card["repo"],
+                  "--json", "number,title,state,updatedAt,labels,assignees,comments"])
+    stage = "closed" if it.get("state") == "CLOSED" else "open"
+    return {
+        "title": it.get("title"), "state": it.get("state"),
+        "updated": it.get("updatedAt"),
+        "labels": [l.get("name") for l in it.get("labels") or []][:6],
+        "assignees": [a.get("login") for a in it.get("assignees") or []],
+        "comments": len(it.get("comments") or []),
+        "stage": stage, "tone": "mute" if stage == "closed" else "warn",
+    }
+
+
+FETCHERS = {"github-pr": fetch_github_pr, "github-issue": fetch_github_issue}
+
+
+class LinkCards:
+    """Fetched state for link cards, cached by URL.
+
+    Kept off the board's own cache on purpose. The board rebuilds every couple
+    of seconds and these take over a second each, so they are fetched only when
+    a project page asks and then reused for LINK_SECONDS. A failure is cached
+    too, for the same window -- otherwise a repo you cannot reach re-runs `gh`
+    on every poll of the page that names it.
+    """
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.by_url = {}
+
+    def get(self, cards, force=False):
+        now = time.time()
+        want = []
+        with self.lock:
+            for c in cards:
+                if c["kind"] not in FETCHERS:
+                    continue
+                hit = self.by_url.get(c["url"])
+                if force or not hit or now - hit["at"] > LINK_SECONDS:
+                    want.append(c)
+        if want:
+            workers = min(LINK_WORKERS, len(want))
+            with concurrent.futures.ThreadPoolExecutor(workers) as pool:
+                for c, res in zip(want, pool.map(self._one, want)):
+                    with self.lock:
+                        self.by_url[c["url"]] = {"at": time.time(), "data": res}
+        out = []
+        with self.lock:
+            for c in cards:
+                c = dict(c)
+                hit = self.by_url.get(c["url"])
+                if hit:
+                    c["fetched_at"] = hit["at"]
+                    if "error" in hit["data"]:
+                        c["error"] = hit["data"]["error"]
+                    else:
+                        c["data"] = hit["data"]
+                out.append(c)
+        return out
+
+    @staticmethod
+    def _one(card):
+        try:
+            return FETCHERS[card["kind"]](card)
+        except RuntimeError as e:
+            return {"error": str(e)}
+
+
+LINKS = LinkCards()
+
+
 def set_status(vault, node_path, slug, status):
     """Rewrite a node head's `status:` and nothing else.
 
@@ -583,8 +875,24 @@ class Handler(BaseHTTPRequestHandler):
         self._send(code, json.dumps(obj).encode("utf-8"), "application/json")
 
     def do_GET(self):
-        if self.path in ("/", "/index.html"):
+        # A project page is a real URL, not a fragment, so it can be opened in
+        # its own window, bookmarked, and walked back out of. The server hands
+        # the same page to every /node/... path and lets the client route: there
+        # is one document, and adding a second would mean a second stylesheet.
+        if (self.path in ("/", "/index.html")
+                or self.path == "/node" or self.path.startswith("/node/")):
             self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
+        elif self.path.startswith("/api/links"):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            try:
+                card = find_node(self.cache.get(), (query.get("path") or [""])[0])
+            except (ValueError, RuntimeError) as e:
+                self._json({"error": str(e)}, 404)
+                return
+            cards = [classify_link(k, v)
+                     for k, v in (card.get("links") or {}).items()]
+            self._json({"links": LINKS.get(
+                cards, force=bool(query.get("force")))})
         elif self.path.startswith("/api/board"):
             try:
                 self._json(self.cache.get())
@@ -986,6 +1294,8 @@ PAGE = r"""<!doctype html>
     z-index: 6;
   }
   #grip:hover, #grip.dragging { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+  /* #main sets display:flex, which outranks the hidden attribute on its own. */
+  [hidden] { display: none !important; }
   body.resizing { cursor: col-resize; user-select: none; }
   .sidehead {
     display: flex; align-items: center; gap: 4px; padding: 8px 8px 8px 12px;
@@ -1021,7 +1331,7 @@ PAGE = r"""<!doctype html>
      so the track, the corner and the arrow buttons kept their defaults and drew
      as pale blocks against the dark theme. `scrollbar-color` covers the browsers
      that do not take the -webkit- pseudo-elements at all. */
-  #tree, .cards, #detail .dbody, .primenu, #ctx {
+  #tree, .cards, #project, .primenu, #ctx {
     scrollbar-width: thin;
     scrollbar-color: var(--line) transparent;
   }
@@ -1338,27 +1648,86 @@ PAGE = r"""<!doctype html>
   .state .desk svg { width: 13px; height: 13px; }
   .empty { color: var(--faint); font-size: 12px; padding: 6px 4px; font-style: italic; }
 
-  /* Detail panel */
-  #scrim { position: fixed; inset: 0; background: var(--overlay); z-index: 30; }
-  #detail {
-    position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 92vw);
-    background: var(--panel); border-left: 1px solid var(--line); z-index: 31;
-    display: flex; flex-direction: column; box-shadow: -8px 0 32px var(--shadow);
+  /* Project page.
+     A page rather than a panel, so it gets the whole window and can hold as
+     many cards as a node has links. Everything here is prefixed `p`: three
+     class collisions in this stylesheet have already cost a round of
+     screenshots each, and a prefix is cheaper than checking every name. */
+  /* The same height #main gets, so swapping one for the other does not move
+     the header or the footer. */
+  #project { height: calc(100vh - 92px); overflow-y: auto; background: var(--bg); }
+  .phead {
+    padding: 14px 20px 13px; border-bottom: 1px solid var(--line);
+    background: var(--panel);
   }
-  #detail .dhead { padding: 14px 18px 13px; border-bottom: 1px solid var(--line);
-                   position: relative; }
-  #detail .dbody { padding: 14px 18px 28px; overflow-y: auto; }
-  #detail h2 { margin: 3px 0 4px; font-size: 16px; overflow-wrap: anywhere; }
-  #detail h3 {
-    font-size: 10.5px; font-weight: 600; color: var(--faint); margin: 18px 0 7px;
+  .phead h2 { margin: 4px 0 3px; font-size: 18px; overflow-wrap: anywhere; }
+  .pback {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 12px;
+    margin-bottom: 2px;
+  }
+  .pback svg { width: 10px; height: 10px; }
+  .phead .agent, .phead .when { font-size: 12px; white-space: nowrap; }
+  .phead .jump { font-size: 12px; padding: 1px 7px; }
+
+  .pgrid {
+    display: grid; gap: 13px; padding: 15px 20px 32px;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    align-items: start;
+  }
+  .pcard {
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px 14px 13px; min-width: 0;
+  }
+  /* A card whose content is prose, not facts, gets the full width: wrapping a
+     head or a log into a 330px column makes every line a fragment. */
+  .pcard.pwide { grid-column: 1 / -1; }
+  .pcard > h3 {
+    font-size: 10.5px; font-weight: 600; color: var(--faint); margin: 0 0 9px;
     text-transform: uppercase; letter-spacing: .06em;
+    display: flex; align-items: center; gap: 7px;
   }
-  #detail .dbody > h3:first-child { margin-top: 0; }
-  #detail p { margin: 0 0 8px; color: var(--dim); overflow-wrap: anywhere; }
-  #detail .close { position: absolute; top: 12px; right: 16px; z-index: 2; }
-  #detail .dhead .trail { padding-right: 62px; }
-  #detail .agent, #detail .when { font-size: 12px; white-space: nowrap; }
-  #detail .jump { font-size: 12px; padding: 1px 7px; }
+  .pcard > h3 .grow { flex: 1; }
+  .pcard > h3 a { color: var(--faint); font-weight: 600; }
+  .pcard > h3 a:hover { color: var(--accent); }
+  .pcard p { margin: 0 0 8px; color: var(--dim); overflow-wrap: anywhere; }
+  .pcard .ptitle {
+    font-size: 13.5px; color: var(--ink); margin: 0 0 8px; line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  .pcard .prose { font-size: 13px; }
+
+  /* The one word that says where a thing stands. It carries the card's colour
+     so the grid can be read without reading any of it. */
+  .pbadge {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px;
+    font-weight: 600; border-radius: 999px; padding: 2px 9px;
+    border: 1px solid color-mix(in srgb, var(--t) 45%, transparent);
+    background: color-mix(in srgb, var(--t) 13%, transparent); color: var(--t);
+    white-space: nowrap;
+  }
+  .pbadge.good { --t: var(--in-review); }
+  .pbadge.warn { --t: var(--in-progress); }
+  .pbadge.bad  { --t: var(--blocked); }
+  .pbadge.mute { --t: var(--faint); }
+
+  .prow {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+    font-size: 12px; color: var(--dim); margin-top: 9px;
+  }
+  .prow .sep { color: var(--line); }
+  /* Nothing else in the stylesheet colours a bare anchor, so one inside a card
+     drew as the browser's default blue-on-dark and was unreadable. */
+  .prow a { color: var(--accent); }
+  .pfail {
+    margin-top: 8px; font-size: 11.5px; color: var(--blocked);
+    font-family: ui-monospace, monospace; overflow-wrap: anywhere;
+  }
+  .pmono {
+    font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--faint);
+    overflow-wrap: anywhere;
+  }
+  .pnote { font-size: 11.5px; color: var(--faint); font-style: italic; margin-top: 9px; }
+  .pcard .logline:last-child { border-bottom: none; }
   /* Two rows, not one. Five controls in a 520px panel had nothing telling them
      to stay whole, so every label broke mid-word: "in-/progress", "no/priority",
      "jump to desktop/8". The controls sit on one line and the facts about the
@@ -1486,10 +1855,11 @@ PAGE = r"""<!doctype html>
   </aside>
   <div id="board"></div>
 </div>
+<div id="project" hidden></div>
 <footer>
   <kbd>/</kbd> search &middot; <kbd>b</kbd> tree &middot; <kbd>c</kbd> columns &middot;
-  <kbd>r</kbd> refresh &middot; <kbd>esc</kbd> clear &middot; click a card for detail, drag it to
-  change its node's <code>status:</code> &middot; bookmark to track it, bars to rank it
+  <kbd>r</kbd> refresh &middot; <kbd>esc</kbd> back &middot; click a card to open its project,
+  drag it to change its node's <code>status:</code> &middot; bookmark to track it, bars to rank it
   &middot; <kbd>alt</kbd>-click a checkbox for that node alone, not its children
 </footer>
 <script>
@@ -1839,6 +2209,9 @@ const PIN_ON = `<svg viewBox="0 0 14 17" fill="currentColor" stroke="currentColo
   ><path d="${RIBBON}"/></svg>`;
 
 
+const BACK = `<svg viewBox="0 0 10 10" fill="none" stroke="currentColor"
+  stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M6.5 2 L3.5 5 L6.5 8"/></svg>`;
 const CARET = `<svg viewBox="0 0 10 10" fill="none" stroke="currentColor"
   stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"
   aria-hidden="true"><path d="M2 3.5 L5 6.5 L8 3.5"/></svg>`;
@@ -2019,7 +2392,7 @@ function renderTree() {
     });
   }
   for (const name of document.querySelectorAll("#tree .rname")) {
-    name.addEventListener("click", () => openDetail(name.dataset.open));
+    name.addEventListener("click", () => gotoNode(name.dataset.open));
   }
   wire();
 }
@@ -2132,106 +2505,251 @@ document.addEventListener("click", e => {
   }
 });
 
-// ---- detail panel --------------------------------------------------------
-async function openDetail(path) {
+// ---- project page --------------------------------------------------------
+//
+// One node, the whole window, as a grid of cards. The board stays the hub and
+// this is where a node is actually read.
+//
+// It is a real URL under /node/, not a fragment, which is what makes it a page
+// rather than a panel: back and forward work, it can be bookmarked, and it can
+// be opened in a window of its own and left there.
+
+const NODE_URL = p => "/node/" + p.split("/").map(encodeURIComponent).join("/");
+
+function nodeFromUrl() {
+  if (!location.pathname.startsWith("/node/")) return null;
+  const rest = location.pathname.slice("/node/".length);
+  if (!rest) return null;
+  try { return rest.split("/").map(decodeURIComponent).join("/"); }
+  catch (e) { return null; }
+}
+
+function gotoNode(path) {
+  if (!path || path === detailPath) return;
+  try { history.pushState(null, "", NODE_URL(path)); } catch (e) {}
+  route();
+}
+
+function gotoBoard() {
+  try { history.pushState(null, "", "/"); } catch (e) {}
+  route();
+}
+
+// Everything that decides which of the two views is up, in one place, driven by
+// the URL rather than by a flag. A click, the back button, a pasted link and a
+// reload then all arrive the same way and cannot disagree.
+function route() {
+  const path = nodeFromUrl();
+  const moved = path !== detailPath;
   detailPath = path;
-  // The panel is addressable, so a card can be linked to rather than only
-  // arrived at: reloading or sharing the URL reopens the same node.
-  try { history.replaceState(null, "", "#node=" + encodeURIComponent(path)); } catch (e) {}
-  render();
-  let d;
+  if (moved) { priMenu = null; closeCtx(); }
+  document.getElementById("main").hidden = !!path;
+  document.getElementById("project").hidden = !path;
+  if (path) renderProject(moved); else render();
+}
+
+// The page is drawn from three things that arrive at different times: the card
+// (already in the board poll), the node's own files, and whatever each link's
+// service says about it. Each redraw uses what has landed so far, so the page
+// is never blank waiting on `gh`.
+let pNode = null, pLinks = null, pFor = null;
+
+function renderProject(reload) {
+  const path = detailPath;
+  if (reload || pFor !== path) {
+    pFor = path; pNode = null; pLinks = null;
+    drawProject();
+    loadProject(path);
+    return;
+  }
+  drawProject();
+}
+
+async function loadProject(path) {
   try {
     const r = await fetch("/api/node?path=" + encodeURIComponent(path));
-    d = await r.json();
+    const d = await r.json();
     if (d.error) throw new Error(d.error);
+    if (detailPath !== path) return;
+    pNode = d;
+    drawProject();
   } catch (e) { fail(e.message); return; }
-  if (detailPath !== path) return;     // a second click landed first
+  try {
+    const r = await fetch("/api/links?path=" + encodeURIComponent(path));
+    const d = await r.json();
+    if (detailPath !== path) return;
+    pLinks = d.links || [];
+  } catch (e) {
+    if (detailPath !== path) return;
+    pLinks = [];
+  }
+  drawProject();
+}
 
-  const c = d.card;
-  const links = Object.entries(c.links || {}).map(([k, v]) =>
-    `<a href="${esc(v)}" target="_blank" rel="noreferrer"><span class="k">${esc(k)}</span>
-      <span class="v">${esc(v.replace(/^https?:\/\//, ""))}</span></a>`).join("");
+function card(cls, head, body) {
+  return `<section class="pcard ${cls}"><h3>${head}</h3>${body}</section>`;
+}
+
+function badge(tone, text) {
+  return `<span class="pbadge ${esc(tone)}">${esc(text)}</span>`;
+}
+
+// ISO 8601 from a service, rendered the way the board renders its own ages, so
+// "updated 2h ago" means the same thing everywhere on the page.
+function isoAgo(iso) {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (isNaN(t)) return "";
+  return ago(Math.max(0, (Date.now() - t) / 1000)) + " ago";
+}
+
+const CHECK_MARK = {passed: "✓", failed: "✗", pending: "○"};
+
+function linkCard(l) {
+  // A glyph rather than the word "open": the card head is uppercased, so "OPEN"
+  // sitting beside a `merged` badge read as the PR's state rather than a link.
+  const out = `<a href="${esc(l.url)}" target="_blank" rel="noreferrer"
+    title="${esc(l.url)}">\u2197</a>`;
+  const head = k => `${esc(k)}<span class="grow"></span>${out}`;
+
+  if (l.kind === "github-pr" || l.kind === "github-issue") {
+    const what = l.kind === "github-pr" ? "pull" : "issue";
+    const title = `${esc(l.repo)} <span class="sep">#</span>${l.number}`;
+    if (l.error) {
+      return card("", head("github " + what),
+        `<div class="ptitle">${title}</div>
+         <div class="pfail">${esc(l.error)}</div>`);
+    }
+    const d = l.data;
+    if (!d) {
+      return card("", head("github " + what),
+        `<div class="ptitle">${title}</div><div class="pnote">reading…</div>`);
+    }
+    const checks = d.checks
+      ? Object.entries(CHECK_MARK)
+          .filter(([k]) => d.checks[k])
+          .map(([k, m]) => `${m} ${d.checks[k]}`).join(" ")
+      : "";
+    const bits = [];
+    if (checks) bits.push(`<span class="pmono">${esc(checks)}</span>`);
+    if (d.review) bits.push(esc(d.review.toLowerCase().replace(/_/g, " ")));
+    if (d.reviewers && d.reviewers.length) bits.push("to " + esc(d.reviewers.join(", ")));
+    if (d.labels && d.labels.length) bits.push(esc(d.labels.join(", ")));
+    if (d.assignees && d.assignees.length) bits.push(esc(d.assignees.join(", ")));
+    if (d.adds != null) bits.push(`<span class="pmono">+${d.adds} −${d.dels}</span>`);
+    if (d.files != null) bits.push(d.files + (d.files === 1 ? " file" : " files"));
+    if (d.comments) bits.push(d.comments + (d.comments === 1 ? " comment" : " comments"));
+    if (d.updated) bits.push(esc(isoAgo(d.updated)));
+    return card("", head("github " + what), `
+      <div class="ptitle">${badge(d.tone, d.stage)} ${esc(d.title || "")}</div>
+      <div class="pmono">${title}${d.branch ? " · " + esc(d.branch) + " → " + esc(d.base) : ""}</div>
+      <div class="prow">${bits.join('<span class="sep">·</span>')}</div>
+      ${d.failing && d.failing.length
+        ? `<div class="pfail">failing: ${esc(d.failing.join(", "))}</div>` : ""}`);
+  }
+
+  if (l.kind === "slack-thread" || l.kind === "slack-channel") {
+    // slack:// reaches the desktop app instead of the browser. It is documented
+    // for a channel and not for a message, so the thread link offers both and
+    // says which is which rather than pretending one of them is exact.
+    return card("", head("slack " + (l.kind === "slack-thread" ? "thread" : "channel")), `
+      <div class="pmono">${esc(l.channel)}${l.ts ? " · " + esc(l.ts) : ""}</div>
+      ${l.app_url ? `<div class="prow">
+        <a href="${esc(l.app_url)}">open the channel in the app</a>
+      </div>` : ""}
+      <div class="pnote">the conversation itself is not rendered here yet</div>`);
+  }
+
+  if (l.kind === "linear-issue") {
+    return card("", head("linear"), `
+      <div class="ptitle">${esc(l.issue)}</div>
+      <div class="pnote">issue state is not rendered here yet</div>`);
+  }
+
+  if (l.kind === "github-repo") {
+    return card("", head("github repo"), `<div class="ptitle">${esc(l.repo)}</div>`);
+  }
+
+  return card("", head(esc(l.key)), `<div class="pmono">${esc(l.host)}</div>`);
+}
+
+function drawProject() {
+  const path = detailPath;
+  const c = (pNode && pNode.card) || (board && board.cards.find(x => x.path === path));
+  const host = document.getElementById("project");
+  if (!c) {
+    host.innerHTML = `<div class="phead"><button class="pback" id="pback">${BACK} board</button>
+      <h2>${esc(path || "")}</h2></div>
+      <div class="pgrid">${card("", "reading", '<div class="pnote">…</div>')}</div>`;
+    document.getElementById("pback").addEventListener("click", gotoBoard);
+    return;
+  }
+
+  const links = pLinks !== null ? pLinks
+    : Object.entries(c.links || {}).map(([k, v]) => ({key: k, url: v, kind: "other",
+        host: v.replace(/^https?:\/\//, "").split("/")[0]}));
+
   const repos = (c.repos || []).map(esc).join("<br>");
-  const notes = (d.notes || []).map(n =>
+  const notes = ((pNode && pNode.notes) || []).map(n =>
     `<span class="tag">${esc(n.replace(/\.md$/, ""))}</span>`).join("");
-  const log = (d.log || []).map(l =>
+  const log = ((pNode && pNode.log) || []).map(l =>
     `<div class="logline">${md(l.replace(/^- /, "")).replace(/^<p>|<\/p>$/g, "")}</div>`).join("");
 
-  for (const id of ["scrim", "detail"]) {
-    const old = document.getElementById(id);
-    if (old) old.remove();
-  }
-  document.body.insertAdjacentHTML("beforeend", `
-    <div id="scrim"></div>
-    <aside id="detail" style="--c:${cssVar(c.status)}">
-      <div class="dhead">
-        <button class="close">close</button>
-        <div class="trail mono">${esc(c.trail.join(" / ")) || "&nbsp;"}</div>
-        <h2>${esc(c.slug)}</h2>
-        <div class="statusline">
-          <button class="pill" data-menu="${esc(c.path)}"
-            title="move it, hide it, open its links">${esc(label(c.status))}${CARET}</button>
-          <button class="dbtn ${c.tracked ? "on" : ""}" data-track="${esc(c.path)}"
-            data-on="${c.tracked ? "0" : "1"}"
-            >${c.tracked ? PIN_ON : PIN}${c.tracked ? "tracked" : "track"}</button>
-          ${c.tracked ? `<button class="dbtn ${esc(c.priority || "")}" data-pri="${esc(c.path)}"
-            >${BARS(PRI_LEVEL[c.priority] || 0)}${esc(c.priority || "no priority")}</button>` : ""}
-        </div>
-        ${priMenu === c.path ? `<div class="primenu" style="top:76px;right:18px">
-          ${["high", "medium", "low"].map(k =>
-            `<button data-set="${esc(c.path)}" data-level="${k}"
-              style="color:var(--${k === "high" ? "blocked" : k === "medium" ? "in-progress" : "dim"})"
-              >${BARS(PRI_LEVEL[k])}${k}</button>`).join("")}
-          <button data-set="${esc(c.path)}" data-level="">${BARS(0)}none</button>
-        </div>` : ""}
-        <div class="factline">
-          ${c.agent
-            ? `<span class="agent${c.agent.state === "idle" ? " waits" : ""}">
-                 <span class="pulse"></span>${
-                   c.agent.state === "idle" ? "waiting for you"
-                   : c.agent.state === "busy" ? "working"
-                   : "quiet"}${c.agent.state_seconds != null
-                     ? ", " + ago(c.agent.state_seconds)
-                     : c.agent.state ? "" : ", " + ago(c.agent.idle_seconds)}
-                 ${c.agent.name ? `<span class="when">${esc(c.agent.name)}</span>` : ""}</span>`
-            : c.touched ? `<span class="when">touched ${ago(board.now - c.touched)} ago</span>` : ""}
-          ${(c.agent && c.agent.desktop) || c.open
-            ? `<button class="jump" data-pid="${c.agent && c.agent.desktop ? c.agent.pid : ""}"
-                 data-desk="${esc((c.agent && c.agent.desktop) || c.open)}"
-                 >jump to desktop ${esc((c.agent && c.agent.desktop) || c.open)}</button>`
-            : ""}
-        </div>
+  host.innerHTML = `
+    <div class="phead" style="--c:${cssVar(c.status)}">
+      <button class="pback" id="pback">${BACK} board</button>
+      <div class="trail mono">${esc(c.trail.join(" / ")) || "&nbsp;"}</div>
+      <h2>${esc(c.slug)}</h2>
+      <div class="statusline">
+        <button class="pill" data-menu="${esc(c.path)}"
+          title="move it, hide it, open its links">${esc(label(c.status))}${CARET}</button>
+        <button class="dbtn ${c.tracked ? "on" : ""}" data-track="${esc(c.path)}"
+          data-on="${c.tracked ? "0" : "1"}"
+          >${c.tracked ? PIN_ON : PIN}${c.tracked ? "tracked" : "track"}</button>
+        ${c.tracked ? `<button class="dbtn ${esc(c.priority || "")}" data-pri="${esc(c.path)}"
+          >${BARS(PRI_LEVEL[c.priority] || 0)}${esc(c.priority || "no priority")}</button>` : ""}
       </div>
-      <div class="dbody">
-        ${c.description ? `<h3>description</h3><p>${esc(c.description)}</p>` : ""}
-        ${links ? `<h3>links</h3><div class="links">${links}</div>` : ""}
-        <h3>where</h3>
+      ${priMenu === c.path ? `<div class="primenu" style="top:96px;left:20px">
+        ${["high", "medium", "low"].map(k =>
+          `<button data-set="${esc(c.path)}" data-level="${k}"
+            style="color:var(--${k === "high" ? "blocked" : k === "medium" ? "in-progress" : "dim"})"
+            >${BARS(PRI_LEVEL[k])}${k}</button>`).join("")}
+        <button data-set="${esc(c.path)}" data-level="">${BARS(0)}none</button>
+      </div>` : ""}
+      <div class="factline">
+        ${c.agent
+          ? `<span class="agent${c.agent.state === "idle" ? " waits" : ""}">
+               <span class="pulse"></span>${
+                 c.agent.state === "idle" ? "waiting for you"
+                 : c.agent.state === "busy" ? "working"
+                 : "quiet"}${c.agent.state_seconds != null
+                   ? ", " + ago(c.agent.state_seconds)
+                   : c.agent.state ? "" : ", " + ago(c.agent.idle_seconds)}
+               ${c.agent.name ? `<span class="when">${esc(c.agent.name)}</span>` : ""}</span>`
+          : c.touched ? `<span class="when">touched ${ago(board.now - c.touched)} ago</span>` : ""}
+        ${(c.agent && c.agent.desktop) || c.open
+          ? `<button class="jump" data-pid="${c.agent && c.agent.desktop ? c.agent.pid : ""}"
+               data-desk="${esc((c.agent && c.agent.desktop) || c.open)}"
+               >jump to desktop ${esc((c.agent && c.agent.desktop) || c.open)}</button>`
+          : ""}
+      </div>
+    </div>
+    <div class="pgrid">
+      ${links.map(linkCard).join("")}
+      ${card("", "about", `
+        ${c.description ? `<p>${esc(c.description)}</p>` : '<div class="pnote">no description</div>'}
         <dl class="kv">
           <dt>node</dt><dd>${esc(c.path)}</dd>
           ${repos ? `<dt>repos</dt><dd>${repos}</dd>` : ""}
           ${c.checkout ? `<dt>checkout</dt><dd>${esc(c.checkout)}</dd>` : ""}
           ${c.branch ? `<dt>branch</dt><dd>${esc(c.branch)}</dd>` : ""}
-        </dl>
-        ${log ? `<h3>recent log</h3>${log}` : ""}
-        ${notes ? `<h3>notes</h3><div class="notes">${notes}</div>` : ""}
-        ${d.body ? `<h3>head</h3><div class="prose">${md(d.body)}</div>` : ""}
-      </div>
-    </aside>`);
+        </dl>`)}
+      ${notes ? card("", "notes", `<div class="notes">${notes}</div>`) : ""}
+      ${log ? card("pwide", "recent log", log) : ""}
+      ${pNode && pNode.body ? card("pwide", "head", `<div class="prose">${md(pNode.body)}</div>`) : ""}
+    </div>`;
+  document.getElementById("pback").addEventListener("click", gotoBoard);
   wire();
-  document.querySelector("#scrim").addEventListener("click", closeDetail);
-  document.querySelector("#detail .close").addEventListener("click", closeDetail);
-}
-
-function closeDetail() {
-  detailPath = null;
-  priMenu = null;
-  closeCtx();
-  try { history.replaceState(null, "", location.pathname); } catch (e) {}
-  for (const id of ["scrim", "detail"]) {
-    const el = document.getElementById(id);
-    if (el) el.remove();
-  }
-  render();
 }
 
 // One implementation of each write, so the cards, the panel and the menu cannot
@@ -2249,7 +2767,7 @@ async function trackNode(path, on, priority) {
     board = d.board;
     fail("");
     render();
-    if (detailPath === path) openDetail(path);
+    if (detailPath === path) drawProject();
   } catch (err) { fail(err.message); }
 }
 
@@ -2337,7 +2855,7 @@ function openCtx(path, x, y) {
     }
     if (act === "track") return trackNode(path, !c.tracked).then(reopen);
     closeCtx();
-    if (act === "open") return openDetail(path);
+    if (act === "open") return gotoNode(path);
     if (act === "jump")
       return jumpTo(c.agent && c.agent.desktop ? c.agent.pid : null,
                     (c.agent && c.agent.desktop) || c.open);
@@ -2371,7 +2889,7 @@ function wire() {
       trackNode(b.dataset.track, b.dataset.on === "1");
     });
   }
-  const redraw = el => el.closest("#detail") ? openDetail(detailPath) : render();
+  const redraw = el => el.closest("#project") ? drawProject() : render();
   for (const b of document.querySelectorAll("[data-pri]")) {
     b.addEventListener("click", e => {
       e.stopPropagation();
@@ -2387,7 +2905,7 @@ function wire() {
     });
   }
   for (const card of document.querySelectorAll(".card")) {
-    card.addEventListener("click", () => openDetail(card.dataset.path));
+    card.addEventListener("click", () => gotoNode(card.dataset.path));
     card.addEventListener("contextmenu", e => {
       e.preventDefault();
       openCtx(card.dataset.path, e.clientX, e.clientY);
@@ -2419,7 +2937,7 @@ function wire() {
       openCtx(b.dataset.menu, r.left, r.bottom + 4);
     });
   }
-  const head = document.querySelector("#detail .dhead");
+  const head = document.querySelector("#project .phead");
   if (head) {
     head.addEventListener("contextmenu", e => {
       e.preventDefault();
@@ -2476,7 +2994,7 @@ async function move(path, status) {
     fail(e.message);
   }
   render();
-  if (detailPath === path) openDetail(path);
+  if (detailPath === path) drawProject();
 }
 
 async function refresh() {
@@ -2487,7 +3005,11 @@ async function refresh() {
     if (data.error) throw new Error(data.error);
     board = data;
     fail("");
-    if (signature(board) === rendered) tick();
+    // The poll is what keeps a card's agent state and status live, and the
+    // project page shows the same facts, so it redraws on the poll too rather
+    // than going stale the moment it is opened.
+    if (detailPath) drawProject();
+    else if (signature(board) === rendered) tick();
     else render();
   } catch (e) {
     fail(e.message);
@@ -2503,7 +3025,7 @@ q.addEventListener("input", () => {
 
 addEventListener("keydown", e => {
   if (e.key === "Escape") {
-    if (document.getElementById("detail")) return closeDetail();
+    if (detailPath) return gotoBoard();
     if (!document.getElementById("colsmenu").hidden) return toggleMenu(false);
     if (priMenu) { priMenu = null; return render(); }
     if (onlyTracked) { onlyTracked = false; save("trackedonly", false); return render(); }
@@ -2520,17 +3042,20 @@ addEventListener("keydown", e => {
   if (e.key === "b") toggleSide();
 });
 
-// Pasting a #node= link into the address bar of a board that is already open
-// is a same-document navigation, so this has to answer the hash change too, not
-// only the first load.
-function openFromHash() {
+// The page was addressed by a #node= fragment before it was a page of its own.
+// Those links are in the vault and in Kai's tabs, so they still work: the hash
+// is swapped for the path once and then forgotten about.
+function fromHash() {
   const m = /^#node=(.+)$/.exec(location.hash);
-  const path = m ? decodeURIComponent(m[1]) : null;
-  if (path === detailPath) return;
-  if (path) openDetail(path); else if (detailPath) closeDetail();
+  if (!m) return;
+  try {
+    history.replaceState(null, "", NODE_URL(decodeURIComponent(m[1])));
+  } catch (e) {}
 }
-addEventListener("hashchange", openFromHash);
-refresh().then(openFromHash);
+addEventListener("hashchange", () => { fromHash(); route(); });
+addEventListener("popstate", route);
+fromHash();
+refresh().then(route);
 setInterval(refresh, 2000);
 </script>
 </body>
