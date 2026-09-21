@@ -500,6 +500,83 @@ SLACK_CHAN = re.compile(r"^https?://([a-z0-9-]+)\.slack\.com/archives/([A-Z0-9]+
 LINEAR_ISSUE = re.compile(r"^https?://linear\.app/([^/]+)/issue/([A-Za-z0-9]+-\d+)")
 
 
+# Trailing markdown that a URL picks up when it is written into prose rather
+# than into a frontmatter value: `pull/690**`, `pull/690,`, `pull/690).`
+URL_IN_PROSE = re.compile(r'https?://[^\s)\]>"\'`]+')
+URL_TAIL = re.compile(r'[*,.;:)\]}>]+$')
+
+
+def node_urls(vault, node_path):
+    """Every link the node names anywhere, not only in its frontmatter.
+
+    `links:` is curated and most nodes never get around to filling it in: 57 of
+    165 have one, while 74 name a GitHub, Slack or Linear URL somewhere in their
+    files. A node whose PR is mentioned in a note and not in its head is the
+    common case, not the exception, so the page reads the whole node.
+    """
+    found = []
+    try:
+        names = sorted(n for n in os.listdir(os.path.join(vault, node_path))
+                       if n.endswith(".md"))
+    except OSError:
+        return found
+    for name in names:
+        try:
+            with open(os.path.join(vault, node_path, name), encoding="utf-8") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        for url in URL_IN_PROSE.findall(text):
+            url = URL_TAIL.sub("", url)
+            if any(h in url for h in ("github.com", "slack.com", "linear.app")):
+                found.append(url)
+    return found
+
+
+def link_identity(card):
+    """What makes two links the same thing.
+
+    The URL is the wrong key. One node cites the same PR three times with three
+    different bits of markdown stuck to the end, and a Slack thread is linked
+    once by its parent and once by a reply, which are different permalinks to
+    the same conversation.
+    """
+    if card["kind"] in ("github-pr", "github-issue"):
+        return (card["kind"], card["repo"], card["number"])
+    if card["kind"] == "slack-thread":
+        return ("slack", card["channel"], card["ts"])
+    if card["kind"] == "slack-channel":
+        return ("slack", card["channel"], None)
+    if card["kind"] == "linear-issue":
+        return ("linear", card["issue"])
+    return ("url", card["url"])
+
+
+def node_link_cards(vault, card):
+    """The node's links, curated first and then whatever its prose mentions.
+
+    A frontmatter link keeps its key as a label and wins any tie, because
+    someone chose to put it there.
+    """
+    out, seen = [], set()
+    for key, url in (card.get("links") or {}).items():
+        c = classify_link(key, url)
+        ident = link_identity(c)
+        if ident in seen:
+            continue
+        seen.add(ident)
+        out.append(c)
+    for url in node_urls(vault, card["path"]):
+        c = classify_link("", url)
+        ident = link_identity(c)
+        if ident in seen:
+            continue
+        seen.add(ident)
+        c["found"] = True
+        out.append(c)
+    return out
+
+
 SLACK_STATE = os.path.expanduser("~/.config/Slack/storage/root-state.json")
 _slack_team = []
 
@@ -889,8 +966,7 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, RuntimeError) as e:
                 self._json({"error": str(e)}, 404)
                 return
-            cards = [classify_link(k, v)
-                     for k, v in (card.get("links") or {}).items()]
+            cards = node_link_cards(self.cache.vault, card)
             self._json({"links": LINKS.get(
                 cards, force=bool(query.get("force")))})
         elif self.path.startswith("/api/board"):
@@ -1669,20 +1745,22 @@ PAGE = r"""<!doctype html>
   .phead .agent, .phead .when { font-size: 12px; white-space: nowrap; }
   .phead .jump { font-size: 12px; padding: 1px 7px; }
 
+  /* Columns rather than a grid. A grid row is as tall as its tallest card, so
+     one long card left a band of empty space beside it across the whole width;
+     columns let a short card sit directly under a short card. */
   .pgrid {
-    display: grid; gap: 13px; padding: 15px 20px 32px;
-    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
-    align-items: start;
+    column-width: 330px; column-gap: 12px; padding: 14px 18px 26px;
   }
   .pcard {
     background: var(--card); border: 1px solid var(--line); border-radius: 8px;
-    padding: 12px 14px 13px; min-width: 0;
+    padding: 10px 12px 11px; margin: 0 0 12px; break-inside: avoid;
   }
-  /* A card whose content is prose, not facts, gets the full width: wrapping a
-     head or a log into a 330px column makes every line a fragment. */
-  .pcard.pwide { grid-column: 1 / -1; }
+  /* The log and the head are the two that run long. They are a glance on this
+     page, not a read -- the note itself is one click away -- so they scroll
+     inside a fixed height instead of pushing everything else off the screen. */
+  .pcard .pscroll { max-height: 220px; overflow-y: auto; }
   .pcard > h3 {
-    font-size: 10.5px; font-weight: 600; color: var(--faint); margin: 0 0 9px;
+    font-size: 10.5px; font-weight: 600; color: var(--faint); margin: 0 0 8px;
     text-transform: uppercase; letter-spacing: .06em;
     display: flex; align-items: center; gap: 7px;
   }
@@ -1694,7 +1772,14 @@ PAGE = r"""<!doctype html>
     font-size: 13.5px; color: var(--ink); margin: 0 0 8px; line-height: 1.35;
     overflow-wrap: anywhere;
   }
-  .pcard .prose { font-size: 13px; }
+  .pcard .prose { font-size: 12.5px; }
+  .pcard .prose h1, .pcard .prose h2 { font-size: 14px; margin: 10px 0 5px; }
+  .pcard .prose h3 { font-size: 12.5px; margin: 10px 0 5px; }
+  .pcard .logline { font-size: 12px; padding: 4px 0; }
+  /* A card found by reading the node rather than declared in its frontmatter.
+     Worth saying, because an unlabelled card is not something anyone chose. */
+  .pfound { color: var(--faint); font-weight: 400; text-transform: none;
+            letter-spacing: 0; font-size: 10px; }
 
   /* The one word that says where a thing stands. It carries the card's colour
      so the grid can be read without reading any of it. */
@@ -2610,7 +2695,8 @@ function linkCard(l) {
   // sitting beside a `merged` badge read as the PR's state rather than a link.
   const out = `<a href="${esc(l.url)}" target="_blank" rel="noreferrer"
     title="${esc(l.url)}">\u2197</a>`;
-  const head = k => `${esc(k)}<span class="grow"></span>${out}`;
+  const head = k => `${esc(k)}${l.found ? ' <span class="pfound">in the notes</span>' : ""}
+    <span class="grow"></span>${out}`;
 
   if (l.kind === "github-pr" || l.kind === "github-issue") {
     const what = l.kind === "github-pr" ? "pull" : "issue";
@@ -2670,7 +2756,7 @@ function linkCard(l) {
     return card("", head("github repo"), `<div class="ptitle">${esc(l.repo)}</div>`);
   }
 
-  return card("", head(esc(l.key)), `<div class="pmono">${esc(l.host)}</div>`);
+  return card("", head(l.key || l.host), `<div class="pmono">${esc(l.url)}</div>`);
 }
 
 function drawProject() {
@@ -2745,8 +2831,9 @@ function drawProject() {
           ${c.branch ? `<dt>branch</dt><dd>${esc(c.branch)}</dd>` : ""}
         </dl>`)}
       ${notes ? card("", "notes", `<div class="notes">${notes}</div>`) : ""}
-      ${log ? card("pwide", "recent log", log) : ""}
-      ${pNode && pNode.body ? card("pwide", "head", `<div class="prose">${md(pNode.body)}</div>`) : ""}
+      ${log ? card("", "recent log", `<div class="pscroll">${log}</div>`) : ""}
+      ${pNode && pNode.body
+        ? card("", "head", `<div class="pscroll prose">${md(pNode.body)}</div>`) : ""}
     </div>`;
   document.getElementById("pback").addEventListener("click", gotoBoard);
   wire();
