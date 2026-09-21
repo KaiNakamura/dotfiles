@@ -975,6 +975,60 @@ STAGE_TONE = {
 }
 
 
+def pr_situation(pr, stage):
+    """Whose move it is, on what, and since when -- the one thing to read first.
+
+    `stage` already says what state the PR is in; this turns that into the
+    question actually being asked of a PR list: is the ball in my court or
+    theirs, and how long has it sat there. `court` is "mine", "theirs" or
+    "done"; `since` is the moment the ball last moved, so the card can say how
+    long the wait has run.
+    """
+    reviews = pr.get("reviews") or []
+
+    def last(state):
+        hit = [r for r in reviews if (r.get("state") or "").upper() == state]
+        return hit[-1] if hit else None
+
+    requested = [r.get("login") or r.get("name") or r.get("slug") or "?"
+                 for r in pr.get("reviewRequests") or []]
+    opened, updated = pr.get("createdAt"), pr.get("updatedAt")
+
+    if stage == "merged":
+        return {"court": "done", "verb": "merged", "who": "", "since": updated}
+    if stage == "closed":
+        return {"court": "done", "verb": "closed", "who": "", "since": updated}
+    if stage == "draft":
+        return {"court": "mine", "verb": "not sent for review yet",
+                "who": "", "since": opened}
+    if stage == "CI failing":
+        return {"court": "mine", "verb": "CI failing, your move",
+                "who": "", "since": updated}
+    if stage == "CI running":
+        return {"court": "theirs", "verb": "CI running", "who": "", "since": updated}
+    if stage == "changes requested":
+        r = last("CHANGES_REQUESTED")
+        return {"court": "mine", "verb": "changes requested, your move",
+                "who": (r or {}).get("author", {}).get("login") if r else "",
+                "since": (r or {}).get("submittedAt") or updated}
+    if stage in ("approved, ready to merge", "approved, conflicts"):
+        r = last("APPROVED")
+        return {"court": "mine",
+                "verb": "approved, ready to merge" if stage.endswith("merge")
+                        else "approved, but has conflicts",
+                "who": (r or {}).get("author", {}).get("login") if r else "",
+                "since": (r or {}).get("submittedAt") or updated}
+    if stage == "awaiting review":
+        # The ball moved to them at the last thing you did; the closest stamp to
+        # that without the events API is the last update.
+        return {"court": "theirs", "verb": "waiting on review",
+                "who": ", ".join(requested), "since": updated}
+    if stage == "conflicts":
+        return {"court": "mine", "verb": "conflicts to resolve", "who": "", "since": updated}
+    return {"court": "mine", "verb": "no reviewer yet, request one",
+            "who": "", "since": opened}
+
+
 def fetch_github_pr(card):
     pr = gh_json(["pr", "view", str(card["number"]), "--repo", card["repo"],
                   "--json", CHECK_FIELDS])
@@ -1018,6 +1072,7 @@ def fetch_github_pr(card):
         "timeline": gh_timeline(pr),
         "checks": checks, "failing": failing, "reviewers": reviewers,
         "stage": stage, "tone": STAGE_TONE.get(stage, "mute"),
+        "situation": pr_situation(pr, stage),
     }
 
 
@@ -2217,13 +2272,51 @@ PAGE = r"""<!doctype html>
   .pbadge.bad  { --t: var(--blocked); }
   .pbadge.mute { --t: var(--faint); }
 
-  /* Pull request: a header block, then the conversation, like the real page. */
-  .prhead { border-bottom: 1px solid var(--line); padding-bottom: 11px; margin-bottom: 4px; }
+  /* Pull request: state first, then description, then the conversation behind a
+     toggle -- the card answers "whose move, how long" before anything else. */
+  .prhead { border-bottom: 1px solid var(--line); padding-bottom: 11px; }
   .prtitle { display: flex; align-items: baseline; gap: 8px; }
   .prtitle span { font-size: 15px; font-weight: 600; color: var(--ink);
                   line-height: 1.35; overflow-wrap: anywhere; }
-  .prmeta { font-size: 12px; color: var(--dim); margin-top: 6px; }
-  .prfacts { font-size: 12px; color: var(--dim); margin-top: 4px; }
+  /* The court-and-clock banner. Its tint is the whole point: mine is a nudge,
+     theirs is a neutral wait, done is settled. */
+  .psit {
+    display: flex; align-items: center; gap: 8px; margin-top: 9px;
+    font-size: 12.5px; border-radius: 7px; padding: 6px 10px;
+    border: 1px solid color-mix(in srgb, var(--t) 40%, transparent);
+    background: color-mix(in srgb, var(--t) 12%, transparent);
+  }
+  .psit.warn { --t: var(--in-progress); }
+  .psit.mute { --t: var(--faint); }
+  .psit.good { --t: var(--in-review); }
+  .psitdot { width: 8px; height: 8px; border-radius: 50%; background: var(--t); flex: none; }
+  .psitverb { font-weight: 600; color: var(--ink); }
+  .psitwho { color: var(--dim); }
+  .psitcourt { color: var(--t); font-weight: 600; text-transform: lowercase; }
+  .psitdur { color: var(--dim); font-family: ui-monospace, monospace;
+             font-size: 11.5px; }
+  .prmeta { font-size: 12px; color: var(--dim); margin-top: 8px;
+            display: flex; flex-wrap: wrap; align-items: center; gap: 3px 2px; }
+  .prdesc {
+    font-size: 12.5px; color: var(--dim); line-height: 1.5; padding: 11px 0 3px;
+    overflow-wrap: anywhere;
+  }
+  .prdesc > :first-child { margin-top: 0; }
+  .prdesc pre { background: var(--panel); border: 1px solid var(--line);
+                border-radius: 5px; padding: 6px 8px; overflow-x: auto; font-size: 11.5px; }
+  .prdesc code { font-family: ui-monospace, monospace; font-size: .92em; }
+  .prdesc ul { margin: 4px 0; padding-left: 18px; }
+  /* The one control that shows or hides the thread. */
+  .pconvtoggle {
+    display: flex; align-items: center; gap: 6px; width: 100%;
+    background: none; border: none; border-top: 1px solid var(--line);
+    padding: 9px 0 2px; margin-top: 4px; color: var(--dim); font: inherit;
+    font-size: 12.5px; cursor: pointer; text-align: left;
+  }
+  .pconvtoggle:hover { color: var(--ink); }
+  .pcaret { display: inline-flex; transition: transform .12s; }
+  .pcaret svg { width: 9px; height: 9px; }
+  .pcaret.open { transform: rotate(90deg); }
   .padd { color: var(--in-review); font-family: ui-monospace, monospace; }
   .pdel { color: var(--blocked); font-family: ui-monospace, monospace; }
   .pchecks { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px;
@@ -3139,6 +3232,7 @@ let pLinks = null, pFor = null, pRendered = null;
 const pThread = {};      // channel|ts -> {loading|error|messages}
 const pSent = {};        // channel|ts -> the permalink of the last reply sent
 const pDraft = {};       // key -> what is typed but not sent, kept across polls
+const pConvOpen = {};    // pr url -> whether its conversation is expanded
 
 // A fingerprint of everything the page draws, so the poll can tell a real
 // change from a no-op and leave the DOM (and the scroll position) alone when
@@ -3342,38 +3436,68 @@ function timelineEntry(e, opts) {
 // long and often and would otherwise bury the reviews.
 const PR_COMMENTS_SHOWN = 4;
 
-function prConvo(d) {
+// The court-and-clock line: whose move it is, on what, and for how long. This
+// is what a PR list is really asking, so it sits at the top, coloured by court
+// -- mine wants my attention, theirs is a wait, done is settled.
+const COURT_TONE = {mine: "warn", theirs: "mute", done: "good"};
+
+function prSituation(d) {
+  const s = d.situation;
+  if (!s) return "";
+  const tone = s.court === "done" ? "good" : COURT_TONE[s.court] || "mute";
+  const dur = s.since ? isoAgo(s.since).replace(" ago", "") : "";
+  const whose = s.court === "mine" ? "your court"
+    : s.court === "theirs" ? "their court" : "";
+  return `<div class="psit ${tone}">
+    <span class="psitdot"></span>
+    <span class="psitverb">${esc(s.verb)}</span>
+    ${s.who ? `<span class="psitwho">${esc(s.who)}</span>` : ""}
+    <span class="grow"></span>
+    ${whose ? `<span class="psitcourt">${whose}</span>` : ""}
+    ${dur ? `<span class="psitdur">${esc(dur)}</span>` : ""}
+  </div>`;
+}
+
+// The whole conversation, reviews first, comments capped, bots counted. Returned
+// as a block that the card shows or hides as one -- collapsed by default, so the
+// card leads with state and description and the thread is there when wanted.
+function prThread(d) {
   const tl = d.timeline || [];
   const reviews = tl.filter(e => e.kind === "review");
   const humanComments = tl.filter(e => e.kind === "comment" && !e.bot);
   const botComments = tl.filter(e => e.kind === "comment" && e.bot);
-  const shownComments = humanComments.slice(-PR_COMMENTS_SHOWN);
-  const hidden = (humanComments.length - shownComments.length) + botComments.length;
+  const shown = humanComments.slice(-PR_COMMENTS_SHOWN);
+  const hidden = (humanComments.length - shown.length) + botComments.length;
 
-  const opening = (d.body && d.body.trim())
-    ? timelineEntry({who: d.author, assoc: "", body: d.body,
-                     clipped: false, at: d.opened}, {opening: true, open: true})
-    : "";
-
-  let out = opening;
+  let out = "";
   if (reviews.length) {
     out += `<div class="pconvhead">reviews</div>`
       + reviews.map(e => timelineEntry(e)).join("");
   }
-  if (shownComments.length) {
+  if (shown.length) {
     out += `<div class="pconvhead">${
-      humanComments.length > shownComments.length
-        ? `latest ${shownComments.length} of ${humanComments.length} comments` : "comments"}</div>`
-      + shownComments.map(e => timelineEntry(e)).join("");
+      humanComments.length > shown.length
+        ? `latest ${shown.length} of ${humanComments.length} comments` : "comments"}</div>`
+      + shown.map(e => timelineEntry(e)).join("");
   }
-  if (!reviews.length && !humanComments.length && !opening) {
-    out += '<div class="pdim pquiet">no description or comments</div>';
+  if (!reviews.length && !humanComments.length) {
+    out += '<div class="pdim pquiet">no comments or reviews yet</div>';
   }
   if (hidden > 0) {
-    const onlyBots = botComments.length && humanComments.length <= shownComments.length;
+    const onlyBots = botComments.length && humanComments.length <= shown.length;
     out += `<div class="pmoreconv">+ ${hidden}${onlyBots ? " automated" : ""} more on GitHub</div>`;
   }
   return out;
+}
+
+function threadCount(d) {
+  const tl = d.timeline || [];
+  const r = tl.filter(e => e.kind === "review").length;
+  const c = tl.filter(e => e.kind === "comment" && !e.bot).length;
+  const parts = [];
+  if (r) parts.push(r + (r === 1 ? " review" : " reviews"));
+  if (c) parts.push(c + (c === 1 ? " comment" : " comments"));
+  return parts.join(", ");
 }
 
 function prCard(l) {
@@ -3390,11 +3514,8 @@ function prCard(l) {
   const meta = [];
   if (d.author) meta.push(`<b>${esc(d.author)}</b> opened ${esc(isoAgo(d.opened))}`);
   if (d.branch) meta.push(`<span class="pmono">${esc(d.branch)} → ${esc(d.base)}</span>`);
-  const facts = [];
-  if (d.adds != null) facts.push(`<span class="padd">+${d.adds}</span> <span class="pdel">−${d.dels}</span>`);
-  if (d.files != null) facts.push(d.files + (d.files === 1 ? " file" : " files"));
-  if (d.reviewers && d.reviewers.length) facts.push("waiting on " + esc(d.reviewers.join(", ")));
-  if (d.labels && d.labels.length) facts.push(esc(d.labels.join(", ")));
+  if (d.adds != null) meta.push(`<span class="padd">+${d.adds}</span> <span class="pdel">−${d.dels}</span>`);
+  if (d.files != null) meta.push(d.files + (d.files === 1 ? " file" : " files"));
 
   const counts = d.checks ? [
     d.checks.failed ? `<span class="cbad">✗ ${d.checks.failed} failing</span>` : "",
@@ -3403,16 +3524,25 @@ function prCard(l) {
     d.checks.skipped ? `<span class="cmute">${d.checks.skipped} skipped</span>` : "",
   ].filter(Boolean).join("") : "";
 
+  const opening = (d.body && d.body.trim())
+    ? `<div class="prdesc">${ghBody(d.body, false)}</div>` : "";
+  const count = threadCount(d);
+  const open = !!pConvOpen[l.url];
+
   return card("tall wide", head, `
     <div class="prhead">
       <div class="prtitle">${badge(d.tone, d.stage)}<span>${esc(d.title || "")}</span></div>
+      ${prSituation(d)}
       <div class="prmeta">${meta.join('<span class="sep">·</span>')}</div>
-      <div class="prfacts">${facts.join('<span class="sep">·</span>')}</div>
       ${counts ? `<div class="pchecks">${counts}</div>` : ""}
       ${d.failing && d.failing.length
         ? `<div class="pfail">${esc(d.failing.join("\n"))}</div>` : ""}
     </div>
-    <div class="pconvo">${prConvo(d)}</div>`,
+    ${opening}
+    ${count ? `<button class="pconvtoggle" data-conv="${esc(l.url)}">
+      <span class="pcaret${open ? " open" : ""}">${CARET}</span>
+      ${open ? "hide" : "show"} conversation <span class="pdim">${esc(count)}</span></button>` : ""}
+    ${open && count ? `<div class="pconvo">${prThread(d)}</div>` : ""}`,
     `<div class="pfoot">
        ${sendBox("gh|" + l.url, "comment on this " + what + "…", "comment")}
        <div class="pfootrow">
@@ -3444,10 +3574,10 @@ function slackCard(l) {
          desktop app's own session for this one — then finishes with
          <code>board slack-auth &lt;token&gt;</code>.</p>
       <p class="pdim">It writes ${esc(t.conf || "")} and the card fills on the next
-         refresh. No server restart.</p></div>`, l.url);
+         refresh. No server restart.</p></div>`, "", l.url);
   }
   if (t.error) {
-    return card("tall wide", head, `<div class="pempty"><p class="pfail">${esc(t.error)}</p></div>`, l.url);
+    return card("tall wide", head, `<div class="pempty"><p class="pfail">${esc(t.error)}</p></div>`, "", l.url);
   }
   if (!t.messages) {
     return card("tall wide", head, `<div class="pempty"><p>reading the thread…</p></div>`);
@@ -3590,6 +3720,14 @@ function drawProject() {
 }
 
 function wireProject() {
+  // The whole conversation toggles as one, collapsed by default, so the card
+  // leads with state and reads short until the thread is actually wanted.
+  for (const b of document.querySelectorAll("[data-conv]")) {
+    b.addEventListener("click", () => {
+      pConvOpen[b.dataset.conv] = !pConvOpen[b.dataset.conv];
+      drawProject();
+    });
+  }
   // A clamped comment opens in place on a click, so a long one is available
   // without leaving the board and without being tall by default.
   for (const b of document.querySelectorAll(".pev-body.clamp")) {
