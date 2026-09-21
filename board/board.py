@@ -2220,12 +2220,26 @@ PAGE = r"""<!doctype html>
     padding: 8px 10px; margin: 4px 0 10px; font-size: 11.5px; overflow-x: auto;
     color: var(--dim); font-family: ui-monospace, monospace;
   }
-  .pconnrow { color: var(--ink); margin-bottom: 3px; }
-  /* The command and its copy button on one line, the button against the right
-     edge of the code block. */
-  .pcopyline { display: flex; align-items: stretch; gap: 8px; margin: 4px 0 10px; }
-  .pcopyline pre { flex: 1; margin: 0; }
-  .pcopyline button { flex: none; align-self: center; }
+  .pconnrow { color: var(--ink); margin-bottom: 5px; }
+  /* A code block with the copy control inside it, top-right, the way a docs
+     snippet reads: the command fills the block, the button sits over it. */
+  .pcopy {
+    position: relative; margin: 4px 0 12px; background: var(--bg);
+    border: 1px solid var(--line); border-radius: 7px; padding: 10px 40px 10px 12px;
+  }
+  .pcopy code {
+    font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+  .pcopybtn {
+    position: absolute; top: 6px; right: 6px; display: inline-flex;
+    align-items: center; justify-content: center; width: 26px; height: 26px;
+    background: none; border: 1px solid var(--line); border-radius: 6px;
+    color: var(--faint); cursor: pointer; padding: 0;
+  }
+  .pcopybtn:hover { color: var(--ink); border-color: var(--accent); background: var(--panel); }
+  .pcopybtn.ok { color: var(--in-review); border-color: var(--in-review); }
+  .pcopybtn svg { width: 14px; height: 14px; }
   .ptitle {
     font-size: 13.5px; color: var(--ink); margin: 0 0 6px; line-height: 1.4;
     overflow-wrap: anywhere;
@@ -2889,6 +2903,17 @@ const BACK = `<svg viewBox="0 0 10 10" fill="none" stroke="currentColor"
 const CARET = `<svg viewBox="0 0 10 10" fill="none" stroke="currentColor"
   stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"
   aria-hidden="true"><path d="M2 3.5 L5 6.5 L8 3.5"/></svg>`;
+
+// The two-sheets clipboard glyph, drawn rather than an emoji so it takes the
+// theme's colour and sits on the pixel grid.
+const CLIP = `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor"
+  stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"
+  aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.3"/>
+  <path d="M5.4 3 V2.2 A1 1 0 0 1 6.4 1.2 H10 A1 1 0 0 1 11 2.2 V9.6"/></svg>`;
+
+const CHECK = `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor"
+  stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
+  aria-hidden="true"><path d="M2.5 7.5 L5.5 10.5 L11.5 3.5"/></svg>`;
 
 const CHEVRON = `<svg viewBox="0 0 10 10" fill="none" stroke="currentColor"
   stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
@@ -3565,9 +3590,10 @@ function slackCard(l) {
       <p><b>Slack isn't connected yet.</b> The thread is there — it just needs
          one of your Slack tokens to read it as you.</p>
       <p class="pconnrow"><b>One command sets it up:</b></p>
-      <div class="pcopyline">
-        <pre>board slack-auth</pre>
-        <button class="linkish" data-copy="board slack-auth">copy</button>
+      <div class="pcopy">
+        <code>board slack-auth</code>
+        <button class="pcopybtn" data-copy="board slack-auth"
+          data-icon="1" title="copy">${CLIP}</button>
       </div>
       <p>Run it with no arguments and it prints the two ways to get a token —
          a durable workspace-app token that works on every machine, or the
@@ -3749,8 +3775,18 @@ function wireProject() {
     b.addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(b.dataset.copy);
-        b.textContent = "copied";
-        setTimeout(() => drawProject(), 1200);
+        // An icon button flashes a check in place; a text link says "copied".
+        // Both restore themselves without a full redraw, so nothing else moves.
+        if (b.dataset.icon) {
+          const was = b.innerHTML;
+          b.innerHTML = CHECK;
+          b.classList.add("ok");
+          setTimeout(() => { b.innerHTML = was; b.classList.remove("ok"); }, 1200);
+        } else {
+          const was = b.textContent;
+          b.textContent = "copied";
+          setTimeout(() => { b.textContent = was; }, 1200);
+        }
       } catch (e) { fail("could not copy: " + e.message); }
     });
   }
