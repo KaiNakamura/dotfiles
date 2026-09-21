@@ -660,6 +660,183 @@ def slack_app_url(card):
     return card
 
 
+# --------------------------------------------------------------------------
+# Slack
+#
+# The board holds no Slack credential of its own and cannot get one: the Slack
+# connector Claude uses is an OAuth grant held at mcp.slack.com, and nothing on
+# this machine carries a token. So the page reads whatever is put in
+# SLACK_CONF, and says what is missing when there is nothing there.
+#
+# Two kinds of token work. A `xoxp-`/`xoxb-` token from a workspace app stands
+# on its own. A `xoxc-` token is the one the desktop app already holds, and it
+# is only accepted alongside the `d` cookie that was issued with it.
+
+SLACK_CONF = os.path.join(
+    os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")),
+    "board", "slack.json")
+SLACK_API = "https://slack.com/api/"
+SLACK_SECONDS = 25        # how long a fetched thread is reused
+_slack_users = {}
+
+
+def slack_creds():
+    """The Slack token and cookie, or None.
+
+    Read on every call rather than cached, so dropping the file in place is
+    enough and the server does not have to be restarted to pick it up.
+    """
+    try:
+        with open(SLACK_CONF, encoding="utf-8") as fh:
+            conf = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    token = (conf.get("token") or "").strip()
+    if not token:
+        return None
+    cookie = (conf.get("cookie") or "").strip()
+    if token.startswith("xoxc-") and not cookie:
+        return None
+    return {"token": token, "cookie": cookie}
+
+
+def slack_call(method, params, creds):
+    """One Slack Web API call, as the signed-in user.
+
+    urllib rather than a client library, because the board has no dependencies
+    and this is two calls with four parameters between them.
+    """
+    import urllib.request
+    data = urllib.parse.urlencode(params).encode()
+    req = urllib.request.Request(SLACK_API + method, data=data)
+    req.add_header("Authorization", "Bearer " + creds["token"])
+    req.add_header("Content-Type",
+                   "application/x-www-form-urlencoded; charset=utf-8")
+    if creds["cookie"]:
+        req.add_header("Cookie", "d=" + urllib.parse.quote(creds["cookie"], safe=""))
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            body = json.loads(r.read().decode("utf-8"))
+    except Exception as e:
+        raise RuntimeError(str(e))
+    if not body.get("ok"):
+        raise RuntimeError(body.get("error") or "slack said no")
+    return body
+
+
+def slack_name(user_id, creds):
+    """A display name for a user id, remembered for the life of the process.
+
+    Every message in a thread carries an id and no name, and a thread of twenty
+    messages is usually three people, so this is the difference between three
+    calls and twenty.
+    """
+    if not user_id:
+        return "someone"
+    if user_id in _slack_users:
+        return _slack_users[user_id]
+    name = user_id
+    try:
+        u = slack_call("users.info", {"user": user_id}, creds)["user"]
+        p = u.get("profile") or {}
+        name = (p.get("display_name") or p.get("real_name")
+                or u.get("real_name") or u.get("name") or user_id)
+    except RuntimeError:
+        pass
+    _slack_users[user_id] = name
+    return name
+
+
+def slack_thread(channel, ts, creds):
+    """A thread as a list of messages, oldest first.
+
+    `conversations.replies` returns the parent as the first element, which is
+    why nothing here special-cases it.
+    """
+    body = slack_call("conversations.replies",
+                      {"channel": channel, "ts": ts, "limit": 100}, creds)
+    out = []
+    for m in body.get("messages") or []:
+        text = m.get("text") or ""
+        # A bot posting blocks leaves `text` empty and the words in attachments.
+        # Firewatch alerts are exactly that shape, so a thread of them would
+        # otherwise render as a column of blank messages.
+        if not text.strip():
+            bits = []
+            for a in (m.get("attachments") or []):
+                bits.append(a.get("fallback") or a.get("text") or a.get("title") or "")
+            for b in (m.get("blocks") or []):
+                t = (b.get("text") or {}).get("text")
+                if t:
+                    bits.append(t)
+            text = "\n".join(x for x in bits if x)
+        who = m.get("username") or slack_name(m.get("user") or m.get("bot_id"), creds)
+        out.append({
+            "ts": m.get("ts"), "who": who, "text": text,
+            "files": len(m.get("files") or []),
+            "reactions": sum(r.get("count", 0) for r in (m.get("reactions") or [])),
+        })
+    return {"messages": out, "channel": channel}
+
+
+class SlackThreads:
+    """Threads, cached like link cards and for the same reason."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.by_key = {}
+
+    def get(self, channel, ts, force=False):
+        creds = slack_creds()
+        if not creds:
+            return {"error": "no-creds", "conf": SLACK_CONF}
+        key = (channel, ts)
+        now = time.time()
+        with self.lock:
+            hit = self.by_key.get(key)
+            if hit and not force and now - hit["at"] < SLACK_SECONDS:
+                return hit["data"]
+        try:
+            data = slack_thread(channel, ts, creds)
+        except RuntimeError as e:
+            data = {"error": str(e)}
+        with self.lock:
+            self.by_key[key] = {"at": time.time(), "data": data}
+        return data
+
+    def drop(self, channel, ts):
+        with self.lock:
+            self.by_key.pop((channel, ts), None)
+
+
+THREADS = SlackThreads()
+
+
+def slack_reply(channel, ts, text):
+    """Post a reply into a thread and hand back its permalink.
+
+    The permalink is the point. Replying in the browser means finding the new
+    message, opening its menu and copying its link before it can be given to an
+    agent; `chat.postMessage` returns the ts it just created, so the link is
+    known without going and looking for it.
+    """
+    creds = slack_creds()
+    if not creds:
+        raise RuntimeError("no Slack token configured at " + SLACK_CONF)
+    body = slack_call("chat.postMessage",
+                      {"channel": channel, "thread_ts": ts, "text": text}, creds)
+    new_ts = body.get("ts") or ""
+    link = ""
+    try:
+        link = slack_call("chat.getPermalink",
+                          {"channel": channel, "message_ts": new_ts},
+                          creds).get("permalink") or ""
+    except RuntimeError:
+        pass
+    THREADS.drop(channel, ts)
+    return {"ts": new_ts, "permalink": link}
+
+
 def gh_json(args):
     """One `gh` call, returning parsed JSON or raising RuntimeError.
 
@@ -959,6 +1136,11 @@ class Handler(BaseHTTPRequestHandler):
         if (self.path in ("/", "/index.html")
                 or self.path == "/node" or self.path.startswith("/node/")):
             self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
+        elif self.path.startswith("/api/slack"):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            self._json(THREADS.get((query.get("channel") or [""])[0],
+                                   (query.get("ts") or [""])[0],
+                                   force=bool(query.get("force"))))
         elif self.path.startswith("/api/links"):
             query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             try:
@@ -990,7 +1172,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not (self.path.startswith("/api/status")
                 or self.path.startswith("/api/desktop")
-                or self.path.startswith("/api/track")):
+                or self.path.startswith("/api/track")
+                or self.path.startswith("/api/reply")
+                or self.path.startswith("/api/comment")):
             self._json({"error": "not found"}, 404)
             return
         length = int(self.headers.get("Content-Length", 0))
@@ -998,6 +1182,28 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length) or b"{}")
         except json.JSONDecodeError:
             self._json({"error": "bad json"}, 400)
+            return
+        if self.path.startswith("/api/reply"):
+            try:
+                self._json(slack_reply(body.get("channel") or "",
+                                       body.get("ts") or "",
+                                       body.get("text") or ""))
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 400)
+            return
+        if self.path.startswith("/api/comment"):
+            # `gh` writes the comment, for the same reason it reads the PR: the
+            # token is already where gh keeps it and there is no second copy.
+            try:
+                run(["gh", ("pr" if body.get("kind") == "github-pr" else "issue"),
+                     "comment", str(body.get("number")), "--repo",
+                     body.get("repo") or "", "--body", body.get("text") or ""],
+                    timeout=25)
+            except (RuntimeError, OSError) as e:
+                self._json({"error": str(e)}, 400)
+                return
+            LINKS.by_url.pop(body.get("url"), None)
+            self._json({"ok": True})
             return
         if self.path.startswith("/api/track"):
             try:
@@ -1725,94 +1931,145 @@ PAGE = r"""<!doctype html>
   .empty { color: var(--faint); font-size: 12px; padding: 6px 4px; font-style: italic; }
 
   /* Project page.
-     A page rather than a panel, so it gets the whole window and can hold as
-     many cards as a node has links. Everything here is prefixed `p`: three
-     class collisions in this stylesheet have already cost a round of
-     screenshots each, and a prefix is cheaper than checking every name. */
-  /* The same height #main gets, so swapping one for the other does not move
-     the header or the footer. */
-  #project { height: calc(100vh - 92px); overflow-y: auto; background: var(--bg); }
-  .phead {
-    padding: 14px 20px 13px; border-bottom: 1px solid var(--line);
-    background: var(--panel);
+     Everything here is prefixed `p`: three class collisions in this stylesheet
+     have already cost a round of screenshots each, and a prefix is cheaper than
+     checking every name against 2500 lines.
+
+     The page is a fixed viewport, not a document that scrolls. Cards scroll
+     inside themselves, which is what lets a conversation be long without
+     pushing the pull request it belongs to off the bottom. */
+  #project {
+    height: calc(100vh - 92px); display: flex; flex-direction: column;
+    background: var(--bg); overflow: hidden;
   }
-  .phead h2 { margin: 4px 0 3px; font-size: 18px; overflow-wrap: anywhere; }
-  .pback {
-    display: inline-flex; align-items: center; gap: 5px; font-size: 12px;
-    margin-bottom: 2px;
+
+  .phead { padding: 9px 18px 11px; border-bottom: 1px solid var(--line);
+           background: var(--panel); flex: none; position: relative; }
+  .pline { display: flex; align-items: center; gap: 9px; }
+  /* The title row carries the description rather than a card of its own: it was
+     the one fact worth keeping from `about`, and there was a band of empty space
+     beside the title already paying for it. */
+  .ptop { margin-top: 5px; flex-wrap: wrap; }
+  .phead h2 { margin: 0; font-size: 17px; }
+  .pdesc {
+    margin: 0; color: var(--dim); font-size: 12.5px; line-height: 1.4;
+    flex: 1 1 340px; min-width: 240px; border-left: 2px solid var(--c, var(--line));
+    padding-left: 10px;
   }
+  .pback { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; flex: none; }
   .pback svg { width: 10px; height: 10px; }
+  .phead .grow { flex: 1; }
   .phead .agent, .phead .when { font-size: 12px; white-space: nowrap; }
   .phead .jump { font-size: 12px; padding: 1px 7px; }
 
-  /* Columns rather than a grid. A grid row is as tall as its tallest card, so
-     one long card left a band of empty space beside it across the whole width;
-     columns let a short card sit directly under a short card. */
+  /* One baseline row height for everything, with the two kinds that can be
+     acted on taking two rows. A uniform grid is what stops the ragged holes a
+     content-sized one leaves, and it means a glance lands in the same place on
+     every project. */
   .pgrid {
-    column-width: 330px; column-gap: 12px; padding: 14px 18px 26px;
+    flex: 1; overflow-y: auto; display: grid; gap: 12px;
+    /* auto-fit, not auto-fill: a node with two links should get two wide cards
+       rather than two narrow ones and a screen of empty tracks beside them. */
+    grid-template-columns: repeat(auto-fit, minmax(390px, 1fr));
+    grid-auto-rows: 224px; align-content: start; padding: 12px 18px 18px;
   }
   .pcard {
     background: var(--card); border: 1px solid var(--line); border-radius: 8px;
-    padding: 10px 12px 11px; margin: 0 0 12px; break-inside: avoid;
+    display: flex; flex-direction: column; overflow: hidden; min-width: 0;
   }
-  /* The log and the head are the two that run long. They are a glance on this
-     page, not a read -- the note itself is one click away -- so they scroll
-     inside a fixed height instead of pushing everything else off the screen. */
-  .pcard .pscroll { max-height: 220px; overflow-y: auto; }
+  .pcard.tall { grid-row: span 2; }
   .pcard > h3 {
-    font-size: 10.5px; font-weight: 600; color: var(--faint); margin: 0 0 8px;
-    text-transform: uppercase; letter-spacing: .06em;
-    display: flex; align-items: center; gap: 7px;
+    flex: none; display: flex; align-items: center; gap: 7px;
+    font-size: 10.5px; font-weight: 600; color: var(--faint);
+    letter-spacing: .06em; margin: 0; padding: 9px 12px 8px;
+    border-bottom: 1px solid var(--line);
   }
+  .pcard > h3 .pk { text-transform: uppercase; color: var(--dim); }
   .pcard > h3 .grow { flex: 1; }
-  .pcard > h3 a { color: var(--faint); font-weight: 600; }
+  .pcard > h3 a { color: var(--faint); }
   .pcard > h3 a:hover { color: var(--accent); }
-  .pcard p { margin: 0 0 8px; color: var(--dim); overflow-wrap: anywhere; }
+  .pbody { flex: 1; overflow-y: auto; padding: 10px 12px; min-height: 0; }
+  .pfoot {
+    flex: none; border-top: 1px solid var(--line); padding: 7px 10px 8px;
+    display: flex; flex-direction: column; gap: 6px; background: var(--panel);
+  }
+  /* A button in the footer is an action, not a bar: without this it stretched
+     to the card's whole width and read as a banner. */
+  .pfoot > button { align-self: flex-start; }
+
+  .pcard p { margin: 0 0 7px; color: var(--dim); overflow-wrap: anywhere; }
   .pcard .ptitle {
-    font-size: 13.5px; color: var(--ink); margin: 0 0 8px; line-height: 1.35;
+    font-size: 13.5px; color: var(--ink); margin: 0 0 7px; line-height: 1.4;
     overflow-wrap: anywhere;
   }
-  .pcard .prose { font-size: 12.5px; }
-  .pcard .prose h1, .pcard .prose h2 { font-size: 14px; margin: 10px 0 5px; }
-  .pcard .prose h3 { font-size: 12.5px; margin: 10px 0 5px; }
-  .pcard .logline { font-size: 12px; padding: 4px 0; }
-  /* A card found by reading the node rather than declared in its frontmatter.
-     Worth saying, because an unlabelled card is not something anyone chose. */
-  .pfound { color: var(--faint); font-weight: 400; text-transform: none;
-            letter-spacing: 0; font-size: 10px; }
+  .pempty { color: var(--faint); font-size: 12.5px; }
+  .pempty p { color: inherit; }
+  .pnothing { grid-column: 1 / -1; }
+  .pfound {
+    color: var(--faint); font-weight: 400; letter-spacing: 0; font-size: 10px;
+    font-style: italic;
+  }
+  .pmono {
+    font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--faint);
+    overflow-wrap: anywhere;
+  }
+  .prow {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 5px 9px;
+    font-size: 12px; color: var(--dim); margin-top: 8px;
+  }
+  .prow .sep { color: var(--line); }
+  /* Nothing else in the stylesheet colours a bare anchor, so one inside a card
+     drew as the browser's default blue-on-dark and was unreadable. */
+  .pbody a, .pfoot a { color: var(--accent); }
+  .pfail {
+    margin-top: 8px; font-size: 11.5px; color: var(--blocked);
+    font-family: ui-monospace, monospace; white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
 
-  /* The one word that says where a thing stands. It carries the card's colour
-     so the grid can be read without reading any of it. */
   .pbadge {
-    display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px;
-    font-weight: 600; border-radius: 999px; padding: 2px 9px;
+    display: inline-flex; align-items: center; font-size: 11.5px;
+    font-weight: 600; border-radius: 999px; padding: 1px 9px;
     border: 1px solid color-mix(in srgb, var(--t) 45%, transparent);
     background: color-mix(in srgb, var(--t) 13%, transparent); color: var(--t);
-    white-space: nowrap;
+    white-space: nowrap; margin-right: 4px;
   }
   .pbadge.good { --t: var(--in-review); }
   .pbadge.warn { --t: var(--in-progress); }
   .pbadge.bad  { --t: var(--blocked); }
   .pbadge.mute { --t: var(--faint); }
 
-  .prow {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
-    font-size: 12px; color: var(--dim); margin-top: 9px;
+  .pchecks { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 9px;
+             font-size: 11.5px; font-family: ui-monospace, monospace; }
+  .cgood { color: var(--in-review); }
+  .cwarn { color: var(--in-progress); }
+  .cbad  { color: var(--blocked); }
+  .cmute { color: var(--faint); }
+
+  /* A conversation, not a log: each message is a block with who and when above
+     it, so a thread can be followed the way it reads in Slack. */
+  .pthread { display: flex; flex-direction: column; gap: 11px; }
+  .pmsg { font-size: 12.5px; line-height: 1.45; }
+  .pwho { font-weight: 600; color: var(--ink); font-size: 12px; }
+  .pwhen { color: var(--faint); font-weight: 400; margin-left: 7px; font-size: 11px; }
+  .ptext { color: var(--dim); margin-top: 2px; overflow-wrap: anywhere; }
+  .ptext pre {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 5px;
+    padding: 6px 8px; margin: 5px 0; overflow-x: auto; font-size: 11.5px;
   }
-  .prow .sep { color: var(--line); }
-  /* Nothing else in the stylesheet colours a bare anchor, so one inside a card
-     drew as the browser's default blue-on-dark and was unreadable. */
-  .prow a { color: var(--accent); }
-  .pfail {
-    margin-top: 8px; font-size: 11.5px; color: var(--blocked);
-    font-family: ui-monospace, monospace; overflow-wrap: anywhere;
+  .ptext code { font-family: ui-monospace, monospace; font-size: .92em; }
+  .pmeta { color: var(--faint); font-size: 11px; margin-top: 2px; }
+
+  .psend { display: flex; gap: 6px; align-items: flex-end; }
+  .psend textarea {
+    flex: 1; resize: vertical; min-height: 30px; max-height: 150px;
+    background: var(--bg); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 12.5px;
+    font-family: inherit;
   }
-  .pmono {
-    font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--faint);
-    overflow-wrap: anywhere;
-  }
-  .pnote { font-size: 11.5px; color: var(--faint); font-style: italic; margin-top: 9px; }
-  .pcard .logline:last-child { border-bottom: none; }
+  .psend textarea:focus { outline: none; border-color: var(--accent); }
+  .psend button { flex: none; }
+  .psent { font-size: 11.5px; color: var(--faint); overflow-wrap: anywhere; }
   /* Two rows, not one. Five controls in a 520px panel had nothing telling them
      to stay whole, so every label broke mid-word: "in-/progress", "no/priority",
      "jump to desktop/8". The controls sit on one line and the facts about the
@@ -2592,12 +2849,14 @@ document.addEventListener("click", e => {
 
 // ---- project page --------------------------------------------------------
 //
-// One node, the whole window, as a grid of cards. The board stays the hub and
-// this is where a node is actually read.
+// One node, the whole window. The board stays the hub; this is where a node is
+// worked rather than looked at, so the page carries only the things that can be
+// acted on -- the conversations and the pull requests -- and nothing the vault
+// already shows better in the editor.
 //
-// It is a real URL under /node/, not a fragment, which is what makes it a page
-// rather than a panel: back and forward work, it can be bookmarked, and it can
-// be opened in a window of its own and left there.
+// It is a real URL under /node/, not a fragment, which is what makes it a page:
+// back and forward work, it can be bookmarked, and it can be opened in a window
+// of its own and left on a screen.
 
 const NODE_URL = p => "/node/" + p.split("/").map(encodeURIComponent).join("/");
 
@@ -2633,16 +2892,19 @@ function route() {
   if (path) renderProject(moved); else render();
 }
 
-// The page is drawn from three things that arrive at different times: the card
-// (already in the board poll), the node's own files, and whatever each link's
-// service says about it. Each redraw uses what has landed so far, so the page
-// is never blank waiting on `gh`.
-let pNode = null, pLinks = null, pFor = null;
+// The page is drawn from things that arrive at different times: the card is
+// already in the board poll, the links come from reading the node, and each
+// conversation is fetched on its own. Every redraw uses what has landed so far,
+// so the page is never blank waiting on a network call.
+let pLinks = null, pFor = null;
+const pThread = {};      // channel|ts -> {loading|error|messages}
+const pSent = {};        // channel|ts -> the permalink of the last reply sent
+const pDraft = {};       // key -> what is typed but not sent, kept across polls
 
 function renderProject(reload) {
   const path = detailPath;
   if (reload || pFor !== path) {
-    pFor = path; pNode = null; pLinks = null;
+    pFor = path; pLinks = null;
     drawProject();
     loadProject(path);
     return;
@@ -2651,14 +2913,6 @@ function renderProject(reload) {
 }
 
 async function loadProject(path) {
-  try {
-    const r = await fetch("/api/node?path=" + encodeURIComponent(path));
-    const d = await r.json();
-    if (d.error) throw new Error(d.error);
-    if (detailPath !== path) return;
-    pNode = d;
-    drawProject();
-  } catch (e) { fail(e.message); return; }
   try {
     const r = await fetch("/api/links?path=" + encodeURIComponent(path));
     const d = await r.json();
@@ -2669,18 +2923,38 @@ async function loadProject(path) {
     pLinks = [];
   }
   drawProject();
+  for (const l of pLinks) {
+    if (l.kind === "slack-thread") loadThread(l.channel, l.ts);
+  }
 }
 
-function card(cls, head, body) {
-  return `<section class="pcard ${cls}"><h3>${head}</h3>${body}</section>`;
+const tkey = (channel, ts) => channel + "|" + ts;
+
+async function loadThread(channel, ts, force) {
+  const k = tkey(channel, ts);
+  if (pThread[k] && pThread[k].loading) return;
+  pThread[k] = {loading: true, ...(pThread[k] || {})};
+  try {
+    const r = await fetch("/api/slack?channel=" + encodeURIComponent(channel)
+      + "&ts=" + encodeURIComponent(ts) + (force ? "&force=1" : ""));
+    pThread[k] = await r.json();
+  } catch (e) {
+    pThread[k] = {error: e.message};
+  }
+  drawProject();
+}
+
+// ---- card chrome ---------------------------------------------------------
+
+function card(cls, head, body, foot) {
+  return `<section class="pcard ${cls}"><h3>${head}</h3>
+    <div class="pbody">${body}</div>${foot || ""}</section>`;
 }
 
 function badge(tone, text) {
   return `<span class="pbadge ${esc(tone)}">${esc(text)}</span>`;
 }
 
-// ISO 8601 from a service, rendered the way the board renders its own ages, so
-// "updated 2h ago" means the same thing everywhere on the page.
 function isoAgo(iso) {
   if (!iso) return "";
   const t = Date.parse(iso);
@@ -2688,105 +2962,194 @@ function isoAgo(iso) {
   return ago(Math.max(0, (Date.now() - t) / 1000)) + " ago";
 }
 
-const CHECK_MARK = {passed: "✓", failed: "✗", pending: "○"};
+// A Slack ts is epoch seconds with microseconds after the dot.
+function slackWhen(ts) {
+  const t = parseFloat(ts);
+  if (!t) return "";
+  const d = new Date(t * 1000);
+  const sameDay = new Date().toDateString() === d.toDateString();
+  return sameDay
+    ? d.toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})
+    : d.toLocaleDateString([], {month: "short", day: "numeric"})
+      + " " + d.toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+}
+
+// Slack's own markup, which is not markdown: <@U123> mentions, <url|label>
+// links, and &amp;-escaped text. Rendering it as markdown would leave the angle
+// brackets on screen, which is how every naive Slack mirror gives itself away.
+function slackText(s) {
+  let out = esc(s || "");
+  out = out.replace(/&lt;([^&|>]+)\|([^&>]*)&gt;/g,
+    (m, href, label) => `<a href="${href}" target="_blank" rel="noreferrer">${label}</a>`);
+  out = out.replace(/&lt;(https?:[^&>]+)&gt;/g,
+    (m, href) => `<a href="${href}" target="_blank" rel="noreferrer">${href}</a>`);
+  out = out.replace(/&lt;[@#]([A-Z0-9]+)(\|([^&>]*))?&gt;/g,
+    (m, id, _p, label) => `<b>@${label || id}</b>`);
+  out = out.replace(/```([\s\S]*?)```/g, (m, code) => `<pre>${code.trim()}</pre>`);
+  out = out.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  out = out.replace(/\*([^*\n]+)\*/g, "<b>$1</b>");
+  out = out.replace(/\n/g, "<br>");
+  return out;
+}
+
+// A box that sends somewhere, remembered across the two-second poll so a redraw
+// cannot eat what is half typed. The draft is keyed, not read off the DOM,
+// because the DOM is rebuilt under it.
+function sendBox(key, placeholder, label) {
+  return `<div class="psend">
+    <textarea data-draft="${esc(key)}" rows="1" placeholder="${esc(placeholder)}"
+      >${esc(pDraft[key] || "")}</textarea>
+    <button data-send="${esc(key)}">${esc(label)}</button>
+  </div>`;
+}
+
+// ---- the cards themselves -------------------------------------------------
+
+function slackCard(l) {
+  const k = tkey(l.channel, l.ts);
+  const t = pThread[k] || {};
+  const head = `<span class="pk">slack</span>
+    <span class="pmono">${esc(l.channel)}</span>
+    ${l.found ? '<span class="pfound">in the notes</span>' : ""}
+    <span class="grow"></span>
+    ${l.app_url ? `<a href="${esc(l.app_url)}" title="open the channel in the Slack app">app</a>` : ""}
+    <a href="${esc(l.url)}" target="_blank" rel="noreferrer" title="${esc(l.url)}">↗</a>`;
+
+  if (t.error === "no-creds") {
+    return card("tall", head, `<div class="pempty">
+      <p>No Slack token yet, so the conversation cannot be read.</p>
+      <p class="pmono">${esc(t.conf || "")}</p>
+      <p>Put a <code>token</code> there, plus a <code>cookie</code> if it is an
+         <code>xoxc-</code> one.</p></div>`);
+  }
+  if (t.error) {
+    return card("tall", head, `<div class="pempty"><p class="pfail">${esc(t.error)}</p></div>`);
+  }
+  if (!t.messages) {
+    return card("tall", head, `<div class="pempty"><p>reading the thread…</p></div>`);
+  }
+
+  const msgs = t.messages.map(m => `
+    <div class="pmsg">
+      <div class="pwho">${esc(m.who)}<span class="pwhen">${esc(slackWhen(m.ts))}</span></div>
+      <div class="ptext">${slackText(m.text)}</div>
+      ${m.files ? `<div class="pmeta">${m.files} file${m.files === 1 ? "" : "s"}</div>` : ""}
+    </div>`).join("");
+
+  const sent = pSent[k];
+  return card("tall", head,
+    `<div class="pthread">${msgs || '<div class="pempty"><p>no messages</p></div>'}</div>`,
+    `<div class="pfoot">
+       ${sent ? `<div class="psent">replied ·
+         <a href="${esc(sent)}" target="_blank" rel="noreferrer">${esc(sent)}</a>
+         <button data-copy="${esc(sent)}">copy link</button></div>` : ""}
+       ${sendBox(k, "reply in this thread", "reply")}
+     </div>`);
+}
+
+function prCard(l) {
+  const what = l.kind === "github-pr" ? "pull" : "issue";
+  const head = `<span class="pk">github ${what}</span>
+    <span class="pmono">${esc(l.repo)}#${l.number}</span>
+    ${l.found ? '<span class="pfound">in the notes</span>' : ""}
+    <span class="grow"></span>
+    <a href="${esc(l.url)}" target="_blank" rel="noreferrer" title="${esc(l.url)}">↗</a>`;
+
+  if (l.error) return card("tall", head, `<div class="pempty"><p class="pfail">${esc(l.error)}</p></div>`);
+  const d = l.data;
+  if (!d) return card("tall", head, `<div class="pempty"><p>reading…</p></div>`);
+
+  const bits = [];
+  if (d.review) bits.push(esc(d.review.toLowerCase().replace(/_/g, " ")));
+  if (d.reviewers && d.reviewers.length) bits.push("with " + esc(d.reviewers.join(", ")));
+  if (d.assignees && d.assignees.length) bits.push(esc(d.assignees.join(", ")));
+  if (d.labels && d.labels.length) bits.push(esc(d.labels.join(", ")));
+  if (d.adds != null) bits.push(`<span class="pmono">+${d.adds} −${d.dels}</span>`);
+  if (d.files != null) bits.push(d.files + (d.files === 1 ? " file" : " files"));
+  if (d.comments) bits.push(d.comments + (d.comments === 1 ? " comment" : " comments"));
+  if (d.updated) bits.push(esc(isoAgo(d.updated)));
+
+  const counts = d.checks ? [
+    d.checks.failed ? `<span class="cbad">✗ ${d.checks.failed} failed</span>` : "",
+    d.checks.pending ? `<span class="cwarn">○ ${d.checks.pending} running</span>` : "",
+    d.checks.passed ? `<span class="cgood">✓ ${d.checks.passed} passed</span>` : "",
+    d.checks.skipped ? `<span class="cmute">${d.checks.skipped} skipped</span>` : "",
+  ].filter(Boolean).join("") : "";
+
+  return card("tall", head, `
+    <div class="ptitle">${badge(d.tone, d.stage)} ${esc(d.title || "")}</div>
+    ${d.branch ? `<div class="pmono">${esc(d.branch)} → ${esc(d.base)}</div>` : ""}
+    <div class="prow">${bits.join('<span class="sep">·</span>')}</div>
+    ${counts ? `<div class="pchecks">${counts}</div>` : ""}
+    ${d.failing && d.failing.length
+      ? `<div class="pfail">${esc(d.failing.join("\n"))}</div>` : ""}`,
+    `<div class="pfoot">
+       ${d.branch ? `<button data-copy="${esc(d.branch)}">copy branch</button>` : ""}
+       ${sendBox("gh|" + l.url, "comment on this " + what, "comment")}
+     </div>`);
+}
 
 function linkCard(l) {
-  // A glyph rather than the word "open": the card head is uppercased, so "OPEN"
-  // sitting beside a `merged` badge read as the PR's state rather than a link.
-  const out = `<a href="${esc(l.url)}" target="_blank" rel="noreferrer"
-    title="${esc(l.url)}">\u2197</a>`;
-  const head = k => `${esc(k)}${l.found ? ' <span class="pfound">in the notes</span>' : ""}
-    <span class="grow"></span>${out}`;
+  if (l.kind === "slack-thread") return slackCard(l);
+  if (l.kind === "github-pr" || l.kind === "github-issue") return prCard(l);
 
-  if (l.kind === "github-pr" || l.kind === "github-issue") {
-    const what = l.kind === "github-pr" ? "pull" : "issue";
-    const title = `${esc(l.repo)} <span class="sep">#</span>${l.number}`;
-    if (l.error) {
-      return card("", head("github " + what),
-        `<div class="ptitle">${title}</div>
-         <div class="pfail">${esc(l.error)}</div>`);
-    }
-    const d = l.data;
-    if (!d) {
-      return card("", head("github " + what),
-        `<div class="ptitle">${title}</div><div class="pnote">reading…</div>`);
-    }
-    const checks = d.checks
-      ? Object.entries(CHECK_MARK)
-          .filter(([k]) => d.checks[k])
-          .map(([k, m]) => `${m} ${d.checks[k]}`).join(" ")
-      : "";
-    const bits = [];
-    if (checks) bits.push(`<span class="pmono">${esc(checks)}</span>`);
-    if (d.review) bits.push(esc(d.review.toLowerCase().replace(/_/g, " ")));
-    if (d.reviewers && d.reviewers.length) bits.push("to " + esc(d.reviewers.join(", ")));
-    if (d.labels && d.labels.length) bits.push(esc(d.labels.join(", ")));
-    if (d.assignees && d.assignees.length) bits.push(esc(d.assignees.join(", ")));
-    if (d.adds != null) bits.push(`<span class="pmono">+${d.adds} −${d.dels}</span>`);
-    if (d.files != null) bits.push(d.files + (d.files === 1 ? " file" : " files"));
-    if (d.comments) bits.push(d.comments + (d.comments === 1 ? " comment" : " comments"));
-    if (d.updated) bits.push(esc(isoAgo(d.updated)));
-    return card("", head("github " + what), `
-      <div class="ptitle">${badge(d.tone, d.stage)} ${esc(d.title || "")}</div>
-      <div class="pmono">${title}${d.branch ? " · " + esc(d.branch) + " → " + esc(d.base) : ""}</div>
-      <div class="prow">${bits.join('<span class="sep">·</span>')}</div>
-      ${d.failing && d.failing.length
-        ? `<div class="pfail">failing: ${esc(d.failing.join(", "))}</div>` : ""}`);
-  }
-
-  if (l.kind === "slack-thread" || l.kind === "slack-channel") {
-    // slack:// reaches the desktop app instead of the browser. It is documented
-    // for a channel and not for a message, so the thread link offers both and
-    // says which is which rather than pretending one of them is exact.
-    return card("", head("slack " + (l.kind === "slack-thread" ? "thread" : "channel")), `
-      <div class="pmono">${esc(l.channel)}${l.ts ? " · " + esc(l.ts) : ""}</div>
-      ${l.app_url ? `<div class="prow">
-        <a href="${esc(l.app_url)}">open the channel in the app</a>
-      </div>` : ""}
-      <div class="pnote">the conversation itself is not rendered here yet</div>`);
-  }
-
-  if (l.kind === "linear-issue") {
-    return card("", head("linear"), `
-      <div class="ptitle">${esc(l.issue)}</div>
-      <div class="pnote">issue state is not rendered here yet</div>`);
-  }
-
-  if (l.kind === "github-repo") {
-    return card("", head("github repo"), `<div class="ptitle">${esc(l.repo)}</div>`);
-  }
-
-  return card("", head(l.key || l.host), `<div class="pmono">${esc(l.url)}</div>`);
+  const label = l.kind === "linear-issue" ? "linear"
+    : l.kind === "slack-channel" ? "slack channel"
+    : l.kind === "github-repo" ? "github repo"
+    : (l.key || l.host);
+  const head = `<span class="pk">${esc(label)}</span>
+    ${l.found ? '<span class="pfound">in the notes</span>' : ""}
+    <span class="grow"></span>
+    ${l.app_url ? `<a href="${esc(l.app_url)}">app</a>` : ""}
+    <a href="${esc(l.url)}" target="_blank" rel="noreferrer" title="${esc(l.url)}">↗</a>`;
+  const what = l.issue || l.channel || l.repo || l.key || "";
+  return card("", head,
+    `${what ? `<div class="ptitle">${esc(what)}</div>` : ""}
+     <div class="pmono">${esc(l.url.replace(/^https?:\/\//, ""))}</div>`);
 }
+
+// ---- the page -------------------------------------------------------------
 
 function drawProject() {
   const path = detailPath;
-  const c = (pNode && pNode.card) || (board && board.cards.find(x => x.path === path));
+  const c = board && board.cards.find(x => x.path === path);
   const host = document.getElementById("project");
   if (!c) {
     host.innerHTML = `<div class="phead"><button class="pback" id="pback">${BACK} board</button>
-      <h2>${esc(path || "")}</h2></div>
-      <div class="pgrid">${card("", "reading", '<div class="pnote">…</div>')}</div>`;
+      <h2>${esc(path || "")}</h2></div>`;
     document.getElementById("pback").addEventListener("click", gotoBoard);
     return;
   }
 
-  const links = pLinks !== null ? pLinks
-    : Object.entries(c.links || {}).map(([k, v]) => ({key: k, url: v, kind: "other",
-        host: v.replace(/^https?:\/\//, "").split("/")[0]}));
-
-  const repos = (c.repos || []).map(esc).join("<br>");
-  const notes = ((pNode && pNode.notes) || []).map(n =>
-    `<span class="tag">${esc(n.replace(/\.md$/, ""))}</span>`).join("");
-  const log = ((pNode && pNode.log) || []).map(l =>
-    `<div class="logline">${md(l.replace(/^- /, "")).replace(/^<p>|<\/p>$/g, "")}</div>`).join("");
+  const links = pLinks !== null ? pLinks : [];
+  // Order is the whole layout: the things that can be acted on come first, and
+  // the rest are one-line cards that fill in around them.
+  const rank = l => l.kind === "slack-thread" ? 0
+    : l.kind === "github-pr" ? 1 : l.kind === "github-issue" ? 2
+    : l.kind === "linear-issue" ? 3 : 4;
+  const ordered = links.slice().sort((a, b) => rank(a) - rank(b));
 
   host.innerHTML = `
     <div class="phead" style="--c:${cssVar(c.status)}">
-      <button class="pback" id="pback">${BACK} board</button>
-      <div class="trail mono">${esc(c.trail.join(" / ")) || "&nbsp;"}</div>
-      <h2>${esc(c.slug)}</h2>
-      <div class="statusline">
+      <div class="pline">
+        <button class="pback" id="pback">${BACK} board</button>
+        <span class="trail mono">${esc(c.trail.join(" / "))}</span>
+        <span class="grow"></span>
+        ${c.agent
+          ? `<span class="agent${c.agent.state === "idle" ? " waits" : ""}">
+               <span class="pulse"></span>${
+                 c.agent.state === "idle" ? "waiting for you"
+                 : c.agent.state === "busy" ? "working" : "quiet"}
+               ${c.agent.name ? `<span class="when">${esc(c.agent.name)}</span>` : ""}</span>`
+          : c.touched ? `<span class="when">touched ${ago(board.now - c.touched)} ago</span>` : ""}
+        ${(c.agent && c.agent.desktop) || c.open
+          ? `<button class="jump" data-pid="${c.agent && c.agent.desktop ? c.agent.pid : ""}"
+               data-desk="${esc((c.agent && c.agent.desktop) || c.open)}"
+               >desktop ${esc((c.agent && c.agent.desktop) || c.open)}</button>`
+          : ""}
+      </div>
+      <div class="pline ptop">
+        <h2>${esc(c.slug)}</h2>
         <button class="pill" data-menu="${esc(c.path)}"
           title="move it, hide it, open its links">${esc(label(c.status))}${CARET}</button>
         <button class="dbtn ${c.tracked ? "on" : ""}" data-track="${esc(c.path)}"
@@ -2794,49 +3157,82 @@ function drawProject() {
           >${c.tracked ? PIN_ON : PIN}${c.tracked ? "tracked" : "track"}</button>
         ${c.tracked ? `<button class="dbtn ${esc(c.priority || "")}" data-pri="${esc(c.path)}"
           >${BARS(PRI_LEVEL[c.priority] || 0)}${esc(c.priority || "no priority")}</button>` : ""}
+        ${c.description ? `<p class="pdesc">${esc(c.description)}</p>` : ""}
       </div>
-      ${priMenu === c.path ? `<div class="primenu" style="top:96px;left:20px">
+      ${priMenu === c.path ? `<div class="primenu" style="top:70px;left:150px">
         ${["high", "medium", "low"].map(k =>
           `<button data-set="${esc(c.path)}" data-level="${k}"
             style="color:var(--${k === "high" ? "blocked" : k === "medium" ? "in-progress" : "dim"})"
             >${BARS(PRI_LEVEL[k])}${k}</button>`).join("")}
         <button data-set="${esc(c.path)}" data-level="">${BARS(0)}none</button>
       </div>` : ""}
-      <div class="factline">
-        ${c.agent
-          ? `<span class="agent${c.agent.state === "idle" ? " waits" : ""}">
-               <span class="pulse"></span>${
-                 c.agent.state === "idle" ? "waiting for you"
-                 : c.agent.state === "busy" ? "working"
-                 : "quiet"}${c.agent.state_seconds != null
-                   ? ", " + ago(c.agent.state_seconds)
-                   : c.agent.state ? "" : ", " + ago(c.agent.idle_seconds)}
-               ${c.agent.name ? `<span class="when">${esc(c.agent.name)}</span>` : ""}</span>`
-          : c.touched ? `<span class="when">touched ${ago(board.now - c.touched)} ago</span>` : ""}
-        ${(c.agent && c.agent.desktop) || c.open
-          ? `<button class="jump" data-pid="${c.agent && c.agent.desktop ? c.agent.pid : ""}"
-               data-desk="${esc((c.agent && c.agent.desktop) || c.open)}"
-               >jump to desktop ${esc((c.agent && c.agent.desktop) || c.open)}</button>`
-          : ""}
-      </div>
     </div>
     <div class="pgrid">
-      ${links.map(linkCard).join("")}
-      ${card("", "about", `
-        ${c.description ? `<p>${esc(c.description)}</p>` : '<div class="pnote">no description</div>'}
-        <dl class="kv">
-          <dt>node</dt><dd>${esc(c.path)}</dd>
-          ${repos ? `<dt>repos</dt><dd>${repos}</dd>` : ""}
-          ${c.checkout ? `<dt>checkout</dt><dd>${esc(c.checkout)}</dd>` : ""}
-          ${c.branch ? `<dt>branch</dt><dd>${esc(c.branch)}</dd>` : ""}
-        </dl>`)}
-      ${notes ? card("", "notes", `<div class="notes">${notes}</div>`) : ""}
-      ${log ? card("", "recent log", `<div class="pscroll">${log}</div>`) : ""}
-      ${pNode && pNode.body
-        ? card("", "head", `<div class="pscroll prose">${md(pNode.body)}</div>`) : ""}
+      ${ordered.map(linkCard).join("")}
+      ${pLinks === null ? '<section class="pcard"><h3>reading the node</h3></section>' : ""}
+      ${pLinks !== null && !links.length
+        ? `<section class="pcard pnothing"><h3>nothing linked</h3>
+             <div class="pbody"><p>This node names no pull request, thread or issue,
+             in its frontmatter or anywhere in its notes.</p></div></section>` : ""}
     </div>`;
   document.getElementById("pback").addEventListener("click", gotoBoard);
+  wireProject();
   wire();
+}
+
+function wireProject() {
+  for (const t of document.querySelectorAll("[data-draft]")) {
+    t.addEventListener("input", () => { pDraft[t.dataset.draft] = t.value; });
+    // Enter sends and shift-enter breaks the line, which is what the box it is
+    // standing in for does.
+    t.addEventListener("keydown", e => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(t.dataset.draft); }
+      e.stopPropagation();
+    });
+  }
+  for (const b of document.querySelectorAll("[data-send]")) {
+    b.addEventListener("click", () => send(b.dataset.send));
+  }
+  for (const b of document.querySelectorAll("[data-copy]")) {
+    b.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(b.dataset.copy);
+        b.textContent = "copied";
+        setTimeout(() => drawProject(), 1200);
+      } catch (e) { fail("could not copy: " + e.message); }
+    });
+  }
+}
+
+async function send(key) {
+  const text = (pDraft[key] || "").trim();
+  if (!text) return;
+  const btn = document.querySelector(`[data-send="${CSS.escape(key)}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = "sending"; }
+  try {
+    if (key.startsWith("gh|")) {
+      const url = key.slice(3);
+      const l = (pLinks || []).find(x => x.url === url);
+      const r = await fetch("/api/comment", {method: "POST", body: JSON.stringify(
+        {url, repo: l.repo, number: l.number, kind: l.kind, text})});
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      pDraft[key] = "";
+      loadProject(detailPath);
+    } else {
+      const [channel, ts] = key.split("|");
+      const r = await fetch("/api/reply", {method: "POST", body: JSON.stringify(
+        {channel, ts, text})});
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      pDraft[key] = "";
+      if (d.permalink) pSent[key] = d.permalink;
+      loadThread(channel, ts, true);
+    }
+  } catch (e) {
+    fail(e.message);
+  }
+  drawProject();
 }
 
 // One implementation of each write, so the cards, the panel and the menu cannot
