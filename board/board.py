@@ -873,36 +873,59 @@ CHECK_FIELDS = ("number,title,state,isDraft,reviewDecision,mergeable,"
                 "author,body,url")
 
 
+EVENT_BODY_CAP = 900   # per comment/review; agents post very long ones
+
+
+def is_bot(login):
+    return bool(re.search(r"(\[bot\]$|-bot$|^github-actions$|^linear$|^codecov)",
+                          login or "", re.I))
+
+
+def clip_body(body):
+    """A body capped so one long agent reply cannot dominate the payload.
+
+    The card is a glance; the full text is a click away on GitHub. The cap is on
+    characters and falls on a line boundary so a code block is not sliced mid-
+    token.
+    """
+    body = body or ""
+    if len(body) <= EVENT_BODY_CAP:
+        return body, False
+    cut = body.rfind("\n", 0, EVENT_BODY_CAP)
+    return body[:cut if cut > 400 else EVENT_BODY_CAP], True
+
+
 def gh_timeline(pr):
     """The PR's conversation as one list, oldest first.
 
-    GitHub keeps issue comments and reviews in separate arrays, and the page
-    wants them interleaved the way the PR page shows them. A review with no body
-    and the COMMENTED state is dropped: it is the empty envelope GitHub creates
-    to hold inline code comments, and rendering it is a blank row that says a
-    review happened when none did. An APPROVED or CHANGES_REQUESTED review is
-    kept even empty, because the act is the content.
+    GitHub keeps issue comments and reviews in separate arrays; they are
+    interleaved here by time. A review with no body and the COMMENTED state is
+    dropped: it is the empty envelope GitHub makes to hold inline code comments,
+    and rendering it claims a review that did not happen. An APPROVED or
+    CHANGES_REQUESTED review is kept even empty, because the act is the content.
+    Each event is tagged bot/human and its body is clipped, so the page can lead
+    with what people said and keep the machine noise short.
     """
     events = []
     for c in pr.get("comments") or []:
+        who = (c.get("author") or {}).get("login") or "someone"
+        body, clipped = clip_body(c.get("body"))
         events.append({
-            "kind": "comment",
-            "who": (c.get("author") or {}).get("login") or "someone",
-            "assoc": c.get("authorAssociation"),
-            "body": c.get("body") or "",
-            "at": c.get("createdAt"),
+            "kind": "comment", "who": who, "bot": is_bot(who),
+            "assoc": c.get("authorAssociation"), "body": body,
+            "clipped": clipped, "at": c.get("createdAt"),
         })
     for r in pr.get("reviews") or []:
         state = (r.get("state") or "").upper()
-        body = r.get("body") or ""
-        if state in ("COMMENTED", "") and not body.strip():
+        raw = r.get("body") or ""
+        if state in ("COMMENTED", "") and not raw.strip():
             continue
+        who = (r.get("author") or {}).get("login") or "someone"
+        body, clipped = clip_body(raw)
         events.append({
-            "kind": "review", "state": state,
-            "who": (r.get("author") or {}).get("login") or "someone",
-            "assoc": r.get("authorAssociation"),
-            "body": body,
-            "at": r.get("submittedAt"),
+            "kind": "review", "state": state, "who": who, "bot": is_bot(who),
+            "assoc": r.get("authorAssociation"), "body": body,
+            "clipped": clipped, "at": r.get("submittedAt"),
         })
     events.sort(key=lambda e: e.get("at") or "")
     return events
@@ -1440,6 +1463,56 @@ def cmd_serve(args, vault):
     serve(vault, args.port, not args.no_open)
 
 
+SLACK_AUTH_HELP = """\
+Connect Slack so the board can show and reply to threads. It reads the API as
+you; there is no board-owned Slack app, so it needs one of your own tokens.
+
+Two ways to get one:
+
+  A. Durable, works on every machine (recommended). Make a user token once:
+       1. https://api.slack.com/apps  ->  Create New App  ->  From scratch
+       2. OAuth & Permissions -> User Token Scopes -> add:
+            channels:history  groups:history  im:history  mpim:history
+            channels:read  users:read  chat:write
+       3. Install to Workspace, approve, copy the "User OAuth Token" (xoxp-...)
+       4. board slack-auth xoxp-your-token
+
+  B. Fastest, this machine only. Borrow the desktop app's own session:
+       token:  open Slack, Help -> Troubleshooting -> Open Console, paste:
+                 JSON.parse(localStorage.localConfig_v2).teams[
+                   Object.keys(JSON.parse(localStorage.localConfig_v2).teams)[0]].token
+               (copy the xoxc-... it prints)
+       cookie: DevTools -> Application -> Cookies -> https://app.slack.com
+               -> the row named `d`, copy its value (xoxd-...)
+       then:   board slack-auth xoxc-your-token xoxd-your-cookie
+
+The token is written to %s. To carry it between machines instead, export
+BOARD_SLACK_TOKEN (and BOARD_SLACK_COOKIE for an xoxc token) in your shell.
+""" % SLACK_CONF
+
+
+def cmd_slack_auth(args, vault):
+    if not args.token:
+        print(SLACK_AUTH_HELP)
+        return
+    token = args.token.strip()
+    cookie = (args.cookie or "").strip()
+    if token.startswith("xoxc-") and not cookie:
+        raise RuntimeError("an xoxc- token needs its xoxd- cookie as the second "
+                           "argument; run `board slack-auth` for how to get it")
+    # Verify before writing, so a wrong paste fails here with Slack's own reason
+    # rather than silently on the card later.
+    who = slack_call("auth.test", {}, {"token": token, "cookie": cookie})
+    os.makedirs(os.path.dirname(SLACK_CONF), exist_ok=True)
+    tmp = SLACK_CONF + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump({"token": token, "cookie": cookie}, fh, indent=2)
+    os.chmod(tmp, 0o600)          # it is a credential; keep it to the owner
+    os.replace(tmp, SLACK_CONF)
+    print("Connected as %s in %s. Written to %s"
+          % (who.get("user"), who.get("team"), SLACK_CONF))
+
+
 def cmd_open(args, vault):
     webbrowser.open("http://127.0.0.1:%d/" % args.port)
 
@@ -1473,6 +1546,11 @@ def build_parser():
     s.add_argument("target", help="slug, a unique fragment of one, or a path")
     s.add_argument("status", choices=STATUSES)
     s.set_defaults(fn=cmd_mv)
+
+    s = sub.add_parser("slack-auth", help="connect Slack (run bare for how)")
+    s.add_argument("token", nargs="?", help="xoxp- or xoxc- token")
+    s.add_argument("cookie", nargs="?", help="xoxd- cookie, for an xoxc- token")
+    s.set_defaults(fn=cmd_slack_auth)
 
     s = sub.add_parser("open", help="open the board in a browser")
     s.add_argument("-p", "--port", type=int, default=DEFAULT_PORT)
@@ -2150,7 +2228,16 @@ PAGE = r"""<!doctype html>
   .cbad  { color: var(--blocked); }
   .cmute { color: var(--faint); }
 
-  .pconvo { display: flex; flex-direction: column; gap: 14px; padding-top: 11px; }
+  .pconvo { display: flex; flex-direction: column; gap: 13px; padding-top: 11px; }
+  /* A section label inside the conversation: reviews, then comments. Small caps
+     the way the card heads are, so the eye groups them. */
+  .pconvhead {
+    font-size: 10px; font-weight: 600; color: var(--faint); letter-spacing: .06em;
+    text-transform: uppercase; margin: 5px 0 -3px;
+  }
+  .pmoreconv, .pmoreline { font-size: 11.5px; color: var(--accent); cursor: default; }
+  .pmoreconv { margin-top: 2px; }
+  .pmoreline { margin-top: 4px; }
   .pev { display: flex; gap: 9px; }
   .pevmain { flex: 1; min-width: 0; }
   .pevhead { display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
@@ -2170,8 +2257,16 @@ PAGE = r"""<!doctype html>
     background: var(--panel); border: 1px solid var(--line); border-radius: 7px;
     padding: 8px 10px; overflow-wrap: anywhere;
   }
+  /* A comment is clamped to a few lines by default, with a fade at the cut, so
+     one agent essay does not run the length of the card. Clicking it opens. */
+  .pev-body.clamp {
+    max-height: 8.2em; overflow: hidden; cursor: pointer;
+    -webkit-mask-image: linear-gradient(180deg, #000 68%, transparent);
+    mask-image: linear-gradient(180deg, #000 68%, transparent);
+  }
   .pev-body > :first-child { margin-top: 0; }
   .pev-body > :last-child { margin-bottom: 0; }
+  .pmoreline { margin-top: 6px; }
   .pev-body h4, .pev-body h5, .pev-body h6 { font-size: 12.5px; margin: 9px 0 4px; color: var(--ink); }
   .pev-body pre { background: var(--bg); border: 1px solid var(--line);
                   border-radius: 5px; padding: 6px 8px; overflow-x: auto; font-size: 11.5px; }
@@ -3202,24 +3297,78 @@ const REVIEW_TONE = {
   APPROVED: "good", CHANGES_REQUESTED: "bad", COMMENTED: "mute", DISMISSED: "mute",
 };
 
-function timelineEntry(e) {
-  const bot = /(\[bot\]|-bot$|^github-actions$|^linear$)/.test(e.who || "");
-  const tag = assoc(e.assoc, bot);
+// A GitHub body before markdown: turn image embeds -- markdown and raw <img> --
+// into a plain link, because those images sit behind GitHub auth and load as a
+// broken box here, and the raw tag rendered as escaped text was worse. Every
+// body is line-clamped in CSS regardless, so a long one shows its start and
+// says "more on GitHub".
+function ghBody(raw, clipped) {
+  let s = (raw || "")
+    .replace(/!\[[^\]]*\]\((https?:[^)\s]+)\)/g, "[▢ image]($1)")
+    .replace(/<img[^>]*\bsrc="([^"]+)"[^>]*>/gi, "[▢ image]($1)");
+  return md(s) + (clipped ? '<div class="pmoreline">… more on GitHub</div>' : "");
+}
+
+function timelineEntry(e, opts) {
+  opts = opts || {};
+  const tag = assoc(e.assoc, e.bot);
   const rv = e.kind === "review" ? REVIEW_WORD[e.state] || "reviewed" : "";
-  return `<div class="pev">
+  const has = e.body && e.body.trim();
+  return `<div class="pev${opts.open ? " pev-open" : ""}">
     ${avatar(e.who)}
     <div class="pevmain">
       <div class="pevhead">
         <b>${esc(e.who)}</b>
         ${tag ? `<span class="ptag">${esc(tag)}</span>` : ""}
         ${rv ? `<span class="pverdict ${REVIEW_TONE[e.state] || "mute"}">${esc(rv)}</span>`
-             : '<span class="pdim">commented</span>'}
+             : (opts.opening ? '<span class="pdim">opened this</span>'
+                             : '<span class="pdim">commented</span>')}
         <span class="pdim">${esc(isoAgo(e.at))}</span>
       </div>
-      ${e.body && e.body.trim()
-        ? `<div class="pev-body">${md(e.body)}</div>` : ""}
+      ${has ? `<div class="pev-body${opts.open ? "" : " clamp"}">${ghBody(e.body, e.clipped)}</div>`
+            : (rv ? "" : '<div class="pdim">(no text)</div>')}
     </div>
   </div>`;
+}
+
+// How much of a PR's conversation the card shows. The description and every
+// human review are the signal Kai asked for; comments are capped and bot chatter
+// (CI preview links, coverage bots) is counted, not shown, because agents post
+// long and often and would otherwise bury the reviews.
+const PR_COMMENTS_SHOWN = 4;
+
+function prConvo(d) {
+  const tl = d.timeline || [];
+  const reviews = tl.filter(e => e.kind === "review");
+  const humanComments = tl.filter(e => e.kind === "comment" && !e.bot);
+  const botComments = tl.filter(e => e.kind === "comment" && e.bot);
+  const shownComments = humanComments.slice(-PR_COMMENTS_SHOWN);
+  const hidden = (humanComments.length - shownComments.length) + botComments.length;
+
+  const opening = (d.body && d.body.trim())
+    ? timelineEntry({who: d.author, assoc: "", body: d.body,
+                     clipped: false, at: d.opened}, {opening: true, open: true})
+    : "";
+
+  let out = opening;
+  if (reviews.length) {
+    out += `<div class="pconvhead">reviews</div>`
+      + reviews.map(e => timelineEntry(e)).join("");
+  }
+  if (shownComments.length) {
+    out += `<div class="pconvhead">${
+      humanComments.length > shownComments.length
+        ? `latest ${shownComments.length} of ${humanComments.length} comments` : "comments"}</div>`
+      + shownComments.map(e => timelineEntry(e)).join("");
+  }
+  if (!reviews.length && !humanComments.length && !opening) {
+    out += '<div class="pdim pquiet">no description or comments</div>';
+  }
+  if (hidden > 0) {
+    const onlyBots = botComments.length && humanComments.length <= shownComments.length;
+    out += `<div class="pmoreconv">+ ${hidden}${onlyBots ? " automated" : ""} more on GitHub</div>`;
+  }
+  return out;
 }
 
 function prCard(l) {
@@ -3233,10 +3382,8 @@ function prCard(l) {
   const d = l.data;
   if (!d) return card("tall", head, `<div class="pempty"><p>reading the ${what}…</p></div>`);
 
-  // The stat line, in GitHub's own order: who opened it when, the branch, the
-  // diff, the file and comment counts.
   const meta = [];
-  if (d.author) meta.push(`<b>${esc(d.author)}</b> opened this ${esc(isoAgo(d.opened))}`);
+  if (d.author) meta.push(`<b>${esc(d.author)}</b> opened ${esc(isoAgo(d.opened))}`);
   if (d.branch) meta.push(`<span class="pmono">${esc(d.branch)} → ${esc(d.base)}</span>`);
   const facts = [];
   if (d.adds != null) facts.push(`<span class="padd">+${d.adds}</span> <span class="pdel">−${d.dels}</span>`);
@@ -3251,13 +3398,6 @@ function prCard(l) {
     d.checks.skipped ? `<span class="cmute">${d.checks.skipped} skipped</span>` : "",
   ].filter(Boolean).join("") : "";
 
-  // The opening post is the first entry in the conversation, GitHub-style: the
-  // author's avatar, the description body, dated when the PR opened.
-  const opening = (d.body && d.body.trim()) ? timelineEntry(
-    {kind: "comment", who: d.author, assoc: "", body: d.body, at: d.opened}) : "";
-  const convo = (d.timeline || []).map(timelineEntry).join("");
-  const n = (d.timeline || []).length;
-
   return card("tall wide", head, `
     <div class="prhead">
       <div class="prtitle">${badge(d.tone, d.stage)}<span>${esc(d.title || "")}</span></div>
@@ -3267,10 +3407,7 @@ function prCard(l) {
       ${d.failing && d.failing.length
         ? `<div class="pfail">${esc(d.failing.join("\n"))}</div>` : ""}
     </div>
-    <div class="pconvo">
-      ${opening}
-      ${n ? convo : (opening ? "" : '<div class="pdim pquiet">no description or comments</div>')}
-    </div>`,
+    <div class="pconvo">${prConvo(d)}</div>`,
     `<div class="pfoot">
        ${sendBox("gh|" + l.url, "comment on this " + what + "…", "comment")}
        <div class="pfootrow">
@@ -3290,18 +3427,16 @@ function slackCard(l) {
 
   if (t.error === "no-creds") {
     return card("tall wide", head, `<div class="pempty pslackempty">
-      <p><b>Slack isn't connected on this machine.</b> The thread is there — it
-         just needs a token to read it as you.</p>
-      <p class="pconnrow"><b>Quickest, any machine:</b> put a token in your shell,
-         and the card fills on refresh.</p>
-      <pre>export ${esc(t.env || "BOARD_SLACK_TOKEN")}=xoxp-…   # workspace-app token
-export BOARD_SLACK_COOKIE=xoxd-…  # only for an xoxc- token</pre>
-      <p class="pconnrow"><b>Or standing config:</b>
-         <span class="pmono">${esc(t.conf || "")}</span></p>
-      <pre>{"token": "xoxp-…"}</pre>
-      <p class="pdim">A <code>xoxp-</code> workspace-app token stands alone. The
-         desktop app's own <code>xoxc-</code> token needs its <code>xoxd-</code>
-         cookie alongside.</p></div>`, l.url);
+      <p><b>Slack isn't connected yet.</b> The thread is there — it just needs
+         one of your Slack tokens to read it as you.</p>
+      <p class="pconnrow"><b>One command sets it up:</b></p>
+      <pre>board slack-auth</pre>
+      <p>Run it with no arguments and it prints the two ways to get a token —
+         a durable workspace-app token that works on every machine, or the
+         desktop app's own session for this one — then finishes with
+         <code>board slack-auth &lt;token&gt;</code>.</p>
+      <p class="pdim">It writes ${esc(t.conf || "")} and the card fills on the next
+         refresh. No server restart.</p></div>`, l.url);
   }
   if (t.error) {
     return card("tall wide", head, `<div class="pempty"><p class="pfail">${esc(t.error)}</p></div>`, l.url);
@@ -3447,6 +3582,11 @@ function drawProject() {
 }
 
 function wireProject() {
+  // A clamped comment opens in place on a click, so a long one is available
+  // without leaving the board and without being tall by default.
+  for (const b of document.querySelectorAll(".pev-body.clamp")) {
+    b.addEventListener("click", () => b.classList.remove("clamp"));
+  }
   for (const t of document.querySelectorAll("[data-draft]")) {
     t.addEventListener("input", () => { pDraft[t.dataset.draft] = t.value; });
     // Enter sends and shift-enter breaks the line, which is what the box it is
