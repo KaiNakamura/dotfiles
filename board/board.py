@@ -683,18 +683,24 @@ _slack_users = {}
 def slack_creds():
     """The Slack token and cookie, or None.
 
-    Read on every call rather than cached, so dropping the file in place is
-    enough and the server does not have to be restarted to pick it up.
+    Two places, so a new machine has a quick path and a durable one. The
+    environment wins -- `BOARD_SLACK_TOKEN` (and `BOARD_SLACK_COOKIE` for an
+    xoxc token) in a shell rc is the one-line way to bring a laptop up -- and
+    the file at SLACK_CONF is the standing config. Both are read on every call,
+    so dropping either in place needs no restart.
     """
-    try:
-        with open(SLACK_CONF, encoding="utf-8") as fh:
-            conf = json.load(fh)
-    except (OSError, ValueError):
-        return None
-    token = (conf.get("token") or "").strip()
+    token = (os.environ.get("BOARD_SLACK_TOKEN") or "").strip()
+    cookie = (os.environ.get("BOARD_SLACK_COOKIE") or "").strip()
+    if not token:
+        try:
+            with open(SLACK_CONF, encoding="utf-8") as fh:
+                conf = json.load(fh)
+            token = (conf.get("token") or "").strip()
+            cookie = (conf.get("cookie") or "").strip()
+        except (OSError, ValueError):
+            return None
     if not token:
         return None
-    cookie = (conf.get("cookie") or "").strip()
     if token.startswith("xoxc-") and not cookie:
         return None
     return {"token": token, "cookie": cookie}
@@ -795,7 +801,8 @@ class SlackThreads:
     def get(self, channel, ts, force=False):
         creds = slack_creds()
         if not creds:
-            return {"error": "no-creds", "conf": SLACK_CONF}
+            return {"error": "no-creds", "conf": SLACK_CONF,
+                    "env": "BOARD_SLACK_TOKEN"}
         key = (channel, ts)
         now = time.time()
         with self.lock:
@@ -2009,19 +2016,28 @@ PAGE = r"""<!doctype html>
   .phead .agent, .phead .when { font-size: 12px; white-space: nowrap; }
   .phead .jump { font-size: 12px; padding: 1px 7px; }
 
-  .pscroll { flex: 1; overflow-y: auto; padding: 14px 18px 20px; }
+  /* A flex column, so the big grid takes the height that is going and the chip
+     row sits under it rather than the page ending halfway down. */
+  .pscroll {
+    flex: 1; overflow-y: auto; padding: 14px 18px 18px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
   .pquiet { color: var(--faint); font-size: 13px; padding: 8px 2px; }
 
-  /* The big tier: threads and pull requests, side by side on a wide screen and
-     stacked below ~1000px, each tall enough to read a conversation in. They are
-     all about the same height, so a row of them leaves no holes. */
+  /* The big tier: threads and pull requests. It grows to fill the space left
+     over, and its rows stretch with it, so one PR fills the window and four
+     share it -- the layout answers to how many cards there are instead of
+     leaving a fixed card stranded in an empty page. Each row is at least tall
+     enough to be worth reading. */
   .pgrid {
-    display: grid; gap: 14px; margin-bottom: 14px;
+    flex: 1 0 auto; min-height: 0; display: grid; gap: 14px;
     grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+    grid-auto-rows: minmax(340px, 1fr); align-content: stretch;
   }
-  /* The chip tier: everything that is just a link, packed tight. */
+  /* The chip tier: everything that is just a link, packed tight, natural height
+     at the foot. */
   .pmini {
-    display: grid; gap: 10px;
+    flex: none; display: grid; gap: 10px;
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   }
 
@@ -2029,11 +2045,11 @@ PAGE = r"""<!doctype html>
     background: var(--card); border: 1px solid var(--line); border-radius: 10px;
     display: flex; flex-direction: column; overflow: hidden; min-width: 0;
   }
-  /* A conversation card is a fixed-height window onto something longer: it caps
-     at most of the viewport and scrolls its body, so a 40-message thread and a
-     2-message one are the same size on the page. */
-  .pcard.tall { height: min(72vh, 620px); }
-  .pcard.wide { grid-column: auto; }
+  /* A conversation card fills its grid cell and scrolls its own body, so a
+     40-message thread and a 2-message one are the same size and each is as tall
+     as the row the grid gave it. */
+  .pcard.tall { height: 100%; min-height: 0; }
+  .pmini .pcard { min-height: 92px; }
 
   .pcard > h3 {
     flex: none; display: flex; align-items: center; gap: 8px;
@@ -2066,6 +2082,12 @@ PAGE = r"""<!doctype html>
   .pempty { color: var(--faint); font-size: 13px; }
   .pempty p { color: inherit; margin-bottom: 8px; }
   .pslackempty { padding: 4px 2px; }
+  .pslackempty pre {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+    padding: 8px 10px; margin: 4px 0 10px; font-size: 11.5px; overflow-x: auto;
+    color: var(--dim); font-family: ui-monospace, monospace;
+  }
+  .pconnrow { color: var(--ink); margin-bottom: 3px; }
   .ptitle {
     font-size: 13.5px; color: var(--ink); margin: 0 0 6px; line-height: 1.4;
     overflow-wrap: anywhere;
@@ -3013,10 +3035,27 @@ function route() {
 // already in the board poll, the links come from reading the node, and each
 // conversation is fetched on its own. Every redraw uses what has landed so far,
 // so the page is never blank waiting on a network call.
-let pLinks = null, pFor = null;
+let pLinks = null, pFor = null, pRendered = null;
 const pThread = {};      // channel|ts -> {loading|error|messages}
 const pSent = {};        // channel|ts -> the permalink of the last reply sent
 const pDraft = {};       // key -> what is typed but not sent, kept across polls
+
+// A fingerprint of everything the page draws, so the poll can tell a real
+// change from a no-op and leave the DOM (and the scroll position) alone when
+// nothing moved.
+function projectSig() {
+  const c = board && board.cards.find(x => x.path === detailPath);
+  if (!c) return detailPath + "|nocard";
+  const a = c.agent ? c.agent.state + c.agent.name : "";
+  const links = (pLinks || []).map(l => {
+    const d = l.data || {};
+    const t = pThread[tkey(l.channel, l.ts)] || {};
+    return l.url + (d.stage || "") + (d.updated || "") + (d.timeline || []).length
+      + (t.error || "") + ((t.messages || []).length) + (pSent[tkey(l.channel, l.ts)] || "");
+  }).join(";");
+  return [detailPath, c.status, c.tracked, c.priority, a, c.open,
+          pLinks === null ? "loading" : "loaded", links].join("|");
+}
 
 function renderProject(reload) {
   const path = detailPath;
@@ -3063,9 +3102,9 @@ async function loadThread(channel, ts, force) {
 
 // ---- card chrome ---------------------------------------------------------
 
-function card(cls, head, body, foot) {
+function card(cls, head, body, foot, key) {
   return `<section class="pcard ${cls}"><h3>${head}</h3>
-    <div class="pbody">${body}</div>${foot || ""}</section>`;
+    <div class="pbody"${key ? ` data-scroll="${esc(key)}"` : ""}>${body}</div>${foot || ""}</section>`;
 }
 
 function badge(tone, text) {
@@ -3188,7 +3227,7 @@ function prCard(l) {
   const head = `<span class="pk">${esc(l.repo)} #${l.number}</span>
     ${l.found ? '<span class="pfound">in the notes</span>' : ""}
     <span class="grow"></span>
-    <a class="popen" href="${esc(l.url)}" target="_blank" rel="noreferrer">open on GitHub ↗</a>`;
+    <a class="popen" href="${esc(l.url)}" target="_blank" rel="noreferrer">open on GitHub</a>`;
 
   if (l.error) return card("tall", head, `<div class="pempty"><p class="pfail">${esc(l.error)}</p></div>`);
   const d = l.data;
@@ -3237,7 +3276,7 @@ function prCard(l) {
        <div class="pfootrow">
          ${d.branch ? `<button class="linkish" data-copy="${esc(d.branch)}">copy branch name</button>` : ""}
        </div>
-     </div>`);
+     </div>`, l.url);
 }
 
 function slackCard(l) {
@@ -3247,16 +3286,25 @@ function slackCard(l) {
     ${l.found ? '<span class="pfound">in the notes</span>' : ""}
     <span class="grow"></span>
     ${l.app_url ? `<a class="popen" href="${esc(l.app_url)}">open in Slack</a>` : ""}
-    <a class="popen" href="${esc(l.url)}" target="_blank" rel="noreferrer">web ↗</a>`;
+    <a class="popen" href="${esc(l.url)}" target="_blank" rel="noreferrer">open in browser</a>`;
 
   if (t.error === "no-creds") {
     return card("tall wide", head, `<div class="pempty pslackempty">
-      <p><b>Slack isn't connected yet</b>, so the thread can't be shown.</p>
-      <p>Drop a token at <span class="pmono">${esc(t.conf || "")}</span> — see the
-         note in chat for the two ways to get one.</p></div>`);
+      <p><b>Slack isn't connected on this machine.</b> The thread is there — it
+         just needs a token to read it as you.</p>
+      <p class="pconnrow"><b>Quickest, any machine:</b> put a token in your shell,
+         and the card fills on refresh.</p>
+      <pre>export ${esc(t.env || "BOARD_SLACK_TOKEN")}=xoxp-…   # workspace-app token
+export BOARD_SLACK_COOKIE=xoxd-…  # only for an xoxc- token</pre>
+      <p class="pconnrow"><b>Or standing config:</b>
+         <span class="pmono">${esc(t.conf || "")}</span></p>
+      <pre>{"token": "xoxp-…"}</pre>
+      <p class="pdim">A <code>xoxp-</code> workspace-app token stands alone. The
+         desktop app's own <code>xoxc-</code> token needs its <code>xoxd-</code>
+         cookie alongside.</p></div>`, l.url);
   }
   if (t.error) {
-    return card("tall wide", head, `<div class="pempty"><p class="pfail">${esc(t.error)}</p></div>`);
+    return card("tall wide", head, `<div class="pempty"><p class="pfail">${esc(t.error)}</p></div>`, l.url);
   }
   if (!t.messages) {
     return card("tall wide", head, `<div class="pempty"><p>reading the thread…</p></div>`);
@@ -3272,7 +3320,7 @@ function slackCard(l) {
           <span class="pdim">${esc(slackWhen(m.ts))}</span>
           ${i === 0 ? '<span class="ptag">thread start</span>' : ""}</div>
         <div class="stext">${slackText(m.text)}</div>
-        ${m.files ? `<div class="pdim">📎 ${m.files} file${m.files === 1 ? "" : "s"}</div>` : ""}
+        ${m.files ? `<div class="pdim">${m.files} file${m.files === 1 ? "" : "s"}</div>` : ""}
         ${react ? `<div class="sreacts">${react}</div>` : ""}
       </div>
     </div>`;
@@ -3286,7 +3334,7 @@ function slackCard(l) {
        ${sent ? `<div class="psent">sent ·
          <a href="${esc(sent)}" target="_blank" rel="noreferrer">view</a>
          <button class="linkish" data-copy="${esc(sent)}">copy link</button></div>` : ""}
-     </div>`);
+     </div>`, l.url);
 }
 
 function linkCard(l) {
@@ -3301,7 +3349,7 @@ function linkCard(l) {
     ${l.found ? '<span class="pfound">in the notes</span>' : ""}
     <span class="grow"></span>
     ${l.app_url ? `<a class="popen" href="${esc(l.app_url)}">app</a>` : ""}
-    <a class="popen" href="${esc(l.url)}" target="_blank" rel="noreferrer">open ↗</a>`;
+    <a class="popen" href="${esc(l.url)}" target="_blank" rel="noreferrer">open</a>`;
   const what = l.issue || l.channel || l.repo || l.key || "";
   return card("", head,
     `${what ? `<div class="ptitle">${esc(what)}</div>` : ""}
@@ -3314,6 +3362,19 @@ function drawProject() {
   const path = detailPath;
   const c = board && board.cards.find(x => x.path === path);
   const host = document.getElementById("project");
+  pRendered = projectSig();
+  // A rebuild is sometimes unavoidable even when the signature gate lets it
+  // through -- an action redraws on purpose -- so scroll positions are captured
+  // by a stable key and put back, and the page does not lurch.
+  const scroll = {};
+  for (const el of host.querySelectorAll("[data-scroll]")) {
+    if (el.scrollTop) scroll[el.dataset.scroll] = el.scrollTop;
+  }
+  const restore = () => {
+    for (const el of host.querySelectorAll("[data-scroll]")) {
+      if (scroll[el.dataset.scroll]) el.scrollTop = scroll[el.dataset.scroll];
+    }
+  };
   if (!c) {
     host.innerHTML = `<div class="phead"><button class="pback" id="pback">${BACK} board</button>
       <h2>${esc(path || "")}</h2></div>`;
@@ -3371,7 +3432,7 @@ function drawProject() {
         <button data-set="${esc(c.path)}" data-level="">${BARS(0)}none</button>
       </div>` : ""}
     </div>
-    <div class="pscroll">
+    <div class="pscroll" data-scroll="page">
       ${pLinks === null ? '<div class="pdim pquiet">reading the node…</div>' : ""}
       ${big.length ? `<div class="pgrid">${big.map(linkCard).join("")}</div>` : ""}
       ${mini.length ? `<div class="pmini">${mini.map(linkCard).join("")}</div>` : ""}
@@ -3382,6 +3443,7 @@ function drawProject() {
   document.getElementById("pback").addEventListener("click", gotoBoard);
   wireProject();
   wire();
+  restore();
 }
 
 function wireProject() {
@@ -3692,11 +3754,16 @@ async function refresh() {
     if (data.error) throw new Error(data.error);
     board = data;
     fail("");
-    // The poll is what keeps a card's agent state and status live, and the
-    // project page shows the same facts, so it redraws on the poll too rather
-    // than going stale the moment it is opened.
-    if (detailPath) drawProject();
-    else if (signature(board) === rendered) tick();
+    // The poll keeps agent state and status live, and the project page shows
+    // the same facts, so it redraws on the poll too -- but only when something
+    // it shows actually changed. Rebuilding its DOM every two seconds threw
+    // away the scroll position inside a long conversation, which read as the
+    // page jumping to the top. And never while a reply is being typed.
+    if (detailPath) {
+      const composing = document.activeElement
+        && document.activeElement.matches(".psend textarea");
+      if (!composing && projectSig() !== pRendered) drawProject();
+    } else if (signature(board) === rendered) tick();
     else render();
   } catch (e) {
     fail(e.message);
