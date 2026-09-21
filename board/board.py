@@ -2166,6 +2166,11 @@ PAGE = r"""<!doctype html>
     color: var(--dim); font-family: ui-monospace, monospace;
   }
   .pconnrow { color: var(--ink); margin-bottom: 3px; }
+  /* The command and its copy button on one line, the button against the right
+     edge of the code block. */
+  .pcopyline { display: flex; align-items: stretch; gap: 8px; margin: 4px 0 10px; }
+  .pcopyline pre { flex: 1; margin: 0; }
+  .pcopyline button { flex: none; align-self: center; }
   .ptitle {
     font-size: 13.5px; color: var(--ink); margin: 0 0 6px; line-height: 1.4;
     overflow-wrap: anywhere;
@@ -3430,7 +3435,10 @@ function slackCard(l) {
       <p><b>Slack isn't connected yet.</b> The thread is there — it just needs
          one of your Slack tokens to read it as you.</p>
       <p class="pconnrow"><b>One command sets it up:</b></p>
-      <pre>board slack-auth</pre>
+      <div class="pcopyline">
+        <pre>board slack-auth</pre>
+        <button class="linkish" data-copy="board slack-auth">copy</button>
+      </div>
       <p>Run it with no arguments and it prints the two ways to get a token —
          a durable workspace-app token that works on every machine, or the
          desktop app's own session for this one — then finishes with
