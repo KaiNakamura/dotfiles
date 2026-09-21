@@ -724,27 +724,29 @@ def slack_call(method, params, creds):
     return body
 
 
-def slack_name(user_id, creds):
-    """A display name for a user id, remembered for the life of the process.
+def slack_who(user_id, creds):
+    """A {name, avatar} for a user id, remembered for the life of the process.
 
     Every message in a thread carries an id and no name, and a thread of twenty
     messages is usually three people, so this is the difference between three
-    calls and twenty.
+    calls and twenty. The avatar is Slack's own `image_48`, a public CDN URL
+    that loads in the page without the session token.
     """
     if not user_id:
-        return "someone"
+        return {"name": "someone", "avatar": ""}
     if user_id in _slack_users:
         return _slack_users[user_id]
-    name = user_id
+    who = {"name": user_id, "avatar": ""}
     try:
         u = slack_call("users.info", {"user": user_id}, creds)["user"]
         p = u.get("profile") or {}
-        name = (p.get("display_name") or p.get("real_name")
-                or u.get("real_name") or u.get("name") or user_id)
+        who["name"] = (p.get("display_name") or p.get("real_name")
+                       or u.get("real_name") or u.get("name") or user_id)
+        who["avatar"] = p.get("image_48") or p.get("image_72") or ""
     except RuntimeError:
         pass
-    _slack_users[user_id] = name
-    return name
+    _slack_users[user_id] = who
+    return who
 
 
 def slack_thread(channel, ts, creds):
@@ -770,11 +772,15 @@ def slack_thread(channel, ts, creds):
                 if t:
                     bits.append(t)
             text = "\n".join(x for x in bits if x)
-        who = m.get("username") or slack_name(m.get("user") or m.get("bot_id"), creds)
+        if m.get("username"):
+            who = {"name": m["username"], "avatar": m.get("icons", {}).get("image_48", "")}
+        else:
+            who = slack_who(m.get("user") or m.get("bot_id"), creds)
         out.append({
-            "ts": m.get("ts"), "who": who, "text": text,
-            "files": len(m.get("files") or []),
-            "reactions": sum(r.get("count", 0) for r in (m.get("reactions") or [])),
+            "ts": m.get("ts"), "who": who["name"], "avatar": who["avatar"],
+            "text": text, "files": len(m.get("files") or []),
+            "reactions": [{"name": r.get("name"), "count": r.get("count", 0)}
+                          for r in (m.get("reactions") or [])],
         })
     return {"messages": out, "channel": channel}
 
@@ -855,8 +861,44 @@ def gh_json(args):
 
 
 CHECK_FIELDS = ("number,title,state,isDraft,reviewDecision,mergeable,"
-                "statusCheckRollup,reviewRequests,updatedAt,additions,deletions,"
-                "changedFiles,headRefName,baseRefName,comments,url")
+                "statusCheckRollup,reviewRequests,updatedAt,createdAt,additions,"
+                "deletions,changedFiles,headRefName,baseRefName,comments,reviews,"
+                "author,body,url")
+
+
+def gh_timeline(pr):
+    """The PR's conversation as one list, oldest first.
+
+    GitHub keeps issue comments and reviews in separate arrays, and the page
+    wants them interleaved the way the PR page shows them. A review with no body
+    and the COMMENTED state is dropped: it is the empty envelope GitHub creates
+    to hold inline code comments, and rendering it is a blank row that says a
+    review happened when none did. An APPROVED or CHANGES_REQUESTED review is
+    kept even empty, because the act is the content.
+    """
+    events = []
+    for c in pr.get("comments") or []:
+        events.append({
+            "kind": "comment",
+            "who": (c.get("author") or {}).get("login") or "someone",
+            "assoc": c.get("authorAssociation"),
+            "body": c.get("body") or "",
+            "at": c.get("createdAt"),
+        })
+    for r in pr.get("reviews") or []:
+        state = (r.get("state") or "").upper()
+        body = r.get("body") or ""
+        if state in ("COMMENTED", "") and not body.strip():
+            continue
+        events.append({
+            "kind": "review", "state": state,
+            "who": (r.get("author") or {}).get("login") or "someone",
+            "assoc": r.get("authorAssociation"),
+            "body": body,
+            "at": r.get("submittedAt"),
+        })
+    events.sort(key=lambda e: e.get("at") or "")
+    return events
 
 
 def pr_stage(pr, checks):
@@ -937,12 +979,13 @@ def fetch_github_pr(card):
         "title": pr.get("title"), "state": pr.get("state"),
         "draft": pr.get("isDraft"), "review": pr.get("reviewDecision"),
         "mergeable": pr.get("mergeable"), "updated": pr.get("updatedAt"),
+        "opened": pr.get("createdAt"),
+        "author": (pr.get("author") or {}).get("login"),
+        "body": pr.get("body") or "",
         "branch": pr.get("headRefName"), "base": pr.get("baseRefName"),
         "adds": pr.get("additions"), "dels": pr.get("deletions"),
-        # `gh` returns every comment body under this field. The page wants how
-        # many, and shipping the bodies would put a PR's whole discussion into
-        # a payload that is polled.
         "files": pr.get("changedFiles"), "comments": len(pr.get("comments") or []),
+        "timeline": gh_timeline(pr),
         "checks": checks, "failing": failing, "reviewers": reviewers,
         "stage": stage, "tone": STAGE_TONE.get(stage, "mute"),
     }
@@ -950,14 +993,23 @@ def fetch_github_pr(card):
 
 def fetch_github_issue(card):
     it = gh_json(["issue", "view", str(card["number"]), "--repo", card["repo"],
-                  "--json", "number,title,state,updatedAt,labels,assignees,comments"])
+                  "--json", "number,title,state,createdAt,updatedAt,labels,"
+                  "assignees,comments,author,body"])
     stage = "closed" if it.get("state") == "CLOSED" else "open"
+    events = [{
+        "kind": "comment",
+        "who": (c.get("author") or {}).get("login") or "someone",
+        "assoc": c.get("authorAssociation"), "body": c.get("body") or "",
+        "at": c.get("createdAt"),
+    } for c in it.get("comments") or []]
     return {
         "title": it.get("title"), "state": it.get("state"),
-        "updated": it.get("updatedAt"),
+        "updated": it.get("updatedAt"), "opened": it.get("createdAt"),
+        "author": (it.get("author") or {}).get("login"),
+        "body": it.get("body") or "",
         "labels": [l.get("name") for l in it.get("labels") or []][:6],
         "assignees": [a.get("login") for a in it.get("assignees") or []],
-        "comments": len(it.get("comments") or []),
+        "comments": len(it.get("comments") or []), "timeline": events,
         "stage": stage, "tone": "mute" if stage == "closed" else "warn",
     }
 
@@ -1931,24 +1983,19 @@ PAGE = r"""<!doctype html>
   .empty { color: var(--faint); font-size: 12px; padding: 6px 4px; font-style: italic; }
 
   /* Project page.
-     Everything here is prefixed `p`: three class collisions in this stylesheet
-     have already cost a round of screenshots each, and a prefix is cheaper than
-     checking every name against 2500 lines.
+     Everything here is prefixed `p` (or `s` for the Slack thread, `pr`/`c` for
+     the pull request): class collisions in this stylesheet have already cost a
+     round of screenshots each, so the page keeps its own namespace.
 
-     The page is a fixed viewport, not a document that scrolls. Cards scroll
-     inside themselves, which is what lets a conversation be long without
-     pushing the pull request it belongs to off the bottom. */
+     A fixed viewport with one scroll region, so the header stays put and the
+     cards below it scroll as a body. */
   #project {
     height: calc(100vh - 92px); display: flex; flex-direction: column;
     background: var(--bg); overflow: hidden;
   }
-
   .phead { padding: 9px 18px 11px; border-bottom: 1px solid var(--line);
            background: var(--panel); flex: none; position: relative; }
   .pline { display: flex; align-items: center; gap: 9px; }
-  /* The title row carries the description rather than a card of its own: it was
-     the one fact worth keeping from `about`, and there was a band of empty space
-     beside the title already paying for it. */
   .ptop { margin-top: 5px; flex-wrap: wrap; }
   .phead h2 { margin: 0; font-size: 17px; }
   .pdesc {
@@ -1962,114 +2009,184 @@ PAGE = r"""<!doctype html>
   .phead .agent, .phead .when { font-size: 12px; white-space: nowrap; }
   .phead .jump { font-size: 12px; padding: 1px 7px; }
 
-  /* One baseline row height for everything, with the two kinds that can be
-     acted on taking two rows. A uniform grid is what stops the ragged holes a
-     content-sized one leaves, and it means a glance lands in the same place on
-     every project. */
+  .pscroll { flex: 1; overflow-y: auto; padding: 14px 18px 20px; }
+  .pquiet { color: var(--faint); font-size: 13px; padding: 8px 2px; }
+
+  /* The big tier: threads and pull requests, side by side on a wide screen and
+     stacked below ~1000px, each tall enough to read a conversation in. They are
+     all about the same height, so a row of them leaves no holes. */
   .pgrid {
-    flex: 1; overflow-y: auto; display: grid; gap: 12px;
-    /* auto-fit, not auto-fill: a node with two links should get two wide cards
-       rather than two narrow ones and a screen of empty tracks beside them. */
-    grid-template-columns: repeat(auto-fit, minmax(390px, 1fr));
-    grid-auto-rows: 224px; align-content: start; padding: 12px 18px 18px;
+    display: grid; gap: 14px; margin-bottom: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
   }
+  /* The chip tier: everything that is just a link, packed tight. */
+  .pmini {
+    display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  }
+
   .pcard {
-    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
     display: flex; flex-direction: column; overflow: hidden; min-width: 0;
   }
-  .pcard.tall { grid-row: span 2; }
+  /* A conversation card is a fixed-height window onto something longer: it caps
+     at most of the viewport and scrolls its body, so a 40-message thread and a
+     2-message one are the same size on the page. */
+  .pcard.tall { height: min(72vh, 620px); }
+  .pcard.wide { grid-column: auto; }
+
   .pcard > h3 {
-    flex: none; display: flex; align-items: center; gap: 7px;
-    font-size: 10.5px; font-weight: 600; color: var(--faint);
-    letter-spacing: .06em; margin: 0; padding: 9px 12px 8px;
-    border-bottom: 1px solid var(--line);
+    flex: none; display: flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 600; color: var(--faint);
+    letter-spacing: .04em; margin: 0; padding: 9px 12px;
+    border-bottom: 1px solid var(--line); background: var(--panel);
   }
-  .pcard > h3 .pk { text-transform: uppercase; color: var(--dim); }
+  .pcard > h3 .pk { color: var(--dim); font-family: ui-monospace, monospace;
+                    text-transform: none; letter-spacing: 0; }
   .pcard > h3 .grow { flex: 1; }
-  .pcard > h3 a { color: var(--faint); }
-  .pcard > h3 a:hover { color: var(--accent); }
-  .pbody { flex: 1; overflow-y: auto; padding: 10px 12px; min-height: 0; }
+  /* The open-in link, given room and a hit target rather than a 10px glyph in
+     the corner. */
+  .popen {
+    color: var(--accent); font-weight: 600; white-space: nowrap;
+    padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px;
+  }
+  .popen:hover { border-color: var(--accent); }
+  .pbody { flex: 1; overflow-y: auto; padding: 11px 13px; min-height: 0; }
   .pfoot {
-    flex: none; border-top: 1px solid var(--line); padding: 7px 10px 8px;
+    flex: none; border-top: 1px solid var(--line); padding: 8px 10px;
     display: flex; flex-direction: column; gap: 6px; background: var(--panel);
   }
-  /* A button in the footer is an action, not a bar: without this it stretched
-     to the card's whole width and read as a banner. */
-  .pfoot > button { align-self: flex-start; }
+  .pfootrow { display: flex; gap: 10px; }
+  .linkish {
+    background: none; border: none; color: var(--accent); font: inherit;
+    font-size: 11.5px; padding: 0; cursor: pointer;
+  }
 
   .pcard p { margin: 0 0 7px; color: var(--dim); overflow-wrap: anywhere; }
-  .pcard .ptitle {
-    font-size: 13.5px; color: var(--ink); margin: 0 0 7px; line-height: 1.4;
+  .pempty { color: var(--faint); font-size: 13px; }
+  .pempty p { color: inherit; margin-bottom: 8px; }
+  .pslackempty { padding: 4px 2px; }
+  .ptitle {
+    font-size: 13.5px; color: var(--ink); margin: 0 0 6px; line-height: 1.4;
     overflow-wrap: anywhere;
   }
-  .pempty { color: var(--faint); font-size: 12.5px; }
-  .pempty p { color: inherit; }
-  .pnothing { grid-column: 1 / -1; }
   .pfound {
     color: var(--faint); font-weight: 400; letter-spacing: 0; font-size: 10px;
     font-style: italic;
   }
+  .pdim { color: var(--faint); font-weight: 400; }
   .pmono {
     font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--faint);
     overflow-wrap: anywhere;
   }
-  .prow {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 5px 9px;
-    font-size: 12px; color: var(--dim); margin-top: 8px;
-  }
-  .prow .sep { color: var(--line); }
-  /* Nothing else in the stylesheet colours a bare anchor, so one inside a card
-     drew as the browser's default blue-on-dark and was unreadable. */
+  .sep { color: var(--line); margin: 0 2px; }
   .pbody a, .pfoot a { color: var(--accent); }
   .pfail {
-    margin-top: 8px; font-size: 11.5px; color: var(--blocked);
+    margin-top: 6px; font-size: 11.5px; color: var(--blocked);
     font-family: ui-monospace, monospace; white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
 
+  /* An avatar: the service's own image over a coloured initial, so it reads
+     even before the image loads and if it never does. */
+  .pav {
+    flex: none; width: 26px; height: 26px; border-radius: 50%; position: relative;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600; color: #fff; overflow: hidden;
+    background: hsl(var(--h, 210), 45%, 45%);
+  }
+  .pav img {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+    opacity: 0; transition: opacity .15s;
+  }
+
   .pbadge {
-    display: inline-flex; align-items: center; font-size: 11.5px;
+    display: inline-flex; align-items: center; font-size: 11px;
     font-weight: 600; border-radius: 999px; padding: 1px 9px;
     border: 1px solid color-mix(in srgb, var(--t) 45%, transparent);
-    background: color-mix(in srgb, var(--t) 13%, transparent); color: var(--t);
-    white-space: nowrap; margin-right: 4px;
+    background: color-mix(in srgb, var(--t) 14%, transparent); color: var(--t);
+    white-space: nowrap; flex: none;
   }
   .pbadge.good { --t: var(--in-review); }
   .pbadge.warn { --t: var(--in-progress); }
   .pbadge.bad  { --t: var(--blocked); }
   .pbadge.mute { --t: var(--faint); }
 
-  .pchecks { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 9px;
+  /* Pull request: a header block, then the conversation, like the real page. */
+  .prhead { border-bottom: 1px solid var(--line); padding-bottom: 11px; margin-bottom: 4px; }
+  .prtitle { display: flex; align-items: baseline; gap: 8px; }
+  .prtitle span { font-size: 15px; font-weight: 600; color: var(--ink);
+                  line-height: 1.35; overflow-wrap: anywhere; }
+  .prmeta { font-size: 12px; color: var(--dim); margin-top: 6px; }
+  .prfacts { font-size: 12px; color: var(--dim); margin-top: 4px; }
+  .padd { color: var(--in-review); font-family: ui-monospace, monospace; }
+  .pdel { color: var(--blocked); font-family: ui-monospace, monospace; }
+  .pchecks { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px;
              font-size: 11.5px; font-family: ui-monospace, monospace; }
   .cgood { color: var(--in-review); }
   .cwarn { color: var(--in-progress); }
   .cbad  { color: var(--blocked); }
   .cmute { color: var(--faint); }
 
-  /* A conversation, not a log: each message is a block with who and when above
-     it, so a thread can be followed the way it reads in Slack. */
-  .pthread { display: flex; flex-direction: column; gap: 11px; }
-  .pmsg { font-size: 12.5px; line-height: 1.45; }
-  .pwho { font-weight: 600; color: var(--ink); font-size: 12px; }
-  .pwhen { color: var(--faint); font-weight: 400; margin-left: 7px; font-size: 11px; }
-  .ptext { color: var(--dim); margin-top: 2px; overflow-wrap: anywhere; }
-  .ptext pre {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 5px;
-    padding: 6px 8px; margin: 5px 0; overflow-x: auto; font-size: 11.5px;
+  .pconvo { display: flex; flex-direction: column; gap: 14px; padding-top: 11px; }
+  .pev { display: flex; gap: 9px; }
+  .pevmain { flex: 1; min-width: 0; }
+  .pevhead { display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+             font-size: 12.5px; }
+  .pevhead b { color: var(--ink); }
+  .ptag {
+    font-size: 10px; color: var(--faint); border: 1px solid var(--line);
+    border-radius: 999px; padding: 0 6px; text-transform: lowercase;
   }
-  .ptext code { font-family: ui-monospace, monospace; font-size: .92em; }
-  .pmeta { color: var(--faint); font-size: 11px; margin-top: 2px; }
+  .pverdict { font-size: 11px; font-weight: 600; }
+  .pverdict.good { color: var(--in-review); }
+  .pverdict.bad  { color: var(--blocked); }
+  .pverdict.mute { color: var(--dim); }
+  /* The comment body reads like GitHub's: a bordered block under the byline. */
+  .pev-body {
+    margin-top: 5px; font-size: 12.5px; color: var(--dim); line-height: 1.5;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 7px;
+    padding: 8px 10px; overflow-wrap: anywhere;
+  }
+  .pev-body > :first-child { margin-top: 0; }
+  .pev-body > :last-child { margin-bottom: 0; }
+  .pev-body h4, .pev-body h5, .pev-body h6 { font-size: 12.5px; margin: 9px 0 4px; color: var(--ink); }
+  .pev-body pre { background: var(--bg); border: 1px solid var(--line);
+                  border-radius: 5px; padding: 6px 8px; overflow-x: auto; font-size: 11.5px; }
+  .pev-body code { font-family: ui-monospace, monospace; font-size: .92em; }
+  .pev-body ul { margin: 4px 0; padding-left: 18px; }
+  .pev-body blockquote { border-left: 2px solid var(--line); margin: 4px 0;
+                         padding-left: 9px; color: var(--faint); }
+
+  /* Slack thread: avatar, name, time, message -- the thread pane. */
+  .sthread { display: flex; flex-direction: column; gap: 13px; }
+  .smsg { display: flex; gap: 9px; }
+  .smain { flex: 1; min-width: 0; }
+  .shead { display: flex; align-items: baseline; gap: 7px; font-size: 12px; }
+  .shead b { color: var(--ink); font-size: 13px; }
+  .stext { color: var(--ink); font-size: 13px; line-height: 1.46; margin-top: 1px;
+           overflow-wrap: anywhere; }
+  .stext a { color: var(--accent); }
+  .stext pre { background: var(--panel); border: 1px solid var(--line);
+               border-radius: 5px; padding: 6px 8px; margin: 5px 0; overflow-x: auto;
+               font-size: 11.5px; }
+  .stext code { font-family: ui-monospace, monospace; font-size: .92em; }
+  .sreacts { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+  .preact {
+    font-size: 11px; color: var(--dim); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 999px; padding: 0 7px;
+  }
 
   .psend { display: flex; gap: 6px; align-items: flex-end; }
   .psend textarea {
-    flex: 1; resize: vertical; min-height: 30px; max-height: 150px;
+    flex: 1; resize: vertical; min-height: 32px; max-height: 160px;
     background: var(--bg); color: var(--ink); border: 1px solid var(--line);
-    border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 12.5px;
-    font-family: inherit;
+    border-radius: 6px; padding: 7px 9px; font: inherit; font-size: 12.5px;
   }
   .psend textarea:focus { outline: none; border-color: var(--accent); }
   .psend button { flex: none; }
-  .psent { font-size: 11.5px; color: var(--faint); overflow-wrap: anywhere; }
+  .psent { font-size: 11.5px; color: var(--faint); overflow-wrap: anywhere;
+           display: flex; gap: 8px; align-items: center; }
   /* Two rows, not one. Five controls in a 520px panel had nothing telling them
      to stay whole, so every label broke mid-word: "in-/progress", "no/priority",
      "jump to desktop/8". The controls sit on one line and the facts about the
@@ -3004,88 +3121,171 @@ function sendBox(key, placeholder, label) {
 }
 
 // ---- the cards themselves -------------------------------------------------
+//
+// Each of the two that can be acted on borrows the layout of the app it mirrors,
+// so the eye already knows where to look: the GitHub card reads top-to-bottom
+// like a pull request (title, the opening post, then the conversation), and the
+// Slack card reads like a thread (avatar, name, time, message). Using the known
+// shape is the point -- an invented layout would have to be learned.
 
-function slackCard(l) {
-  const k = tkey(l.channel, l.ts);
-  const t = pThread[k] || {};
-  const head = `<span class="pk">slack</span>
-    <span class="pmono">${esc(l.channel)}</span>
-    ${l.found ? '<span class="pfound">in the notes</span>' : ""}
-    <span class="grow"></span>
-    ${l.app_url ? `<a href="${esc(l.app_url)}" title="open the channel in the Slack app">app</a>` : ""}
-    <a href="${esc(l.url)}" target="_blank" rel="noreferrer" title="${esc(l.url)}">↗</a>`;
+// A GitHub avatar is a public URL keyed by login, so it loads with no token and
+// makes the timeline read like the real one. The initial is what shows while it
+// loads and if it 404s.
+function avatar(login, url) {
+  const initial = esc((login || "?")[0].toUpperCase());
+  const src = url || (login ? `https://github.com/${encodeURIComponent(login)}.png?size=48` : "");
+  return `<span class="pav" style="--h:${hue(login || "?")}">${initial}${
+    src ? `<img src="${esc(src)}" alt="" loading="lazy"
+      onload="this.style.opacity=1" onerror="this.remove()">` : ""}</span>`;
+}
 
-  if (t.error === "no-creds") {
-    return card("tall", head, `<div class="pempty">
-      <p>No Slack token yet, so the conversation cannot be read.</p>
-      <p class="pmono">${esc(t.conf || "")}</p>
-      <p>Put a <code>token</code> there, plus a <code>cookie</code> if it is an
-         <code>xoxc-</code> one.</p></div>`);
-  }
-  if (t.error) {
-    return card("tall", head, `<div class="pempty"><p class="pfail">${esc(t.error)}</p></div>`);
-  }
-  if (!t.messages) {
-    return card("tall", head, `<div class="pempty"><p>reading the thread…</p></div>`);
-  }
+// A stable colour per name for the initial fallback, so the same person is the
+// same colour every time rather than a colour per render.
+function hue(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+  return h;
+}
 
-  const msgs = t.messages.map(m => `
-    <div class="pmsg">
-      <div class="pwho">${esc(m.who)}<span class="pwhen">${esc(slackWhen(m.ts))}</span></div>
-      <div class="ptext">${slackText(m.text)}</div>
-      ${m.files ? `<div class="pmeta">${m.files} file${m.files === 1 ? "" : "s"}</div>` : ""}
-    </div>`).join("");
+// Only the workspace member is `MEMBER`; everyone else on a PR shows their
+// association the way GitHub badges it, and a bot says bot.
+function assoc(a, bot) {
+  if (bot) return "bot";
+  if (!a || a === "NONE" || a === "MEMBER" || a === "OWNER") return "";
+  return a.toLowerCase().replace(/_/g, " ");
+}
 
-  const sent = pSent[k];
-  return card("tall", head,
-    `<div class="pthread">${msgs || '<div class="pempty"><p>no messages</p></div>'}</div>`,
-    `<div class="pfoot">
-       ${sent ? `<div class="psent">replied ·
-         <a href="${esc(sent)}" target="_blank" rel="noreferrer">${esc(sent)}</a>
-         <button data-copy="${esc(sent)}">copy link</button></div>` : ""}
-       ${sendBox(k, "reply in this thread", "reply")}
-     </div>`);
+const REVIEW_WORD = {
+  APPROVED: "approved", CHANGES_REQUESTED: "requested changes",
+  COMMENTED: "reviewed", DISMISSED: "review dismissed",
+};
+const REVIEW_TONE = {
+  APPROVED: "good", CHANGES_REQUESTED: "bad", COMMENTED: "mute", DISMISSED: "mute",
+};
+
+function timelineEntry(e) {
+  const bot = /(\[bot\]|-bot$|^github-actions$|^linear$)/.test(e.who || "");
+  const tag = assoc(e.assoc, bot);
+  const rv = e.kind === "review" ? REVIEW_WORD[e.state] || "reviewed" : "";
+  return `<div class="pev">
+    ${avatar(e.who)}
+    <div class="pevmain">
+      <div class="pevhead">
+        <b>${esc(e.who)}</b>
+        ${tag ? `<span class="ptag">${esc(tag)}</span>` : ""}
+        ${rv ? `<span class="pverdict ${REVIEW_TONE[e.state] || "mute"}">${esc(rv)}</span>`
+             : '<span class="pdim">commented</span>'}
+        <span class="pdim">${esc(isoAgo(e.at))}</span>
+      </div>
+      ${e.body && e.body.trim()
+        ? `<div class="pev-body">${md(e.body)}</div>` : ""}
+    </div>
+  </div>`;
 }
 
 function prCard(l) {
-  const what = l.kind === "github-pr" ? "pull" : "issue";
-  const head = `<span class="pk">github ${what}</span>
-    <span class="pmono">${esc(l.repo)}#${l.number}</span>
+  const what = l.kind === "github-pr" ? "pull request" : "issue";
+  const head = `<span class="pk">${esc(l.repo)} #${l.number}</span>
     ${l.found ? '<span class="pfound">in the notes</span>' : ""}
     <span class="grow"></span>
-    <a href="${esc(l.url)}" target="_blank" rel="noreferrer" title="${esc(l.url)}">↗</a>`;
+    <a class="popen" href="${esc(l.url)}" target="_blank" rel="noreferrer">open on GitHub ↗</a>`;
 
   if (l.error) return card("tall", head, `<div class="pempty"><p class="pfail">${esc(l.error)}</p></div>`);
   const d = l.data;
-  if (!d) return card("tall", head, `<div class="pempty"><p>reading…</p></div>`);
+  if (!d) return card("tall", head, `<div class="pempty"><p>reading the ${what}…</p></div>`);
 
-  const bits = [];
-  if (d.review) bits.push(esc(d.review.toLowerCase().replace(/_/g, " ")));
-  if (d.reviewers && d.reviewers.length) bits.push("with " + esc(d.reviewers.join(", ")));
-  if (d.assignees && d.assignees.length) bits.push(esc(d.assignees.join(", ")));
-  if (d.labels && d.labels.length) bits.push(esc(d.labels.join(", ")));
-  if (d.adds != null) bits.push(`<span class="pmono">+${d.adds} −${d.dels}</span>`);
-  if (d.files != null) bits.push(d.files + (d.files === 1 ? " file" : " files"));
-  if (d.comments) bits.push(d.comments + (d.comments === 1 ? " comment" : " comments"));
-  if (d.updated) bits.push(esc(isoAgo(d.updated)));
+  // The stat line, in GitHub's own order: who opened it when, the branch, the
+  // diff, the file and comment counts.
+  const meta = [];
+  if (d.author) meta.push(`<b>${esc(d.author)}</b> opened this ${esc(isoAgo(d.opened))}`);
+  if (d.branch) meta.push(`<span class="pmono">${esc(d.branch)} → ${esc(d.base)}</span>`);
+  const facts = [];
+  if (d.adds != null) facts.push(`<span class="padd">+${d.adds}</span> <span class="pdel">−${d.dels}</span>`);
+  if (d.files != null) facts.push(d.files + (d.files === 1 ? " file" : " files"));
+  if (d.reviewers && d.reviewers.length) facts.push("waiting on " + esc(d.reviewers.join(", ")));
+  if (d.labels && d.labels.length) facts.push(esc(d.labels.join(", ")));
 
   const counts = d.checks ? [
-    d.checks.failed ? `<span class="cbad">✗ ${d.checks.failed} failed</span>` : "",
+    d.checks.failed ? `<span class="cbad">✗ ${d.checks.failed} failing</span>` : "",
     d.checks.pending ? `<span class="cwarn">○ ${d.checks.pending} running</span>` : "",
     d.checks.passed ? `<span class="cgood">✓ ${d.checks.passed} passed</span>` : "",
     d.checks.skipped ? `<span class="cmute">${d.checks.skipped} skipped</span>` : "",
   ].filter(Boolean).join("") : "";
 
-  return card("tall", head, `
-    <div class="ptitle">${badge(d.tone, d.stage)} ${esc(d.title || "")}</div>
-    ${d.branch ? `<div class="pmono">${esc(d.branch)} → ${esc(d.base)}</div>` : ""}
-    <div class="prow">${bits.join('<span class="sep">·</span>')}</div>
-    ${counts ? `<div class="pchecks">${counts}</div>` : ""}
-    ${d.failing && d.failing.length
-      ? `<div class="pfail">${esc(d.failing.join("\n"))}</div>` : ""}`,
+  // The opening post is the first entry in the conversation, GitHub-style: the
+  // author's avatar, the description body, dated when the PR opened.
+  const opening = (d.body && d.body.trim()) ? timelineEntry(
+    {kind: "comment", who: d.author, assoc: "", body: d.body, at: d.opened}) : "";
+  const convo = (d.timeline || []).map(timelineEntry).join("");
+  const n = (d.timeline || []).length;
+
+  return card("tall wide", head, `
+    <div class="prhead">
+      <div class="prtitle">${badge(d.tone, d.stage)}<span>${esc(d.title || "")}</span></div>
+      <div class="prmeta">${meta.join('<span class="sep">·</span>')}</div>
+      <div class="prfacts">${facts.join('<span class="sep">·</span>')}</div>
+      ${counts ? `<div class="pchecks">${counts}</div>` : ""}
+      ${d.failing && d.failing.length
+        ? `<div class="pfail">${esc(d.failing.join("\n"))}</div>` : ""}
+    </div>
+    <div class="pconvo">
+      ${opening}
+      ${n ? convo : (opening ? "" : '<div class="pdim pquiet">no description or comments</div>')}
+    </div>`,
     `<div class="pfoot">
-       ${d.branch ? `<button data-copy="${esc(d.branch)}">copy branch</button>` : ""}
-       ${sendBox("gh|" + l.url, "comment on this " + what, "comment")}
+       ${sendBox("gh|" + l.url, "comment on this " + what + "…", "comment")}
+       <div class="pfootrow">
+         ${d.branch ? `<button class="linkish" data-copy="${esc(d.branch)}">copy branch name</button>` : ""}
+       </div>
+     </div>`);
+}
+
+function slackCard(l) {
+  const k = tkey(l.channel, l.ts);
+  const t = pThread[k] || {};
+  const head = `<span class="pk"># ${esc(l.chan_name || l.channel)}</span>
+    ${l.found ? '<span class="pfound">in the notes</span>' : ""}
+    <span class="grow"></span>
+    ${l.app_url ? `<a class="popen" href="${esc(l.app_url)}">open in Slack</a>` : ""}
+    <a class="popen" href="${esc(l.url)}" target="_blank" rel="noreferrer">web ↗</a>`;
+
+  if (t.error === "no-creds") {
+    return card("tall wide", head, `<div class="pempty pslackempty">
+      <p><b>Slack isn't connected yet</b>, so the thread can't be shown.</p>
+      <p>Drop a token at <span class="pmono">${esc(t.conf || "")}</span> — see the
+         note in chat for the two ways to get one.</p></div>`);
+  }
+  if (t.error) {
+    return card("tall wide", head, `<div class="pempty"><p class="pfail">${esc(t.error)}</p></div>`);
+  }
+  if (!t.messages) {
+    return card("tall wide", head, `<div class="pempty"><p>reading the thread…</p></div>`);
+  }
+
+  const msgs = t.messages.map((m, i) => {
+    const react = (m.reactions || []).map(r =>
+      `<span class="preact">:${esc(r.name)}: ${r.count}</span>`).join("");
+    return `<div class="smsg">
+      ${avatar(m.who, m.avatar)}
+      <div class="smain">
+        <div class="shead"><b>${esc(m.who)}</b>
+          <span class="pdim">${esc(slackWhen(m.ts))}</span>
+          ${i === 0 ? '<span class="ptag">thread start</span>' : ""}</div>
+        <div class="stext">${slackText(m.text)}</div>
+        ${m.files ? `<div class="pdim">📎 ${m.files} file${m.files === 1 ? "" : "s"}</div>` : ""}
+        ${react ? `<div class="sreacts">${react}</div>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+
+  const sent = pSent[k];
+  return card("tall wide", head,
+    `<div class="sthread">${msgs || '<div class="pempty"><p>no messages</p></div>'}</div>`,
+    `<div class="pfoot">
+       ${sendBox(k, "reply in thread…", "send")}
+       ${sent ? `<div class="psent">sent ·
+         <a href="${esc(sent)}" target="_blank" rel="noreferrer">view</a>
+         <button class="linkish" data-copy="${esc(sent)}">copy link</button></div>` : ""}
      </div>`);
 }
 
@@ -3100,8 +3300,8 @@ function linkCard(l) {
   const head = `<span class="pk">${esc(label)}</span>
     ${l.found ? '<span class="pfound">in the notes</span>' : ""}
     <span class="grow"></span>
-    ${l.app_url ? `<a href="${esc(l.app_url)}">app</a>` : ""}
-    <a href="${esc(l.url)}" target="_blank" rel="noreferrer" title="${esc(l.url)}">↗</a>`;
+    ${l.app_url ? `<a class="popen" href="${esc(l.app_url)}">app</a>` : ""}
+    <a class="popen" href="${esc(l.url)}" target="_blank" rel="noreferrer">open ↗</a>`;
   const what = l.issue || l.channel || l.repo || l.key || "";
   return card("", head,
     `${what ? `<div class="ptitle">${esc(what)}</div>` : ""}
@@ -3122,12 +3322,16 @@ function drawProject() {
   }
 
   const links = pLinks !== null ? pLinks : [];
-  // Order is the whole layout: the things that can be acted on come first, and
-  // the rest are one-line cards that fill in around them.
+  // Two tiers, because they want different room. Threads and pull requests are
+  // worked in, so they get large, uniform cards; a plain link is a chip. Each
+  // tier is its own grid so one tall card cannot leave a hole beside a short
+  // one -- the ragged-grid problem is solved by not mixing the two heights.
+  const isBig = l => l.kind === "slack-thread"
+    || l.kind === "github-pr" || l.kind === "github-issue";
   const rank = l => l.kind === "slack-thread" ? 0
-    : l.kind === "github-pr" ? 1 : l.kind === "github-issue" ? 2
-    : l.kind === "linear-issue" ? 3 : 4;
-  const ordered = links.slice().sort((a, b) => rank(a) - rank(b));
+    : l.kind === "github-pr" ? 1 : 2;
+  const big = links.filter(isBig).sort((a, b) => rank(a) - rank(b));
+  const mini = links.filter(l => !isBig(l));
 
   host.innerHTML = `
     <div class="phead" style="--c:${cssVar(c.status)}">
@@ -3167,13 +3371,13 @@ function drawProject() {
         <button data-set="${esc(c.path)}" data-level="">${BARS(0)}none</button>
       </div>` : ""}
     </div>
-    <div class="pgrid">
-      ${ordered.map(linkCard).join("")}
-      ${pLinks === null ? '<section class="pcard"><h3>reading the node</h3></section>' : ""}
+    <div class="pscroll">
+      ${pLinks === null ? '<div class="pdim pquiet">reading the node…</div>' : ""}
+      ${big.length ? `<div class="pgrid">${big.map(linkCard).join("")}</div>` : ""}
+      ${mini.length ? `<div class="pmini">${mini.map(linkCard).join("")}</div>` : ""}
       ${pLinks !== null && !links.length
-        ? `<section class="pcard pnothing"><h3>nothing linked</h3>
-             <div class="pbody"><p>This node names no pull request, thread or issue,
-             in its frontmatter or anywhere in its notes.</p></div></section>` : ""}
+        ? `<div class="pquiet"><b>Nothing linked.</b> This node names no pull request,
+             thread or issue — not in its frontmatter and not anywhere in its notes.</div>` : ""}
     </div>`;
   document.getElementById("pback").addEventListener("click", gotoBoard);
   wireProject();
