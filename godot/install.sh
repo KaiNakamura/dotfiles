@@ -2,16 +2,25 @@
 
 set -e
 
-GODOT_VERSION="4.6.1"
+GODOT_VERSION="4.7.2"
 GODOT_FLAVOR="stable"
 
 INSTALL_DIR="$HOME/.local/godot"
 BINARY="$INSTALL_DIR/godot"
 
-# Check if already installed
-if [[ -f "$BINARY" ]]; then
-    echo "Godot is already installed, skipping download..."
+# Check if the requested version is already installed. --version prints
+# e.g. "4.6.1.stable.official.14d19694e", so match on the version and flavor.
+INSTALLED_VERSION=""
+if [[ -x "$BINARY" ]]; then
+    INSTALLED_VERSION=$("$BINARY" --headless --version 2>/dev/null || true)
+fi
+
+if [[ "$INSTALLED_VERSION" == "${GODOT_VERSION}.${GODOT_FLAVOR}."* ]]; then
+    echo "Godot ${GODOT_VERSION}-${GODOT_FLAVOR} is already installed, skipping download..."
 else
+    if [[ -n "$INSTALLED_VERSION" ]]; then
+        echo "Found Godot ${INSTALLED_VERSION}, replacing it"
+    fi
     echo "Downloading Godot ${GODOT_VERSION}-${GODOT_FLAVOR}..."
 
     URL="https://downloads.godotengine.org/?version=${GODOT_VERSION}&flavor=${GODOT_FLAVOR}&slug=linux.x86_64.zip&platform=linux.64"
