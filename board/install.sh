@@ -1,23 +1,19 @@
 #!/bin/bash
 # The board: a kanban view of the thoughts vault.
 #
-# Installed as a plain script rather than a systemd service, because the board
-# is something to open when you want it, not a thing that should be running.
-# It reads the vault through `th`, so the th module installs first.
+# It lives in its own repo and is installed from a fresh clone of it, the same
+# way th is. It reads the vault through `th`, so the th module installs first.
 
 set -e
 
-WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET_BIN="$HOME/.local/bin"
+BOARD_REPO="https://github.com/KaiNakamura/th-board"
 
-mkdir -p "$TARGET_BIN"
-echo "  Installing: board"
-cp "$WORKDIR/board.py" "$TARGET_BIN/board"
-chmod +x "$TARGET_BIN/board"
-
-if ! command -v th > /dev/null 2>&1; then
-    echo "Note: th is not on PATH, so the board has nothing to read yet."
-    echo "It is installed by the th module."
+if ! command -v git > /dev/null 2>&1; then
+    echo "Note: git is not on PATH, so the board was skipped."
+    exit 0
 fi
 
-echo "Done."
+SRC="$(mktemp -d)"
+trap 'rm -rf "$SRC"' EXIT
+git clone --quiet --depth 1 "$BOARD_REPO" "$SRC"
+bash "$SRC/install.sh"
