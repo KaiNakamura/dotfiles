@@ -16,6 +16,7 @@ import concurrent.futures
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import threading
@@ -334,7 +335,7 @@ def build_board(vault):
             "open": open_nodes.get(path),
             "agent": None if not agent else {
                 "pid": agent.get("pid"),
-                "idle_seconds": agent.get("idle_seconds", 0),
+                "idle_seconds": agent.get("idle_seconds") or 0,
                 # What the session says about itself, which is the fact the
                 # card is actually asking for. `idle_seconds` measures silence,
                 # and a session that is thinking produces the same silence as
@@ -346,7 +347,7 @@ def build_board(vault):
                 # Something waiting for a prompt is not stale however long it
                 # has waited, and something working is not stale at all.
                 "stale": (agent.get("state") is None
-                          and agent.get("idle_seconds", 0) > STALE_SECONDS),
+                          and (agent.get("idle_seconds") or 0) > STALE_SECONDS),
                 "desktop": desks.get(str(agent.get("pid"))),
             },
         })
@@ -528,7 +529,7 @@ def node_urls(vault, node_path):
             continue
         for url in URL_IN_PROSE.findall(text):
             url = URL_TAIL.sub("", url)
-            if any(h in url for h in ("github.com", "slack.com", "linear.app")):
+            if any(h in url for h in PROSE_HOSTS):
                 found.append(url)
     return found
 
@@ -549,6 +550,14 @@ def link_identity(card):
         return ("slack", card["channel"], None)
     if card["kind"] == "linear-issue":
         return ("linear", card["issue"])
+    if card["kind"] == "linear-project":
+        return ("linear-project", card["slug"])
+    if card["kind"] == "alert-group":
+        return ("alert", card["alert"])
+    # Every URL that names one job is that job: the dashboard, the alert's
+    # tracker link, an Argo run, an ops-api call.
+    if card["kind"] == "job":
+        return ("job", card["env"], card["job"])
     return ("url", card["url"])
 
 
@@ -558,21 +567,21 @@ def node_link_cards(vault, card):
     A frontmatter link keeps its key as a label and wins any tie, because
     someone chose to put it there.
     """
-    out, seen = [], set()
-    for key, url in (card.get("links") or {}).items():
+    out, seen = [], {}
+    pairs = [(k, u, False) for k, u in (card.get("links") or {}).items()]
+    pairs += [("", u, True) for u in node_urls(vault, card["path"])]
+    for key, url, found in pairs:
         c = classify_link(key, url)
         ident = link_identity(c)
         if ident in seen:
+            # A job keeps every way it was linked, so its card can offer each.
+            first = seen[ident]
+            if c["kind"] == "job" and url not in first["also"]:
+                first["also"].append(url)
             continue
-        seen.add(ident)
-        out.append(c)
-    for url in node_urls(vault, card["path"]):
-        c = classify_link("", url)
-        ident = link_identity(c)
-        if ident in seen:
-            continue
-        seen.add(ident)
-        c["found"] = True
+        seen[ident] = c
+        if found:
+            c["found"] = True
         out.append(c)
     return out
 
@@ -641,8 +650,20 @@ def classify_link(key, url):
         return card
     m = LINEAR_ISSUE.match(url)
     if m:
-        card.update(kind="linear-issue", team=m.group(1), issue=m.group(2).upper())
+        card.update(kind="linear-issue", team=m.group(1), issue=m.group(2).upper(),
+                    live=True)
         return card
+    m = LINEAR_PROJECT.match(url)
+    if m:
+        card.update(kind="linear-project", team=m.group(1), slug=m.group(2),
+                    live=True)
+        return card
+    m = ALERT_GROUP.match(url)
+    if m:
+        card.update(kind="alert-group", grafana=m.group(1), alert=m.group(2),
+                    live=True)
+        return card
+    classify_job(card, url)
     return card
 
 
@@ -651,8 +672,9 @@ def slack_app_url(card):
 
     Only the channel is addressable this way. Slack's deep-link docs describe
     `channel` and `user` targets and nothing for a single message, so the card
-    offers the channel in the app and the permalink in the browser rather than
-    guessing at a message parameter that no primary source describes.
+    opens the channel in the app rather than guessing at a message parameter that
+    no primary source describes, and falls back to the permalink where the team
+    id is unknown.
     """
     team = slack_team()
     if team:
@@ -678,6 +700,7 @@ SLACK_CONF = os.path.join(
 SLACK_API = "https://slack.com/api/"
 SLACK_SECONDS = 25        # how long a fetched thread is reused
 _slack_users = {}
+_slack_me = {}        # token -> the id of whoever that token belongs to
 
 
 def slack_creds():
@@ -691,19 +714,21 @@ def slack_creds():
     """
     token = (os.environ.get("BOARD_SLACK_TOKEN") or "").strip()
     cookie = (os.environ.get("BOARD_SLACK_COOKIE") or "").strip()
+    me = ""
     if not token:
         try:
             with open(SLACK_CONF, encoding="utf-8") as fh:
                 conf = json.load(fh)
             token = (conf.get("token") or "").strip()
             cookie = (conf.get("cookie") or "").strip()
+            me = (conf.get("user_id") or "").strip()
         except (OSError, ValueError):
             return None
     if not token:
         return None
     if token.startswith("xoxc-") and not cookie:
         return None
-    return {"token": token, "cookie": cookie}
+    return {"token": token, "cookie": cookie, "user_id": me}
 
 
 def slack_call(method, params, creds):
@@ -755,6 +780,31 @@ def slack_who(user_id, creds):
     return who
 
 
+def slack_me(creds):
+    """The signed-in user's own id, for telling their messages from everyone
+    else's.
+
+    Written into the config at auth time, so the usual path costs nothing. A
+    config written before that field existed falls back to one `auth.test`,
+    cached against the token rather than in a bare global so that swapping
+    tokens cannot hand back the previous account's id. An empty string on
+    failure: not knowing who you are makes the thread's banner vaguer, it does
+    not stop the thread rendering.
+    """
+    if creds.get("user_id"):
+        return creds["user_id"]
+    token = creds["token"]
+    if token in _slack_me:
+        return _slack_me[token]
+    who = ""
+    try:
+        who = slack_call("auth.test", {}, creds).get("user_id") or ""
+    except RuntimeError:
+        pass
+    _slack_me[token] = who
+    return who
+
+
 def slack_thread(channel, ts, creds):
     """A thread as a list of messages, oldest first.
 
@@ -763,7 +813,8 @@ def slack_thread(channel, ts, creds):
     """
     body = slack_call("conversations.replies",
                       {"channel": channel, "ts": ts, "limit": 100}, creds)
-    out = []
+    me = slack_me(creds)
+    out, raw = [], []
     for m in body.get("messages") or []:
         text = m.get("text") or ""
         # A bot posting blocks leaves `text` empty and the words in attachments.
@@ -788,7 +839,39 @@ def slack_thread(channel, ts, creds):
             "reactions": [{"name": r.get("name"), "count": r.get("count", 0)}
                           for r in (m.get("reactions") or [])],
         })
-    return {"messages": out, "channel": channel}
+        raw.append(m)
+    return {"messages": out, "channel": channel,
+            "situation": slack_situation(raw, out, channel, me)}
+
+
+def slack_situation(raw, shown, channel, me):
+    """Whose move the thread is waiting on -- the same shape a pull request
+    reports, so both cards lead with one line that reads the same way.
+
+    Only the last message decides it: a conversation is waiting on whoever has
+    not answered yet. Someone else having the last word counts as your move even
+    when they did not address you by name, because the alternative -- treating an
+    unanswered message as settled -- is the failure that loses a thread. The
+    newest messages sit directly under this line, so a miscall is visible
+    immediately rather than being taken on trust.
+    """
+    if not raw:
+        return None
+    last, name = raw[-1], shown[-1]["who"]
+    since = ""
+    try:
+        since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(float(last.get("ts"))))
+    except (TypeError, ValueError):
+        pass
+    if me and last.get("user") == me:
+        return {"court": "theirs", "verb": "you replied last", "who": "",
+                "since": since}
+    # A DM is addressed to you by construction, so it needs no mention to count
+    # as a question put to you.
+    asked = ("<@%s>" % me in (last.get("text") or "")) if me else False
+    verb = "asked you" if (asked or channel.startswith("D")) else "spoke last"
+    return {"court": "mine", "verb": "%s %s" % (name, verb), "who": "",
+            "since": since}
 
 
 class SlackThreads:
@@ -823,6 +906,40 @@ class SlackThreads:
 
 
 THREADS = SlackThreads()
+
+
+_slack_people = {}
+
+
+def slack_people():
+    """Everyone in the workspace who can be mentioned, for the reply box's @
+    picker: real, active people, not bots or the deactivated. One users.list
+    walk, kept for an hour, since a workspace roster barely moves."""
+    creds = slack_creds()
+    if not creds:
+        return {"error": "no-creds"}
+    hit = _slack_people.get(creds["token"])
+    if hit and time.time() - hit["at"] < 3600:
+        return {"people": hit["people"]}
+    people, cursor = [], ""
+    for _ in range(20):
+        body = slack_call("users.list", {"limit": 200, "cursor": cursor}, creds)
+        for u in body.get("members") or []:
+            if u.get("deleted") or u.get("is_bot") or u.get("id") == "USLACKBOT":
+                continue
+            prof = u.get("profile") or {}
+            people.append({
+                "id": u["id"], "handle": u.get("name") or "",
+                "name": prof.get("display_name") or prof.get("real_name") or u.get("name") or "",
+                "real": prof.get("real_name") or "",
+                "avatar": prof.get("image_48") or "",
+            })
+        cursor = (body.get("response_metadata") or {}).get("next_cursor") or ""
+        if not cursor:
+            break
+    people.sort(key=lambda p: p["name"].lower())
+    _slack_people[creds["token"]] = {"at": time.time(), "people": people}
+    return {"people": people}
 
 
 def slack_reply(channel, ts, text):
@@ -966,13 +1083,13 @@ def pr_stage(pr, checks):
 
 # Which stages are a call for attention, which are fine, and which are neither.
 # The page colours on this rather than on the raw state, so one word decides it.
-STAGE_TONE = {
-    "CI failing": "bad", "changes requested": "bad", "conflicts": "bad",
-    "approved, conflicts": "bad",
-    "CI running": "warn", "awaiting review": "warn", "open, no reviewer": "warn",
-    "approved, ready to merge": "good", "merged": "good",
-    "draft": "mute", "closed": "mute",
-}
+# The badge is coloured the way GitHub colours a PR's state pill -- open green,
+# draft grey, merged purple, closed red -- whatever finer stage its text names.
+# Colour answers "what state is it in" at a glance, the words say why.
+def gh_tone(stage):
+    if stage in ("merged", "closed", "draft"):
+        return "gh-" + stage
+    return "gh-open"
 
 
 def pr_situation(pr, stage):
@@ -995,9 +1112,10 @@ def pr_situation(pr, stage):
     opened, updated = pr.get("createdAt"), pr.get("updatedAt")
 
     if stage == "merged":
-        return {"court": "done", "verb": "merged", "who": "", "since": updated}
+        return {"court": "merged", "verb": "merged", "who": "", "since": updated}
     if stage == "closed":
-        return {"court": "done", "verb": "closed", "who": "", "since": updated}
+        return {"court": "closed", "verb": "closed without merging", "who": "",
+                "since": updated}
     if stage == "draft":
         return {"court": "mine", "verb": "not sent for review yet",
                 "who": "", "since": opened}
@@ -1071,16 +1189,20 @@ def fetch_github_pr(card):
         "files": pr.get("changedFiles"), "comments": len(pr.get("comments") or []),
         "timeline": gh_timeline(pr),
         "checks": checks, "failing": failing, "reviewers": reviewers,
-        "stage": stage, "tone": STAGE_TONE.get(stage, "mute"),
+        "stage": stage, "tone": gh_tone(stage),
         "situation": pr_situation(pr, stage),
     }
 
 
 def fetch_github_issue(card):
     it = gh_json(["issue", "view", str(card["number"]), "--repo", card["repo"],
-                  "--json", "number,title,state,createdAt,updatedAt,labels,"
-                  "assignees,comments,author,body"])
+                  "--json", "number,title,state,stateReason,createdAt,updatedAt,"
+                  "labels,assignees,comments,author,body"])
     stage = "closed" if it.get("state") == "CLOSED" else "open"
+    # GitHub's issue pill: open green, closed as completed purple, closed as not
+    # planned grey.
+    tone = ("gh-open" if stage == "open"
+            else "gh-draft" if it.get("stateReason") == "NOT_PLANNED" else "gh-merged")
     events = [{
         "kind": "comment",
         "who": (c.get("author") or {}).get("login") or "someone",
@@ -1095,11 +1217,411 @@ def fetch_github_issue(card):
         "labels": [l.get("name") for l in it.get("labels") or []][:6],
         "assignees": [a.get("login") for a in it.get("assignees") or []],
         "comments": len(it.get("comments") or []), "timeline": events,
-        "stage": stage, "tone": "mute" if stage == "closed" else "warn",
+        "stage": stage, "tone": tone,
     }
 
 
-FETCHERS = {"github-pr": fetch_github_pr, "github-issue": fetch_github_issue}
+# --------------------------------------------------------------------------
+# Jobs, alerts and Linear
+#
+# A pipeline job is linked many ways -- its ops-tracker dashboard, its alert,
+# an Argo run, an ops-api URL -- and every one of them is about the same state.
+# They are recognised as one job and drawn as one card, fed by the ops-api,
+# which answers over Tailscale without a credential. Alerts and Linear need a
+# token each; without one their card says so and how to add it.
+
+OPS_API = {"prod": "https://ops-api-prod.dingo-woodpecker.ts.net",
+           "dev": "https://ops-api-dev.dingo-woodpecker.ts.net"}
+ARGO_UI = {"prod": "https://argo-workflows.gc0-apps-prod-us-east-1.aws.infra.cyvl.ai"
+                   "/workflows/cyvl-asset-prod/",
+           "dev": "https://argo-workflows.gc0-apps-us-east-1.aws.infra.cyvl.ai"
+                  "/workflows/cyvl-asset-dev/"}
+OPS_TRACKER = ("https://cyvlappsprod.grafana.net/d/b916d088-2e4d-4e95-a0da-"
+               "aee5722fb283/ops-tracker-prod?var-tracker_id=job-%d")
+
+# Where a job number sits in each kind of URL that names one.
+JOB_IN_URL = [
+    re.compile(r"[?&]var-tracker_id=job-(\d+)"),
+    re.compile(r"ops-api-[a-z]+\.[^/]+/tracker/(?:info/)?job-(\d+)"),
+    re.compile(r"ops-api-[a-z]+\.[^/]+/jobs/(\d+)"),
+    re.compile(r"ops-api-service\.[^/]+/tracker/(?:info/)?job-(\d+)"),
+    re.compile(r"argo-workflows\.[^/]+/workflows/[^/]+/[a-z0-9-]*?-job-(\d+)-"),
+    re.compile(r"pitstop\.[^/]+/batches/[a-z0-9-]*?job-(\d+)"),
+]
+ALERT_GROUP = re.compile(
+    r"^https?://([a-z0-9-]+\.grafana\.net)/a/grafana-irm-app/alert-groups/([A-Z0-9]+)")
+LINEAR_PROJECT = re.compile(
+    r"^https?://linear\.app/([^/]+)/project/[a-z0-9-]*?-?([0-9a-f]{12})\b")
+
+# Hosts whose links are worth harvesting out of a node's prose, beyond the
+# ones that already had cards: the job and alert kinds only mean something if
+# the page can find them.
+PROSE_HOSTS = ("github.com", "slack.com", "linear.app", "grafana.net",
+               "ops-api-", "argo-workflows.", "pitstop.")
+
+
+def classify_job(card, url):
+    for rx in JOB_IN_URL:
+        m = rx.search(url)
+        if m:
+            env = "dev" if ("-dev" in card["host"] or "apps-us-east-1" in url
+                            or "cyvl-asset-dev" in url) else "prod"
+            card.update(kind="job", job=int(m.group(1)), env=env, live=True,
+                        also=[url])
+            return True
+    return False
+
+
+def http_json(url, headers=None, data=None, timeout=15):
+    """GET, or POST when there is a body, returning parsed JSON."""
+    import urllib.request
+    req = urllib.request.Request(url, data=data, headers=headers or {})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except Exception as e:
+        raise RuntimeError("%s: %s" % (url.split("?")[0], e))
+
+
+def step_order(graph):
+    """Step names in pipeline order: a topological walk of the tracker graph,
+    ties broken by the order the ops-api lists them, which is stable."""
+    names = [n["id"] for n in graph.get("nodes") or []]
+    after = {n: [] for n in names}
+    need = {n: 0 for n in names}
+    for e in graph.get("edges") or []:
+        if e.get("source") in after and e.get("target") in need:
+            after[e["source"]].append(e["target"])
+            need[e["target"]] += 1
+    ready = [n for n in names if not need[n]]
+    out = []
+    while ready:
+        n = ready.pop(0)
+        out.append(n)
+        for m in after[n]:
+            need[m] -= 1
+            if not need[m]:
+                ready.append(m)
+    return out + [n for n in names if n not in out]
+
+
+def job_step(v, env):
+    runs = v.get("step_executions") or []
+    last = runs[-1] if runs else {}
+    return {
+        "name": v.get("name"), "status": v.get("status") or "unknown",
+        "attempts": len(runs),
+        "last": (last.get("status") or "").lower() or None,
+        "started": last.get("started_at"), "finished": last.get("finished_at"),
+        "run": last.get("name"),
+        "run_url": ARGO_UI[env] + last["name"] if last.get("name") else None,
+        "image": (last.get("image_tag") or "")[:40] or None,
+        "version": last.get("version"),
+        "overrides": len(v.get("overrides") or []),
+    }
+
+
+def job_situation(steps):
+    """The one line a job card leads with: what it is doing or stuck on."""
+    failed = [s for s in steps if s["status"] == "failed"]
+    running = [s for s in steps if s["status"] == "running"]
+    waiting = [s for s in steps if s["status"] == "waiting"]
+    stamp = lambda s: s["finished"] or s["started"]
+    if running:
+        s = running[0]
+        verb = "running %s" % s["name"]
+        if s["attempts"] > 1:
+            verb += " · attempt %d" % s["attempts"]
+        if s["last"] == "failed":
+            verb += " · last attempt failed"
+        # A step that failed and was left behind while the pipeline moved on
+        # is worth naming, but it is not what the job is doing now.
+        if failed:
+            verb += " · %s failed" % ", ".join(f["name"] for f in failed[:2])
+        tone = "failing" if s["last"] == "failed" else "running"
+        return {"court": tone, "verb": verb, "since": s["started"],
+                "extra": len(running) - 1}
+    if failed:
+        s = failed[-1]
+        return {"court": "failing", "verb": "failed at %s" % s["name"],
+                "since": stamp(s), "extra": len(failed) - 1}
+    if waiting and any(s["status"] == "succeeded" for s in steps):
+        return {"court": "idle", "verb": "waiting on the next step", "since":
+                max((stamp(s) for s in steps if stamp(s)), default=None), "extra": 0}
+    if not waiting:
+        return {"court": "done", "verb": "every step succeeded", "since":
+                max((stamp(s) for s in steps if stamp(s)), default=None), "extra": 0}
+    return {"court": "idle", "verb": "not started", "since": None, "extra": 0}
+
+
+def fetch_job(card):
+    base, n, env = OPS_API[card["env"]], card["job"], card["env"]
+    status = http_json("%s/tracker/job-%d/status" % (base, n))
+    graph = http_json("%s/tracker/job-%d/node_graph" % (base, n))
+    try:
+        info = http_json("%s/jobs/%d/info" % (base, n))
+    except RuntimeError:
+        info = {}
+    vertices = status.get("vertices") or {}
+    steps = [job_step(vertices[k], env) for k in step_order(graph)
+             if (vertices.get(k) or {}).get("type") == "step"]
+    counts = {}
+    for s in steps:
+        counts[s["status"]] = counts.get(s["status"], 0) + 1
+    done = counts.get("succeeded", 0)
+    return {
+        "job": n, "env": env, "name": info.get("JobName"),
+        "customer": info.get("Customer"), "city": info.get("City"),
+        "started": info.get("StartDate"), "ended": info.get("EndDate"),
+        "datasets": len(info.get("DatasetList") or []),
+        "steps": steps, "counts": counts,
+        "percent": round(100.0 * done / len(steps)) if steps else 0,
+        "situation": job_situation(steps),
+        "dashboard": OPS_TRACKER % n if env == "prod" else None,
+    }
+
+
+# ---- tokens --------------------------------------------------------------
+
+BOARD_CONF = os.path.join(
+    os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "board")
+
+
+def service_token(name, env):
+    """A token for a service, from the environment first and then from
+    ~/.config/board/<name>.json, read on every call so adding one needs no
+    restart."""
+    token = (os.environ.get(env) or "").strip()
+    if token:
+        return token
+    try:
+        with open(os.path.join(BOARD_CONF, name + ".json"), encoding="utf-8") as fh:
+            return (json.load(fh).get("token") or "").strip() or None
+    except (OSError, ValueError):
+        return None
+
+
+def save_token(name, token, extra=None):
+    os.makedirs(BOARD_CONF, exist_ok=True)
+    path = os.path.join(BOARD_CONF, name + ".json")
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(dict(extra or {}, token=token), fh, indent=2)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+    return path
+
+
+# ---- Grafana alert groups --------------------------------------------------
+
+_oncall_api = {}
+
+
+def oncall_api(grafana, token):
+    """The OnCall API root for a Grafana stack, which the IRM plugin's settings
+    name. Asked once per stack per process."""
+    if grafana not in _oncall_api:
+        s = http_json("https://%s/api/plugins/grafana-irm-app/settings" % grafana,
+                      {"Authorization": "Bearer " + token})
+        url = ((s.get("jsonData") or {}).get("onCallApiUrl") or "").rstrip("/")
+        if not url:
+            raise RuntimeError("the IRM plugin names no OnCall API")
+        _oncall_api[grafana] = url
+    return _oncall_api[grafana]
+
+
+def fetch_alert(card):
+    token = service_token("grafana", "BOARD_GRAFANA_TOKEN")
+    if not token:
+        return {"needs": "grafana"}
+    api = oncall_api(card["grafana"], token)
+    g = http_json("%s/api/v1/alert_groups/%s" % (api, card["alert"]),
+                  {"Authorization": token, "X-Grafana-URL": "https://" + card["grafana"]})
+    payload = ((g.get("last_alert") or {}).get("payload")) or {}
+    detail = payload.get("Message")
+    if isinstance(detail, str):
+        try:
+            detail = json.loads(detail)
+        except ValueError:
+            detail = {"message": detail}
+    detail = detail if isinstance(detail, dict) else {}
+    job = re.search(r"job-(\d+)", json.dumps(detail) + (g.get("title") or ""))
+    return {
+        "title": g.get("title"), "state": g.get("state"),
+        "alerts": g.get("alerts_count"), "created": g.get("created_at"),
+        "acknowledged": g.get("acknowledged_at"), "resolved": g.get("resolved_at"),
+        "slack": (g.get("permalinks") or {}).get("slack"),
+        "failed_step": detail.get("failed_step"),
+        "fields": {k: v for k, v in detail.items()
+                   if v not in ("", None) and k not in ("grafana_url",)},
+        "job": int(job.group(1)) if job else None,
+    }
+
+
+# ---- Linear ----------------------------------------------------------------
+
+LINEAR_API = "https://api.linear.app/graphql"
+
+LINEAR_ISSUE_Q = """query($id: String!) { issue(id: $id) {
+  identifier title url description priority priorityLabel estimate dueDate
+  createdAt updatedAt startedAt completedAt
+  state { name type color } assignee { name } creator { name }
+  project { name url } cycle { number name } team { key name }
+  parent { identifier title state { name type } }
+  labels { nodes { name color } }
+  children { nodes { identifier title state { name type color } assignee { name } } }
+  comments(last: 6) { nodes { body createdAt user { name } } }
+} }"""
+
+LINEAR_PROJECT_Q = """query($slug: String!) {
+  projects(filter: { slugId: { eq: $slug } }, first: 1) { nodes {
+    name url description progress targetDate startDate state health
+    lead { name } status { name type color }
+    teams { nodes { key } }
+    issues(first: 250) { nodes { identifier title priority
+      state { name type } assignee { name } } }
+    projectUpdates(last: 2) { nodes { body health createdAt user { name } } }
+  } } }"""
+
+
+def linear_call(query, variables):
+    token = service_token("linear", "BOARD_LINEAR_KEY")
+    if not token:
+        return None
+    body = http_json(LINEAR_API, {"Authorization": token,
+                                  "Content-Type": "application/json"},
+                     json.dumps({"query": query, "variables": variables}).encode())
+    if body.get("errors"):
+        raise RuntimeError(body["errors"][0].get("message") or "linear said no")
+    return body.get("data") or {}
+
+
+def clip(text, n=900):
+    text = text or ""
+    return text if len(text) <= n else text[:n].rstrip() + "…"
+
+
+def fetch_linear_issue(card):
+    data = linear_call(LINEAR_ISSUE_Q, {"id": card["issue"]})
+    if data is None:
+        return {"needs": "linear"}
+    it = data.get("issue") or {}
+    if not it:
+        raise RuntimeError("no issue %s" % card["issue"])
+    return {
+        "id": it.get("identifier"), "title": it.get("title"),
+        "description": clip(it.get("description")),
+        "state": it.get("state"), "priority": it.get("priorityLabel"),
+        "priority_n": it.get("priority"), "estimate": it.get("estimate"),
+        "due": it.get("dueDate"), "created": it.get("createdAt"),
+        "updated": it.get("updatedAt"), "started": it.get("startedAt"),
+        "completed": it.get("completedAt"),
+        "assignee": (it.get("assignee") or {}).get("name"),
+        "creator": (it.get("creator") or {}).get("name"),
+        "project": it.get("project"), "cycle": it.get("cycle"),
+        "team": (it.get("team") or {}).get("key"),
+        "parent": it.get("parent"),
+        "labels": (it.get("labels") or {}).get("nodes") or [],
+        "children": (it.get("children") or {}).get("nodes") or [],
+        "comments": [dict(c, body=clip(c.get("body"), 500))
+                     for c in (it.get("comments") or {}).get("nodes") or []],
+    }
+
+
+def fetch_linear_project(card):
+    data = linear_call(LINEAR_PROJECT_Q, {"slug": card["slug"]})
+    if data is None:
+        return {"needs": "linear"}
+    nodes = (data.get("projects") or {}).get("nodes") or []
+    if not nodes:
+        raise RuntimeError("no project %s" % card["slug"])
+    p = nodes[0]
+    issues = (p.get("issues") or {}).get("nodes") or []
+    by_type = {}
+    for i in issues:
+        t = (i.get("state") or {}).get("type") or "unknown"
+        by_type[t] = by_type.get(t, 0) + 1
+    open_now = [i for i in issues
+                if (i.get("state") or {}).get("type") in ("started", "unstarted")]
+    open_now.sort(key=lambda i: ((i.get("state") or {}).get("type") != "started",
+                                 i.get("priority") or 5))
+    return {
+        "name": p.get("name"), "description": clip(p.get("description"), 400),
+        "progress": round(100 * (p.get("progress") or 0)),
+        "target": p.get("targetDate"), "start": p.get("startDate"),
+        "health": p.get("health"), "status": p.get("status"),
+        "lead": (p.get("lead") or {}).get("name"),
+        "teams": [t.get("key") for t in (p.get("teams") or {}).get("nodes") or []],
+        "issues": len(issues), "by_type": by_type, "open": open_now[:12],
+        "updates": [dict(u, body=clip(u.get("body"), 600))
+                    for u in (p.get("projectUpdates") or {}).get("nodes") or []],
+    }
+
+
+FETCHERS = {"github-pr": fetch_github_pr, "github-issue": fetch_github_issue,
+            "job": fetch_job, "alert-group": fetch_alert,
+            "linear-issue": fetch_linear_issue,
+            "linear-project": fetch_linear_project}
+
+
+# ---- which links are shown, and in what order ------------------------------
+#
+# Per node, per viewer: a preference about the page, not a fact about the work,
+# so it is kept beside tracking.json rather than written into the vault.
+
+VIEW_FILE = os.path.join(STATE_DIR, "links.json")
+
+
+def link_id(card):
+    return json.dumps(list(link_identity(card)))
+
+
+def load_view(vault, node_path):
+    try:
+        with open(VIEW_FILE, encoding="utf-8") as fh:
+            v = json.load(fh).get(vault, {}).get(node_path) or {}
+    except (OSError, ValueError):
+        v = {}
+    return {"hidden": list(v.get("hidden") or []), "order": list(v.get("order") or [])}
+
+
+def save_view(vault, node_path, hidden, order):
+    try:
+        with open(VIEW_FILE, encoding="utf-8") as fh:
+            allv = json.load(fh)
+    except (OSError, ValueError):
+        allv = {}
+    allv.setdefault(vault, {})[node_path] = {"hidden": hidden, "order": order}
+    os.makedirs(STATE_DIR, exist_ok=True)
+    tmp = VIEW_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(allv, fh, indent=2)
+    os.replace(tmp, VIEW_FILE)
+
+
+def apply_view(cards, view):
+    """Mark hidden cards and put ordered ones first, in the saved order; any
+    link the order has not seen yet keeps its natural place after them."""
+    pos = {k: i for i, k in enumerate(view["order"])}
+    hidden = set(view["hidden"])
+    for c in cards:
+        c["id"] = link_id(c)
+        c["hidden"] = c["id"] in hidden
+    return sorted(cards, key=lambda c: pos.get(c["id"], len(pos)))
+
+
+def fold_alerts(cards):
+    """An alert about a job the page already shows goes inside that job's card
+    rather than beside it; the job carries the state the alert is about."""
+    jobs = {c["job"]: c for c in cards if c["kind"] == "job"}
+    out = []
+    for c in cards:
+        job = (c.get("data") or {}).get("job") if c["kind"] == "alert-group" else None
+        if job in jobs:
+            jobs[job].setdefault("alerts", []).append(c)
+            continue
+        out.append(c)
+    return out
 
 
 class LinkCards:
@@ -1230,6 +1752,26 @@ def jump_to_desktop(pid, desktop=None):
     return True
 
 
+def start_session(vault, path, port):
+    """Set a node up on a free desktop: claude in a terminal, this board's page
+    for it in a browser, each on its own screen, while you stay where you are.
+
+    `thw setup` does the placing, since it owns every piece of KWin knowledge.
+    It runs detached because it waits for both windows to appear, and the
+    request should answer at once; the card shows the desktop once the next
+    window read finds it there.
+    """
+    url = "http://127.0.0.1:%d/node/%s" % (
+        port, "/".join(urllib.parse.quote(p) for p in path.split("/")))
+    try:
+        subprocess.Popen(["thw", "setup", os.path.join(vault, path), url],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+    except FileNotFoundError:
+        raise RuntimeError("thw is not on PATH (it installs with the th module, "
+                           "and only on KDE)")
+
+
 def find_node(board, token):
     """Resolve a slug, a unique fragment of one, or a full node path."""
     cards = board["cards"]
@@ -1259,6 +1801,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Board-Build", BUILD)
         self.end_headers()
         self.wfile.write(body)
 
@@ -1273,6 +1816,11 @@ class Handler(BaseHTTPRequestHandler):
         if (self.path in ("/", "/index.html")
                 or self.path == "/node" or self.path.startswith("/node/")):
             self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
+        elif self.path.startswith("/api/people"):
+            try:
+                self._json(slack_people())
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 500)
         elif self.path.startswith("/api/slack"):
             query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             self._json(THREADS.get((query.get("channel") or [""])[0],
@@ -1286,8 +1834,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": str(e)}, 404)
                 return
             cards = node_link_cards(self.cache.vault, card)
-            self._json({"links": LINKS.get(
-                cards, force=bool(query.get("force")))})
+            got = fold_alerts(LINKS.get(cards, force=bool(query.get("force"))))
+            view = load_view(self.cache.vault, card["path"])
+            self._json({"links": apply_view(got, view),
+                        "ordered": bool(view["order"])})
         elif self.path.startswith("/api/board"):
             try:
                 self._json(self.cache.get())
@@ -1309,9 +1859,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not (self.path.startswith("/api/status")
                 or self.path.startswith("/api/desktop")
+                or self.path.startswith("/api/session")
                 or self.path.startswith("/api/track")
                 or self.path.startswith("/api/reply")
-                or self.path.startswith("/api/comment")):
+                or self.path.startswith("/api/comment")
+                or self.path.startswith("/api/linkview")):
             self._json({"error": "not found"}, 404)
             return
         length = int(self.headers.get("Content-Length", 0))
@@ -1327,6 +1879,17 @@ class Handler(BaseHTTPRequestHandler):
                                        body.get("text") or ""))
             except RuntimeError as e:
                 self._json({"error": str(e)}, 400)
+            return
+        if self.path.startswith("/api/linkview"):
+            try:
+                card = find_node(self.cache.get(), body.get("path") or "")
+            except (ValueError, RuntimeError) as e:
+                self._json({"error": str(e)}, 404)
+                return
+            save_view(self.cache.vault, card["path"],
+                      [str(x) for x in body.get("hidden") or []],
+                      [str(x) for x in body.get("order") or []])
+            self._json({"ok": True})
             return
         if self.path.startswith("/api/comment"):
             # `gh` writes the comment, for the same reason it reads the PR: the
@@ -1357,6 +1920,16 @@ class Handler(BaseHTTPRequestHandler):
             })
             self._json({"ok": True, "board": patched or self.cache.get()})
             return
+        if self.path.startswith("/api/session"):
+            try:
+                card = find_node(self.cache.get(), body.get("path") or "")
+                start_session(self.cache.vault, card["path"],
+                              self.server.server_address[1])
+            except (ValueError, RuntimeError) as e:
+                self._json({"error": str(e)}, 400)
+                return
+            self._json({"ok": True})
+            return
         if self.path.startswith("/api/desktop"):
             try:
                 jump_to_desktop(body.get("pid"), body.get("desktop"))
@@ -1382,6 +1955,52 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+SCRIPT = os.path.abspath(__file__)
+REEXEC_ENV = "BOARD_REEXEC"
+
+
+def script_mtime():
+    try:
+        return os.path.getmtime(SCRIPT)
+    except OSError:
+        return None
+
+
+# Sent on every response, so an open page can tell it is talking to a newer
+# server than the one that drew it.
+BUILD = str(script_mtime())
+
+
+def installed_ok():
+    """Whether the script on disk is whole: an install is a plain copy, so the
+    watcher can catch it half-written, and exec'ing that would take the board
+    down instead of updating it."""
+    try:
+        with open(SCRIPT, encoding="utf-8") as fh:
+            compile(fh.read(), SCRIPT, "exec")
+        return True
+    except (OSError, SyntaxError, ValueError):
+        return False
+
+
+def reexec_on_install():
+    """Replace this process with the installed script when it changes, so a
+    running board serves each fix as it is installed rather than the code it
+    started with. The listening socket is not inherited across exec."""
+    seen = script_mtime()
+    while True:
+        time.sleep(1)
+        now = script_mtime()
+        if now is None or now == seen:
+            continue
+        time.sleep(0.5)
+        if script_mtime() != now or not installed_ok():
+            continue
+        seen = now
+        os.environ[REEXEC_ENV] = "1"
+        os.execv(sys.executable, [sys.executable, SCRIPT] + sys.argv[1:])
+
+
 def serve(vault, port, open_browser):
     Handler.cache = Cache(vault)
     Handler.cache.get()          # fail loudly here rather than in the browser
@@ -1389,9 +2008,10 @@ def serve(vault, port, open_browser):
     url = "http://127.0.0.1:%d/" % port
     print("board: %s" % url)
     print("vault: %s" % vault)
-    if open_browser:
-        threading.Thread(target=lambda: (time.sleep(0.4), webbrowser.open(url)),
+    if open_browser and not os.environ.get(REEXEC_ENV):
+        threading.Thread(target=lambda: (time.sleep(0.4), open_url(url)),
                          daemon=True).start()
+    threading.Thread(target=reexec_on_install, daemon=True).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -1546,6 +2166,56 @@ BOARD_SLACK_TOKEN (and BOARD_SLACK_COOKIE for an xoxc token) in your shell.
 """ % SLACK_CONF
 
 
+LINEAR_AUTH_HELP = """\
+Connect Linear so issue and project cards show state, assignee, sub-issues
+and comments.
+
+  1. Open https://linear.app/settings/account/security
+     Personal API keys -> New API key
+  2. board linear-auth lin_api_your-key
+
+Written to %s. BOARD_LINEAR_KEY in the environment wins over it.
+""" % os.path.join(BOARD_CONF, "linear.json")
+
+GRAFANA_AUTH_HELP = """\
+Connect Grafana so alert-group cards show their state, failed step and Slack
+thread, and fold into the job card they are about.
+
+  1. Open https://cyvlappsprod.grafana.net/org/serviceaccounts
+     Add service account (Viewer role) -> Add service account token
+  2. board grafana-auth glsa_your-token
+
+Written to %s. BOARD_GRAFANA_TOKEN in the environment wins over it.
+""" % os.path.join(BOARD_CONF, "grafana.json")
+
+
+def cmd_linear_auth(args, vault):
+    if not args.token:
+        print(LINEAR_AUTH_HELP)
+        return
+    token = args.token.strip()
+    body = http_json(LINEAR_API, {"Authorization": token,
+                                  "Content-Type": "application/json"},
+                     json.dumps({"query": "{ viewer { name email } }"}).encode())
+    who = (body.get("data") or {}).get("viewer")
+    if not who:
+        raise RuntimeError("Linear refused that key: %s"
+                           % ((body.get("errors") or [{}])[0].get("message")))
+    print("Connected as %s. Written to %s"
+          % (who.get("name"), save_token("linear", token)))
+
+
+def cmd_grafana_auth(args, vault):
+    if not args.token:
+        print(GRAFANA_AUTH_HELP)
+        return
+    token = args.token.strip()
+    org = http_json("https://%s/api/org" % args.stack,
+                    {"Authorization": "Bearer " + token})
+    print("Connected to %s. Written to %s"
+          % (org.get("name") or args.stack, save_token("grafana", token)))
+
+
 def cmd_slack_auth(args, vault):
     if not args.token:
         print(SLACK_AUTH_HELP)
@@ -1561,15 +2231,74 @@ def cmd_slack_auth(args, vault):
     os.makedirs(os.path.dirname(SLACK_CONF), exist_ok=True)
     tmp = SLACK_CONF + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump({"token": token, "cookie": cookie}, fh, indent=2)
+        json.dump({"token": token, "cookie": cookie,
+                   "user_id": who.get("user_id") or ""}, fh, indent=2)
     os.chmod(tmp, 0o600)          # it is a credential; keep it to the owner
     os.replace(tmp, SLACK_CONF)
     print("Connected as %s in %s. Written to %s"
           % (who.get("user"), who.get("team"), SLACK_CONF))
 
 
+def node_here(vault):
+    """The node that owns where you are standing, whether that is its folder
+    in the vault or one of its checkouts, or None when nothing does."""
+    nodes = json.loads(run(["th", "status", "--json", "--vault", vault]))
+    here = [n for n in nodes if n["depth"] == 0]
+    return here[0]["path"] if here else None
+
+
+def open_path(vault, target):
+    """The page to open: the named node's, else the one you are standing in,
+    else the board itself."""
+    if target:
+        return find_node({"cards": read_nodes(vault)}, target)["path"]
+    return node_here(vault)
+
+
+def open_url(url):
+    """Hand the url to the desktop's opener, cut off from the terminal.
+    webbrowser runs xdg-open attached to it, and under KDE that prints
+    screens of Qt and KIO chatter and can keep holding the prompt."""
+    try:
+        subprocess.Popen(["xdg-open", url], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+    except FileNotFoundError:
+        webbrowser.open(url)
+
+
+def serving(port):
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.3):
+            return True
+    except OSError:
+        return False
+
+
+def start_detached(vault, port):
+    """Start a server that outlives the shell that asked for it, and wait for
+    it to answer, so a keybind can open the board cold."""
+    subprocess.Popen(
+        [sys.executable, SCRIPT, "--vault", vault,
+         "serve", "--no-open", "-p", str(port)],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL, start_new_session=True)
+    for _ in range(50):
+        if serving(port):
+            return
+        time.sleep(0.1)
+    raise RuntimeError("started the board on port %d but it never answered"
+                       % port)
+
+
 def cmd_open(args, vault):
-    webbrowser.open("http://127.0.0.1:%d/" % args.port)
+    path = open_path(vault, args.target)
+    if not serving(args.port):
+        start_detached(vault, args.port)
+    url = "http://127.0.0.1:%d/" % args.port
+    if path:
+        url += "node/" + "/".join(urllib.parse.quote(p) for p in path.split("/"))
+    open_url(url)
 
 
 def build_parser():
@@ -1607,7 +2336,18 @@ def build_parser():
     s.add_argument("cookie", nargs="?", help="xoxd- cookie, for an xoxc- token")
     s.set_defaults(fn=cmd_slack_auth)
 
+    s = sub.add_parser("linear-auth", help="connect Linear (run bare for how)")
+    s.add_argument("token", nargs="?", help="a personal API key")
+    s.set_defaults(fn=cmd_linear_auth)
+
+    s = sub.add_parser("grafana-auth", help="connect Grafana (run bare for how)")
+    s.add_argument("token", nargs="?", help="a service account token")
+    s.add_argument("--stack", default="cyvlappsprod.grafana.net")
+    s.set_defaults(fn=cmd_grafana_auth)
+
     s = sub.add_parser("open", help="open the board in a browser")
+    s.add_argument("target", nargs="?",
+                   help="node to open; omit for the one you are standing in")
     s.add_argument("-p", "--port", type=int, default=DEFAULT_PORT)
     s.set_defaults(fn=cmd_open)
     return p
@@ -1639,6 +2379,8 @@ PAGE = r"""<!doctype html>
     --deferred: #9b9b95; --todo: #6b7280; --in-progress: #dd8827;
     --in-review: #349258; --blocked: #c9433a; --done: #33509b;
     --canceled: #bcbcb5; --none: #c4c4bd;
+    /* GitHub's own state colours, from Primer's fgColor-success/-danger/-done/-muted. */
+    --gh-open: #1a7f37; --gh-closed: #d1242f; --gh-merged: #8250df; --gh-draft: #59636e;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -1648,6 +2390,7 @@ PAGE = r"""<!doctype html>
       --deferred: #767b83; --todo: #9aa3b2; --in-progress: #e59a44;
       --in-review: #55b87d; --blocked: #e0736a; --done: #5a78d8;
       --canceled: #585c63; --none: #4a4d53;
+      --gh-open: #3fb950; --gh-closed: #f85149; --gh-merged: #ab7df8; --gh-draft: #9198a1;
     }
   }
   * { box-sizing: border-box; }
@@ -1899,6 +2642,23 @@ PAGE = r"""<!doctype html>
   .card:hover { box-shadow: 0 2px 8px var(--shadow); border-color: var(--dim);
                 border-left-color: var(--c); }
   .card.dragging { opacity: .4; cursor: grabbing; }
+  /* The whole card is the link, so middle-click anywhere on it opens the node in
+     a new tab -- the card is the target a reader is already aiming at, not its
+     title alone. It lies under everything that is its own control (the pin, the
+     rank, the link chips, the desktop bar), so those still take their own
+     clicks, and `draggable="false"` keeps the browser from dragging the link
+     instead of letting the card start its own drag. */
+  /* `cursor: inherit` keeps the card's own grab cursor: an anchor otherwise
+     turns the whole card into a pointer and it stops reading as draggable. */
+  .cardlink {
+    position: absolute; inset: 0; z-index: 1; cursor: inherit; border-radius: 8px;
+  }
+  /* Only what is genuinely its own control comes back above the overlay. The
+     card's text stays under it, which is what makes the whole card the target.
+     `.marks` and `.primenu` are positioned already, so z-index alone does it;
+     the other two are static and need a position to accept one. */
+  .card .marks, .card .primenu { z-index: 2; }
+  .card a.tag, .card .state.jumpable, .card .state.startable { position: relative; z-index: 2; }
   .card.open { border-color: var(--accent); border-left-color: var(--c); }
   .row .rlive {
     width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
@@ -2021,6 +2781,13 @@ PAGE = r"""<!doctype html>
      the bookmark appears on hover, and a trail that reflowed on hover would be
      worse than one that is always a little short. */
   .card .trail { padding-right: 44px; }
+  /* Every anchor added for middle-click states its own colour: the stylesheet
+     has no blanket `a` rule, so one left out renders in the browser's default
+     blue. These three inherit the text they replaced. */
+  .pnav { color: inherit; text-decoration: none; }
+  .pnav:hover { color: var(--accent); }
+  .pcrumb { color: var(--faint); text-decoration: none; }
+  .pcrumb:hover { color: var(--accent); text-decoration: underline; }
   .trail { color: var(--faint); font-size: 11px; font-family: ui-monospace, monospace;
            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .title { font-weight: 600; font-size: 14px; margin: 1px 0 3px; overflow-wrap: anywhere; }
@@ -2120,6 +2887,19 @@ PAGE = r"""<!doctype html>
   }
   .state.jumpable:hover .desk { color: inherit; }
   .state .desk svg { width: 13px; height: 13px; }
+  .state.startable {
+    cursor: pointer; color: var(--faint); opacity: .55;
+    transition: opacity .08s, background .08s, box-shadow .08s;
+  }
+  .state.startable .what { font-weight: 500; }
+  .state.startable .play { font-size: 9px; width: 7px; }
+  .card:hover .state.startable { opacity: 1; }
+  .state.startable:hover {
+    color: var(--accent); opacity: 1;
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .state.startable.busy { cursor: default; color: var(--accent); opacity: 1; }
   .empty { color: var(--faint); font-size: 12px; padding: 6px 4px; font-style: italic; }
 
   /* Project page.
@@ -2143,7 +2923,15 @@ PAGE = r"""<!doctype html>
     flex: 1 1 340px; min-width: 240px; border-left: 2px solid var(--c, var(--line));
     padding-left: 10px;
   }
-  .pback { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; flex: none; }
+  /* An anchor now, for middle-click, so it carries the button rule's own
+     declarations rather than inheriting them. */
+  .pback {
+    display: inline-flex; align-items: center; gap: 5px; flex: none;
+    font: inherit; font-size: 12px; color: var(--ink); background: var(--card);
+    border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px;
+    cursor: pointer; text-decoration: none;
+  }
+  .pback:hover { border-color: var(--dim); }
   .pback svg { width: 10px; height: 10px; }
   .phead .grow { flex: 1; }
   .phead .agent, .phead .when { font-size: 12px; white-space: nowrap; }
@@ -2152,8 +2940,8 @@ PAGE = r"""<!doctype html>
   /* A flex column, so the big grid takes the height that is going and the chip
      row sits under it rather than the page ending halfway down. */
   .pscroll {
-    flex: 1; overflow-y: auto; padding: 14px 18px 18px;
-    display: flex; flex-direction: column; gap: 14px;
+    flex: 1; overflow: hidden; padding: 14px 18px 18px;
+    display: flex; flex-direction: column; gap: 14px; min-height: 0;
   }
   .pquiet { color: var(--faint); font-size: 13px; padding: 8px 2px; }
 
@@ -2163,14 +2951,14 @@ PAGE = r"""<!doctype html>
      leaving a fixed card stranded in an empty page. Each row is at least tall
      enough to be worth reading. */
   .pgrid {
-    flex: 1 0 auto; min-height: 0; display: grid; gap: 14px;
+    flex: 1 1 0; min-height: 0; overflow-y: auto; display: grid; gap: 14px;
     grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
-    grid-auto-rows: minmax(340px, 1fr); align-content: stretch;
+    grid-auto-rows: minmax(220px, 1fr); align-content: stretch;
   }
   /* The chip tier: everything that is just a link, packed tight, natural height
      at the foot. */
   .pmini {
-    flex: none; display: grid; gap: 10px;
+    flex: 0 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 10px;
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   }
 
@@ -2193,6 +2981,9 @@ PAGE = r"""<!doctype html>
   .pcard > h3 .pk { color: var(--dim); font-family: ui-monospace, monospace;
                     text-transform: none; letter-spacing: 0; }
   .pcard > h3 .grow { flex: 1; }
+  .pcard > h3 > * { flex: none; }
+  .pcard > h3 .pk, .pcard > h3 .pdim { flex: 0 1 auto; min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
   /* The open-in link, given room and a hit target rather than a 10px glyph in
      the corner. */
   .popen {
@@ -2200,6 +2991,11 @@ PAGE = r"""<!doctype html>
     padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px;
   }
   .popen:hover { border-color: var(--accent); }
+  /* The state band: pinned under the head, above whatever scrolls. Its own
+     bottom padding is the body's top padding, so the gap to the first message
+     is the same one every other pair of rows gets. */
+  .psub { flex: none; padding: 11px 13px 0; }
+  .psub .psit { margin-top: 0; }
   .pbody { flex: 1; overflow-y: auto; padding: 11px 13px; min-height: 0; }
   .pfoot {
     flex: none; border-top: 1px solid var(--line); padding: 8px 10px;
@@ -2285,27 +3081,117 @@ PAGE = r"""<!doctype html>
   .pbadge.warn { --t: var(--in-progress); }
   .pbadge.bad  { --t: var(--blocked); }
   .pbadge.mute { --t: var(--faint); }
+  .pbadge.gh-open   { --t: var(--gh-open); }
+  .pbadge.gh-draft  { --t: var(--gh-draft); }
+  .pbadge.gh-merged { --t: var(--gh-merged); }
+  .pbadge.gh-closed { --t: var(--gh-closed); }
 
   /* Pull request: state first, then description, then the conversation behind a
      toggle -- the card answers "whose move, how long" before anything else. */
   .prhead { border-bottom: 1px solid var(--line); padding-bottom: 11px; }
   .prtitle { display: flex; align-items: baseline; gap: 8px; }
-  .prtitle span { font-size: 15px; font-weight: 600; color: var(--ink);
+  .prtitle > span:not(.pbadge):not(.lstate) { font-size: 15px; font-weight: 600; color: var(--ink);
                   line-height: 1.35; overflow-wrap: anywhere; }
   /* The court-and-clock banner. Its tint is the whole point: mine is a nudge,
      theirs is a neutral wait, done is settled. */
+  /* Two groups, not five loose items: what happened on the left, whose court and
+     how long on the right. `.grow` is defined only under specific heads, so a
+     spacer here would collapse to nothing and let the clock crowd the verb --
+     the right group pushes itself over instead, and drops to its own line when
+     the card is too narrow to hold both. */
   .psit {
-    display: flex; align-items: center; gap: 8px; margin-top: 9px;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px;
+    margin-top: 9px;
     font-size: 12.5px; border-radius: 7px; padding: 6px 10px;
     border: 1px solid color-mix(in srgb, var(--t) 40%, transparent);
     background: color-mix(in srgb, var(--t) 12%, transparent);
   }
+  .psitend { display: flex; align-items: center; gap: 8px; margin-left: auto; }
   .psit.warn { --t: var(--in-progress); }
   .psit.mute { --t: var(--faint); }
   .psit.good { --t: var(--in-review); }
+  .psit.bad  { --t: var(--blocked); }
+  .psit.gh-merged { --t: var(--gh-merged); }
+  .psit.gh-closed { --t: var(--gh-closed); }
+
+  /* Job cards: a bar, a light per step, then rows. The lights are the status
+     strip -- green done, blue running, red failed, grey waiting -- with a red
+     ring on a step whose last attempt failed though it is still going. */
+  .jprog { display: flex; align-items: center; gap: 10px; margin: 2px 0 9px; }
+  .jbar { flex: 0 0 120px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .jbar span { display: block; height: 100%; background: var(--in-review); }
+  .jcounts { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; }
+  .crun { color: var(--accent); }
+  .cmute { color: var(--faint); }
+  .jlights { display: flex; flex-wrap: wrap; gap: 3px; margin: 0 0 10px; }
+  .jl { width: 11px; height: 11px; border-radius: 3px; background: var(--line); display: block; }
+  .jl.good { background: var(--in-review); }
+  .jl.run  { background: var(--accent); animation: jpulse 1.6s ease-in-out infinite; }
+  .jl.bad  { background: var(--blocked); }
+  .jl.lastbad { box-shadow: 0 0 0 2px var(--blocked); }
+  @keyframes jpulse { 50% { opacity: .45; } }
+  .jsec {
+    margin: 12px 0 5px; font-size: 10.5px; font-weight: 600; color: var(--faint);
+    letter-spacing: .05em; text-transform: uppercase;
+  }
+  .jrow {
+    display: flex; align-items: baseline; gap: 8px; padding: 3px 0; font-size: 12.5px;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+    flex-wrap: wrap;
+  }
+  .jdot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex: none;
+          align-self: center; }
+  .jdot.good { background: var(--in-review); }
+  .jdot.run { background: var(--accent); }
+  .jdot.bad { background: var(--blocked); }
+  .jname { color: var(--ink); font-family: ui-monospace, monospace; font-size: 12px; }
+  .jst { font-size: 11.5px; }
+  .jst.good { color: var(--in-review); } .jst.run { color: var(--accent); }
+  .jst.bad { color: var(--blocked); } .jst.mute { color: var(--faint); }
+  .jmeta { color: var(--faint); font-size: 11.5px; margin-left: auto; }
+  .jrun { font-size: 11.5px; }
+  .jimg { font-size: 10.5px; }
+  .jwait { color: var(--faint); font-size: 11.5px; font-family: ui-monospace, monospace;
+           line-height: 1.7; overflow-wrap: anywhere; }
+  .jalso { display: flex; flex-wrap: wrap; gap: 6px; }
+  .jalert { display: flex; align-items: center; gap: 8px; margin-top: 7px; font-size: 12.5px;
+            flex-wrap: wrap; color: var(--dim); }
+  .jalert .grow { flex: 1; }
+  .pchip {
+    font-size: 11px; padding: 1px 7px; border: 1px solid var(--line); border-radius: 10px;
+    color: var(--accent); background: none; cursor: pointer; font-family: inherit;
+  }
+  .pchip:hover { border-color: var(--accent); }
+  .lstate, .llabel {
+    font-size: 11px; padding: 1px 7px; border-radius: 10px; white-space: nowrap;
+    color: var(--t); border: 1px solid color-mix(in srgb, var(--t) 55%, transparent);
+    background: color-mix(in srgb, var(--t) 12%, transparent);
+  }
+  .llabels { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 8px; }
+
+  /* The grip and hide control every card head carries. */
+  .pgrip { color: var(--faint); cursor: grab; display: inline-flex; padding: 0 2px; }
+  .pgrip:hover { color: var(--ink); }
+  .phide {
+    background: none; border: 1px solid transparent; border-radius: 6px; color: var(--faint);
+    font: inherit; font-size: 11px; padding: 2px 6px; cursor: pointer; letter-spacing: 0;
+  }
+  .phide:hover { color: var(--ink); border-color: var(--line); }
+  /* The carried card, left in place as the slot it will drop into: its content
+     faded, a dashed outline, and a solid bar on its leading edge. */
+  .pcard.pslot { position: relative; overflow: visible; border-style: dashed; border-color: var(--accent);
+                 background: color-mix(in srgb, var(--accent) 6%, var(--card)); }
+  .pcard.pslot > * { opacity: .25; }
+  .pcard.pslot::before {
+    content: ""; position: absolute; left: -9px; top: 6px; bottom: 6px; width: 3px;
+    border-radius: 2px; background: var(--accent);
+  }
+  .phidden { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+             font-size: 12px; }
   .psitdot { width: 8px; height: 8px; border-radius: 50%; background: var(--t); flex: none; }
-  .psitverb { font-weight: 600; color: var(--ink); }
-  .psitwho { color: var(--dim); }
+  .psitverb { font-weight: 600; color: var(--ink); min-width: 0;
+              overflow-wrap: anywhere; }
+  .psitwho { color: var(--dim); min-width: 0; overflow-wrap: anywhere; }
   .psitcourt { color: var(--t); font-weight: 600; text-transform: lowercase; }
   .psitdur { color: var(--dim); font-family: ui-monospace, monospace;
              font-size: 11.5px; }
@@ -2389,7 +3275,25 @@ PAGE = r"""<!doctype html>
 
   /* Slack thread: avatar, name, time, message -- the thread pane. */
   .sthread { display: flex; flex-direction: column; gap: 13px; }
-  .smsg { display: flex; gap: 9px; }
+  .smsg, .sgroup { display: flex; gap: 9px; }
+  /* A second message from the same person, directly under their first: the
+     byline is already above it, so it needs only the gap that says "still them". */
+  .stext.srest { margin-top: 7px; }
+  /* The elided middle, drawn where the gap is. It is the control that opens the
+     thread, so it names what is missing at the point it is missing. The dashes
+     run the width to read as a seam rather than as a line of text. */
+  .smore {
+    display: block; width: 100%; text-align: left; font: inherit;
+    font-size: 11.5px; color: var(--faint); background: none; border: 0;
+    border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line);
+    padding: 7px 0; margin: -3px 0; cursor: pointer;
+  }
+  .smore:hover { color: var(--accent); border-color: var(--accent); }
+  /* Reaction glyphs want the emoji fonts, not the monospace stack around them. */
+  .pemoji {
+    font-family: "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+    font-size: 12px;
+  }
   .smain { flex: 1; min-width: 0; }
   .shead { display: flex; align-items: baseline; gap: 7px; font-size: 12px; }
   .shead b { color: var(--ink); font-size: 13px; }
@@ -2405,15 +3309,48 @@ PAGE = r"""<!doctype html>
     font-size: 11px; color: var(--dim); background: var(--panel);
     border: 1px solid var(--line); border-radius: 999px; padding: 0 7px;
   }
+  /* A reaction this file has no glyph for -- a workspace's own emoji, or an
+     uncommon one. Set as a name in monospace rather than left looking like a
+     glyph that failed to load. */
+  .pshort {
+    font-family: ui-monospace, monospace; font-size: 10px; color: var(--faint);
+  }
+  .pshort::before, .pshort::after { content: ":"; opacity: .5; }
 
   .psend { display: flex; gap: 6px; align-items: flex-end; }
+  /* The box and its button share one height, and the box is always the last
+     thing in its card's foot, so the send rows of cards side by side line up. */
   .psend textarea {
-    flex: 1; resize: vertical; min-height: 32px; max-height: 160px;
+    flex: 1; resize: vertical; height: 34px; min-height: 34px; max-height: 160px;
     background: var(--bg); color: var(--ink); border: 1px solid var(--line);
     border-radius: 6px; padding: 7px 9px; font: inherit; font-size: 12.5px;
   }
   .psend textarea:focus { outline: none; border-color: var(--accent); }
-  .psend button { flex: none; }
+  .psend button { flex: none; height: 34px; }
+  .pfoot .psend { order: 2; }
+  /* The card the keys act on. */
+  .card.bfocus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  /* The item under the cursor inside the focused pane. */
+  .pcard.pfocus .pitem { background: color-mix(in srgb, var(--accent) 12%, transparent);
+                         box-shadow: inset 2px 0 0 var(--accent); border-radius: 4px; }
+  .pcard.pfocus { border-color: var(--accent);
+                  box-shadow: 0 0 0 1px var(--accent), 0 4px 18px var(--shadow); }
+  #pkeys {
+    position: fixed; right: 18px; bottom: 44px; z-index: 60; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+    box-shadow: 0 10px 30px var(--shadow); font-size: 12.5px; min-width: 360px;
+  }
+  #pkeys b { display: block; margin-bottom: 8px; }
+  .pkrow { display: flex; gap: 12px; padding: 2px 0; color: var(--dim); }
+  .pkrow kbd { min-width: 110px; font-family: ui-monospace, monospace; color: var(--ink); }
+  #pmention {
+    position: fixed; z-index: 50; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); padding: 4px; font-size: 12.5px;
+  }
+  .pmrow { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 5px;
+           cursor: pointer; white-space: nowrap; overflow: hidden; }
+  .pmrow img { width: 20px; height: 20px; border-radius: 4px; }
+  .pmrow.on, .pmrow:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
   .psent { font-size: 11.5px; color: var(--faint); overflow-wrap: anywhere;
            display: flex; gap: 8px; align-items: center; }
   /* Two rows, not one. Five controls in a 520px panel had nothing telling them
@@ -2514,7 +3451,7 @@ PAGE = r"""<!doctype html>
 <body>
 <header>
   <div class="bar">
-    <h1>Thoughts Dashboard</h1>
+    <h1><a class="pnav" href="/">Thoughts Dashboard</a></h1>
     <span class="vault" id="vault"></span>
     <input type="search" id="q" placeholder="filter by name, description, path" autocomplete="off">
     <span class="spacer"></span>
@@ -2546,7 +3483,7 @@ PAGE = r"""<!doctype html>
 <div id="project" hidden></div>
 <footer>
   <kbd>/</kbd> search &middot; <kbd>b</kbd> tree &middot; <kbd>c</kbd> columns &middot;
-  <kbd>r</kbd> refresh &middot; <kbd>esc</kbd> back &middot; click a card to open its project,
+  <kbd>r</kbd> refresh &middot; <kbd>esc</kbd> back &middot; <kbd>?</kbd> project-page keys &middot; click a card to open its project,
   drag it to change its node's <code>status:</code> &middot; bookmark to track it, bars to rank it
   &middot; <kbd>alt</kbd>-click a checkbox for that node alone, not its children
 </footer>
@@ -2747,8 +3684,9 @@ function liveBar(c) {
         title="switch to desktop ${esc(desktop)}`
     : '"';
   if (!a) {
-    return c.open
-      ? `<div class="state idle-open${hit}><span class="what">open</span>${jump}</div>` : "";
+    if (c.open)
+      return `<div class="state idle-open${hit}><span class="what">open</span>${jump}</div>`;
+    return startBar(c);
   }
   if (a.state === "idle") {
     const waited = a.state_seconds == null ? "" : ago(a.state_seconds);
@@ -2767,6 +3705,20 @@ function liveBar(c) {
   return `<div class="state unknown${hit}><span class="dot"></span>
     <span class="what">quiet</span>
     <span class="since">${ago(a.idle_seconds)}</span>${jump}</div>`;
+}
+
+// Nothing open and nothing running: the same strip offers to start a session,
+// so the place the eye already goes for "is anything happening here" is also
+// where to make something happen. Quiet until hovered, since most cards are in
+// this state and a row of loud buttons would outshout the waiting ones. Not on
+// finished work, where starting a session is the rare case the menu covers.
+function startBar(c) {
+  if (c.status === "done" || c.status === "canceled") return "";
+  const busy = isStarting(c.path);
+  return `<div class="state startable${busy ? " busy" : ""}" data-start="${esc(c.path)}"
+      title="claude in a terminal and this page, on a free desktop; you stay here">
+    <span class="play">${busy ? "" : "▶"}</span>
+    <span class="what">${busy ? "starting…" : "start session"}</span></div>`;
 }
 
 function cardHtml(c) {
@@ -2818,6 +3770,8 @@ function cardHtml(c) {
     <div class="meta">${agent}${repos.join("")}${shown.join("")}${roll}
       ${c.ambiguous ? `<span class="tag" title="another node has this slug">dup slug</span>` : ""}</div>
     ${liveBar(c)}
+    <a class="cardlink" href="${NODE_URL(c.path)}" draggable="false"
+       aria-hidden="true" tabindex="-1"></a>
   </div>`;
 }
 
@@ -2857,6 +3811,7 @@ function render() {
   }
   rendered = signature(board);
   wire();
+  applyBoardFocus();
 }
 
 function countBy(cards, fn) {
@@ -2990,7 +3945,8 @@ function rowHtml(node, depth) {
     <input type="checkbox" data-check="${esc(node.path)}"
       ${state === "on" ? "checked" : ""} ${state === "some" ? 'data-some="1"' : ""}>
     <span class="rdot" style="--c:${cssVar(c ? c.status : "")}"></span>
-    <span class="rname" data-open="${esc(node.path)}" title="${esc(node.path)}">${esc(node.name)}</span>
+    <a class="rname pnav" href="${NODE_URL(node.path)}" data-open="${esc(node.path)}"
+       title="${esc(node.path)}">${esc(node.name)}</a>
     ${rlive ? `<span class="rlive" title="a claude session is working here"></span>` : ""}
     ${rlive && c.agent.desktop
       ? `<button class="rgo jump" data-pid="${c.agent.pid}"
@@ -3091,7 +4047,11 @@ function renderTree() {
     });
   }
   for (const name of document.querySelectorAll("#tree .rname")) {
-    name.addEventListener("click", () => gotoNode(name.dataset.open));
+    name.addEventListener("click", e => {
+      if (!plainClick(e)) return;
+      e.preventDefault();
+      gotoNode(name.dataset.open);
+    });
   }
   wire();
 }
@@ -3225,6 +4185,13 @@ function nodeFromUrl() {
   catch (e) { return null; }
 }
 
+// Anything that navigates inside the app is a real link, so the browser's own
+// gestures work on it -- middle-click and ctrl-click open a new tab with nothing
+// implemented per control. A handler routes in-page only for the plain case and
+// otherwise stands aside and lets the browser have the click.
+const plainClick = e => e.button === 0
+  && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey);
+
 function gotoNode(path) {
   if (!path || path === detailPath) return;
   try { history.pushState(null, "", NODE_URL(path)); } catch (e) {}
@@ -3232,6 +4199,7 @@ function gotoNode(path) {
 }
 
 function gotoBoard() {
+  if (detailPath) bFocus = detailPath;     // land back on the card you came from
   try { history.pushState(null, "", "/"); } catch (e) {}
   route();
 }
@@ -3243,7 +4211,7 @@ function route() {
   const path = nodeFromUrl();
   const moved = path !== detailPath;
   detailPath = path;
-  if (moved) { priMenu = null; closeCtx(); }
+  if (moved) { priMenu = null; closeCtx(); pFocus = null; pItem = -1; }
   document.getElementById("main").hidden = !!path;
   document.getElementById("project").hidden = !path;
   if (path) renderProject(moved); else render();
@@ -3253,11 +4221,16 @@ function route() {
 // already in the board poll, the links come from reading the node, and each
 // conversation is fetched on its own. Every redraw uses what has landed so far,
 // so the page is never blank waiting on a network call.
-let pLinks = null, pFor = null, pRendered = null;
+let pLinks = null, pFor = null, pRendered = null, pOrdered = false;
 const pThread = {};      // channel|ts -> {loading|error|messages}
 const pSent = {};        // channel|ts -> the permalink of the last reply sent
 const pDraft = {};       // key -> what is typed but not sent, kept across polls
 const pConvOpen = {};    // pr url -> whether its conversation is expanded
+// Set to a card key just before a redraw that should land on the newest
+// message rather than where the reader was. Opening a thread is the case:
+// restoring the old scroll position would show the top of a conversation whose
+// point is at the bottom.
+let pAnchor = null;
 
 // A fingerprint of everything the page draws, so the poll can tell a real
 // change from a no-op and leave the DOM (and the scroll position) alone when
@@ -3269,8 +4242,10 @@ function projectSig() {
   const links = (pLinks || []).map(l => {
     const d = l.data || {};
     const t = pThread[tkey(l.channel, l.ts)] || {};
-    return l.url + (d.stage || "") + (d.updated || "") + (d.timeline || []).length
-      + (t.error || "") + ((t.messages || []).length) + (pSent[tkey(l.channel, l.ts)] || "");
+    // Whole payloads rather than a few fields: a check finishing or a reaction
+    // landing changes neither a PR's updated stamp nor a thread's length.
+    return l.url + (l.hidden ? "h" : "") + JSON.stringify(l.alerts || "") + JSON.stringify(d) + (t.error || "")
+      + JSON.stringify(t.messages || []) + (pSent[tkey(l.channel, l.ts)] || "");
   }).join(";");
   return [detailPath, c.status, c.tracked, c.priority, a, c.open,
           pLinks === null ? "loading" : "loaded", links].join("|");
@@ -3287,42 +4262,69 @@ function renderProject(reload) {
   drawProject();
 }
 
-async function loadProject(path) {
+// `quiet` is a re-read of a page already on screen: a failed fetch keeps what
+// is shown rather than blanking it, and the redraw waits out a reply being typed.
+async function loadProject(path, quiet) {
   try {
     const r = await fetch("/api/links?path=" + encodeURIComponent(path));
     const d = await r.json();
     if (detailPath !== path) return;
-    pLinks = d.links || [];
+    if (!quiet || d.links) { pLinks = d.links || []; pOrdered = !!d.ordered; }
   } catch (e) {
     if (detailPath !== path) return;
-    pLinks = [];
+    if (!quiet) pLinks = [];
   }
-  drawProject();
+  quiet ? redrawProject() : drawProject();
   for (const l of pLinks) {
-    if (l.kind === "slack-thread") loadThread(l.channel, l.ts);
+    if (l.kind === "slack-thread") loadThread(l.channel, l.ts, false, quiet);
   }
 }
 
+function redrawProject() {
+  const composing = document.activeElement
+    && document.activeElement.matches(".psend textarea");
+  if (!composing && !pDrag && projectSig() !== pRendered) drawProject();
+}
+
+// PRs and threads move on their own -- a push, a check finishing, a reply --
+// so a project page asks for them again on a slow poll, and at once when its
+// tab comes back into view, since a hidden tab's timers are throttled. The
+// server's own short cache keeps this from reaching GitHub or Slack more often.
+const LIVE_MS = 20000;
+function reloadProject() {
+  if (!detailPath || pLinks === null || document.hidden) return;
+  loadProject(detailPath, true);
+}
+setInterval(reloadProject, LIVE_MS);
+document.addEventListener("visibilitychange", reloadProject);
+
 const tkey = (channel, ts) => channel + "|" + ts;
 
-async function loadThread(channel, ts, force) {
+async function loadThread(channel, ts, force, quiet) {
   const k = tkey(channel, ts);
   if (pThread[k] && pThread[k].loading) return;
-  pThread[k] = {loading: true, ...(pThread[k] || {})};
+  const before = pThread[k];
+  pThread[k] = {...(before || {}), loading: true};
   try {
     const r = await fetch("/api/slack?channel=" + encodeURIComponent(channel)
       + "&ts=" + encodeURIComponent(ts) + (force ? "&force=1" : ""));
-    pThread[k] = await r.json();
+    const d = await r.json();
+    pThread[k] = quiet && d.error && before ? before : d;
   } catch (e) {
-    pThread[k] = {error: e.message};
+    pThread[k] = quiet && before ? before : {error: e.message};
   }
+  if (quiet) { redrawProject(); return; }
   drawProject();
 }
 
 // ---- card chrome ---------------------------------------------------------
 
-function card(cls, head, body, foot, key) {
+// `sub` is a band that sits between the head and the scrolling body and does not
+// scroll: state belongs to the card, not to the conversation inside it, so
+// reading down a thread never carries away the line saying whose move it is.
+function card(cls, head, body, foot, key, sub) {
   return `<section class="pcard ${cls}"><h3>${head}</h3>
+    ${sub ? `<div class="psub">${sub}</div>` : ""}
     <div class="pbody"${key ? ` data-scroll="${esc(key)}"` : ""}>${body}</div>${foot || ""}</section>`;
 }
 
@@ -3335,6 +4337,67 @@ function isoAgo(iso) {
   const t = Date.parse(iso);
   if (isNaN(t)) return "";
   return ago(Math.max(0, (Date.now() - t) / 1000)) + " ago";
+}
+
+// Slack sends a reaction as its shortcode, and printing that raw put
+// `:dotted_line_face: 2` on the card. The standard ones are a fixed list, so
+// they are a map rather than a dependency, kept to what people actually react
+// with rather than to the whole set -- a miss costs a shortcode, a big table
+// costs every reader of this file.
+//
+// A workspace's own custom emoji are deliberately not resolved: the image would
+// need a scope this app was not granted, and the shortcode is a fine answer for
+// them. So an unmapped name -- custom or merely uncommon -- keeps its shortcode
+// and is styled to read as a name rather than as a failed glyph.
+const EMOJI = {
+  "+1": "\u{1F44D}", "-1": "\u{1F44E}", "thumbsup": "\u{1F44D}",
+  "thumbsdown": "\u{1F44E}", "ok_hand": "\u{1F44C}", "clap": "\u{1F44F}",
+  "raised_hands": "\u{1F64C}", "pray": "\u{1F64F}", "muscle": "\u{1F4AA}",
+  "wave": "\u{1F44B}", "eyes": "\u{1F440}", "saluting_face": "\u{1FAE1}",
+  "dotted_line_face": "\u{1FAE5}", "melting_face": "\u{1FAE0}",
+  "skull": "\u{1F480}", "fire": "\u{1F525}", "tada": "\u{1F389}",
+  "rocket": "\u{1F680}", "sparkles": "\u{2728}", "star": "\u{2B50}",
+  "100": "\u{1F4AF}", "heart": "\u{2764}\u{FE0F}", "heart_eyes": "\u{1F60D}",
+  "joy": "\u{1F602}", "rolling_on_the_floor_laughing": "\u{1F923}",
+  "sweat_smile": "\u{1F605}", "smile": "\u{1F604}",
+  "slightly_smiling_face": "\u{1F642}", "upside_down_face": "\u{1F643}",
+  "wink": "\u{1F609}", "thinking_face": "\u{1F914}",
+  "face_with_monocle": "\u{1F9D0}", "exploding_head": "\u{1F92F}",
+  "sob": "\u{1F62D}", "cry": "\u{1F622}", "scream": "\u{1F631}",
+  "grimacing": "\u{1F62C}", "confused": "\u{1F615}", "neutral_face": "\u{1F610}",
+  "no_mouth": "\u{1F636}", "hugging_face": "\u{1F917}",
+  "partying_face": "\u{1F973}", "sunglasses": "\u{1F60E}",
+  "nerd_face": "\u{1F913}", "ghost": "\u{1F47B}", "robot_face": "\u{1F916}",
+  "see_no_evil": "\u{1F648}", "facepalm": "\u{1F926}", "shrug": "\u{1F937}",
+  "man-shrugging": "\u{1F937}\u{200D}\u{2642}\u{FE0F}",
+  "woman-shrugging": "\u{1F937}\u{200D}\u{2640}\u{FE0F}",
+  "white_check_mark": "\u{2705}", "heavy_check_mark": "\u{2714}\u{FE0F}",
+  "ballot_box_with_check": "\u{2611}\u{FE0F}", "x": "\u{274C}",
+  "warning": "\u{26A0}\u{FE0F}", "no_entry": "\u{26D4}",
+  "question": "\u{2753}", "exclamation": "\u{2757}", "bangbang": "\u{203C}\u{FE0F}",
+  "bulb": "\u{1F4A1}", "zap": "\u{26A1}", "boom": "\u{1F4A5}",
+  "bug": "\u{1F41B}", "wrench": "\u{1F527}", "hammer": "\u{1F528}",
+  "gear": "\u{2699}\u{FE0F}", "lock": "\u{1F512}", "key": "\u{1F511}",
+  "mag": "\u{1F50D}", "memo": "\u{1F4DD}", "package": "\u{1F4E6}",
+  "chart_with_upwards_trend": "\u{1F4C8}",
+  "chart_with_downwards_trend": "\u{1F4C9}",
+  "hourglass_flowing_sand": "\u{23F3}", "alarm_clock": "\u{23F0}",
+  "checkered_flag": "\u{1F3C1}", "trophy": "\u{1F3C6}", "dart": "\u{1F3AF}",
+  "moneybag": "\u{1F4B0}", "money_with_wings": "\u{1F4B8}", "gem": "\u{1F48E}",
+  "construction": "\u{1F6A7}", "arrows_counterclockwise": "\u{1F504}",
+  "arrow_up": "\u{2B06}\u{FE0F}", "arrow_down": "\u{2B07}\u{FE0F}",
+  "parrot": "\u{1F99C}", "salt": "\u{1F9C2}", "popcorn": "\u{1F37F}",
+  "coffee": "\u{2615}", "beer": "\u{1F37A}", "pizza": "\u{1F355}",
+  "snail": "\u{1F40C}",
+
+};
+
+// A skin-tone modifier is a suffix on the name, not a different reaction.
+function reactEmoji(name) {
+  const base = String(name || "").replace(/::skin-tone-\d+$/, "");
+  const hit = EMOJI[base];
+  return hit ? `<span class="pemoji">${hit}</span>`
+             : `<span class="pshort">${esc(base)}</span>`;
 }
 
 // A Slack ts is epoch seconds with microseconds after the dot.
@@ -3389,11 +4452,17 @@ function sendBox(key, placeholder, label) {
 // A GitHub avatar is a public URL keyed by login, so it loads with no token and
 // makes the timeline read like the real one. The initial is what shows while it
 // loads and if it 404s.
+//
+// Deliberately not `loading="lazy"`. These arrive when a collapsed conversation
+// is expanded, which is exactly the case where a deferred load is least reliable
+// -- a lazy avatar was observed sitting unloaded while the same URL fetched fine
+// from the same page. They are 48px and there are a handful of them, so there is
+// nothing to defer.
 function avatar(login, url) {
   const initial = esc((login || "?")[0].toUpperCase());
   const src = url || (login ? `https://github.com/${encodeURIComponent(login)}.png?size=48` : "");
   return `<span class="pav" style="--h:${hue(login || "?")}">${initial}${
-    src ? `<img src="${esc(src)}" alt="" loading="lazy"
+    src ? `<img src="${esc(src)}" alt=""
       onload="this.style.opacity=1" onerror="this.remove()">` : ""}</span>`;
 }
 
@@ -3461,13 +4530,22 @@ function timelineEntry(e, opts) {
 // long and often and would otherwise bury the reviews.
 const PR_COMMENTS_SHOWN = 4;
 
+// How much of a thread a collapsed card shows. The message that opened it says
+// what the thread is about; the newest replies say where it stands. What sits
+// between those two is the part that can wait, so it is what gets elided. Two
+// dials rather than one, because the two ends answer different questions.
+const SLACK_HEAD_SHOWN = 1;
+const SLACK_TAIL_SHOWN = 3;
+
 // The court-and-clock line: whose move it is, on what, and for how long. This
 // is what a PR list is really asking, so it sits at the top, coloured by court
 // -- mine wants my attention, theirs is a wait, done is settled.
-const COURT_TONE = {mine: "warn", theirs: "mute", done: "good"};
+// A job has no court, only a state: running and idle read neutral, failing red.
+const COURT_TONE = {mine: "warn", theirs: "mute", done: "good", failing: "bad",
+                    running: "mute", idle: "mute",
+                    merged: "gh-merged", closed: "gh-closed"};
 
-function prSituation(d) {
-  const s = d.situation;
+function situationLine(s) {
   if (!s) return "";
   const tone = s.court === "done" ? "good" : COURT_TONE[s.court] || "mute";
   const dur = s.since ? isoAgo(s.since).replace(" ago", "") : "";
@@ -3477,9 +4555,10 @@ function prSituation(d) {
     <span class="psitdot"></span>
     <span class="psitverb">${esc(s.verb)}</span>
     ${s.who ? `<span class="psitwho">${esc(s.who)}</span>` : ""}
-    <span class="grow"></span>
-    ${whose ? `<span class="psitcourt">${whose}</span>` : ""}
-    ${dur ? `<span class="psitdur">${esc(dur)}</span>` : ""}
+    ${whose || dur ? `<span class="psitend">
+      ${whose ? `<span class="psitcourt">${whose}</span>` : ""}
+      ${dur ? `<span class="psitdur">${esc(dur)}</span>` : ""}
+    </span>` : ""}
   </div>`;
 }
 
@@ -3557,7 +4636,7 @@ function prCard(l) {
   return card("tall wide", head, `
     <div class="prhead">
       <div class="prtitle">${badge(d.tone, d.stage)}<span>${esc(d.title || "")}</span></div>
-      ${prSituation(d)}
+      ${situationLine(d.situation)}
       <div class="prmeta">${meta.join('<span class="sep">·</span>')}</div>
       ${counts ? `<div class="pchecks">${counts}</div>` : ""}
       ${d.failing && d.failing.length
@@ -3582,8 +4661,9 @@ function slackCard(l) {
   const head = `<span class="pk"># ${esc(l.chan_name || l.channel)}</span>
     ${l.found ? '<span class="pfound">in the notes</span>' : ""}
     <span class="grow"></span>
-    ${l.app_url ? `<a class="popen" href="${esc(l.app_url)}">open in Slack</a>` : ""}
-    <a class="popen" href="${esc(l.url)}" target="_blank" rel="noreferrer">open in browser</a>`;
+    ${l.app_url
+      ? `<a class="popen" href="${esc(l.app_url)}">open in Slack</a>`
+      : `<a class="popen" href="${esc(l.url)}" target="_blank" rel="noreferrer">open in Slack</a>`}`;
 
   if (t.error === "no-creds") {
     return card("tall wide", head, `<div class="pempty pslackempty">
@@ -3609,36 +4689,77 @@ function slackCard(l) {
     return card("tall wide", head, `<div class="pempty"><p>reading the thread…</p></div>`);
   }
 
-  const msgs = t.messages.map((m, i) => {
-    const react = (m.reactions || []).map(r =>
-      `<span class="preact">:${esc(r.name)}: ${r.count}</span>`).join("");
-    return `<div class="smsg">
-      ${avatar(m.who, m.avatar)}
-      <div class="smain">
-        <div class="shead"><b>${esc(m.who)}</b>
-          <span class="pdim">${esc(slackWhen(m.ts))}</span>
-          ${i === 0 ? '<span class="ptag">thread start</span>' : ""}</div>
-        <div class="stext">${slackText(m.text)}</div>
-        ${m.files ? `<div class="pdim">${m.files} file${m.files === 1 ? "" : "s"}</div>` : ""}
-        ${react ? `<div class="sreacts">${react}</div>` : ""}
-      </div>
-    </div>`;
-  }).join("");
+  const open = !!pConvOpen[l.url];
+  const all = t.messages.map((m, i) => ({m: m, i: i}));
+  // Nothing is worth eliding unless the gap is bigger than the line announcing
+  // it, so a thread that would show whole is shown whole, with no gap at all.
+  const gap = open ? 0 : Math.max(0, all.length - SLACK_HEAD_SHOWN - SLACK_TAIL_SHOWN);
+  const opening = gap ? all.slice(0, SLACK_HEAD_SHOWN) : all;
+  const latest = gap ? all.slice(-SLACK_TAIL_SHOWN) : [];
 
-  const sent = pSent[k];
+  // Consecutive messages from one person are one turn in the conversation, and
+  // repeating the avatar and byline for each of them is most of what made a
+  // thread long to read. One header per run, each message under it. Grouping
+  // runs within a stretch and never across the gap: the message that opened the
+  // thread and the newest replies are not consecutive even when one person sent
+  // both, and one byline over both would say they were.
+  const stretch = list => {
+    const runs = [];
+    for (const x of list) {
+      const prev = runs[runs.length - 1];
+      if (prev && prev.who === x.m.who) prev.msgs.push(x);
+      else runs.push({who: x.m.who, avatar: x.m.avatar, ts: x.m.ts, msgs: [x]});
+    }
+    return runs.map(r => `<div class="sgroup">
+      ${avatar(r.who, r.avatar)}
+      <div class="smain">
+        <div class="shead"><b>${esc(r.who)}</b>
+          <span class="pdim">${esc(slackWhen(r.ts))}</span>
+          ${r.msgs.some(x => x.i === 0) ? '<span class="ptag">thread start</span>' : ""}</div>
+        ${r.msgs.map((x, n) => {
+          const m = x.m;
+          const react = (m.reactions || []).map(z =>
+            `<span class="preact">${reactEmoji(z.name)} ${z.count}</span>`).join("");
+          return `<div class="stext${n ? " srest" : ""}">${slackText(m.text)}</div>
+            ${m.files ? `<div class="pdim">${m.files} file${m.files === 1 ? "" : "s"}</div>` : ""}
+            ${react ? `<div class="sreacts">${react}</div>` : ""}`;
+        }).join("")}
+      </div>
+    </div>`).join("");
+  };
+
+  // The gap line sits where the gap is, between the opening message and the
+  // newest replies, and opening the thread is what it does -- it names what is
+  // missing at the point it is missing.
+  const gapLine = gap
+    ? `<button class="smore" data-conv="${esc(l.url)}">+ ${gap} earlier</button>`
+    : "";
+  const body = stretch(opening) + gapLine + stretch(latest);
+
+  const count = all.length + (all.length === 1 ? " message" : " messages");
+  const elides = all.length > SLACK_HEAD_SHOWN + SLACK_TAIL_SHOWN;
   return card("tall wide", head,
-    `<div class="sthread">${msgs || '<div class="pempty"><p>no messages</p></div>'}</div>`,
+    `<div class="sthread">
+       ${body || '<div class="pempty"><p>no messages</p></div>'}
+     </div>
+     ${elides ? `<button class="pconvtoggle" data-conv="${esc(l.url)}">
+       <span class="pcaret${open ? " open" : ""}">${CARET}</span>
+       ${open ? "hide" : "show"} thread <span class="pdim">${esc(count)}</span></button>` : ""}`,
     `<div class="pfoot">
        ${sendBox(k, "reply in thread…", "send")}
-       ${sent ? `<div class="psent">sent ·
-         <a href="${esc(sent)}" target="_blank" rel="noreferrer">view</a>
-         <button class="linkish" data-copy="${esc(sent)}">copy link</button></div>` : ""}
-     </div>`, l.url);
+       ${pSent[k] ? `<div class="psent">sent ·
+         <a href="${esc(pSent[k])}" target="_blank" rel="noreferrer">view</a>
+         <button class="linkish" data-copy="${esc(pSent[k])}">copy link</button></div>` : ""}
+     </div>`, l.url, situationLine(t.situation));
 }
 
 function linkCard(l) {
   if (l.kind === "slack-thread") return slackCard(l);
   if (l.kind === "github-pr" || l.kind === "github-issue") return prCard(l);
+  if (l.kind === "job") return jobCard(l);
+  if (l.kind === "alert-group") return alertCard(l);
+  if (l.kind === "linear-issue") return linearCard(l);
+  if (l.kind === "linear-project") return linearProjectCard(l);
 
   const label = l.kind === "linear-issue" ? "linear"
     : l.kind === "slack-channel" ? "slack channel"
@@ -3655,7 +4776,862 @@ function linkCard(l) {
      <div class="pmono">${esc(l.url.replace(/^https?:\/\//, ""))}</div>`);
 }
 
+// ---- jobs, alerts, Linear -------------------------------------------------
+
+// How long between two stamps, or since the first when the second is missing.
+function span(a, b) {
+  const t0 = Date.parse(a), t1 = b ? Date.parse(b) : Date.now();
+  if (isNaN(t0) || isNaN(t1)) return "";
+  return ago(Math.max(0, (t1 - t0) / 1000));
+}
+
+const STEP_TONE = {succeeded: "good", running: "run", failed: "bad",
+                   waiting: "mute", unknown: "mute"};
+
+function copyBlock(cmd) {
+  return `<div class="pcopy"><code>${esc(cmd)}</code>
+    <button class="pcopybtn" data-copy="${esc(cmd)}" data-icon="1" title="copy">${CLIP}</button></div>`;
+}
+
+const TOKEN_PAGE = {
+  Grafana: "https://cyvlappsprod.grafana.net/org/serviceaccounts",
+  Linear: "https://linear.app/settings/account/security",
+};
+
+function needsToken(what, cmd, why) {
+  return `<div class="pempty"><p><b>Connect ${esc(what)}</b> to see ${esc(why)}.
+    Make a token <a href="${esc(TOKEN_PAGE[what])}" target="_blank" rel="noreferrer">here</a>,
+    then run this with it:</p>${copyBlock(cmd)}</div>`;
+}
+
+// One job's pipeline, from every link that names it. Leads with what it is
+// doing or stuck on, then a light per step in pipeline order, then the steps
+// that have run with their attempts, times and Argo runs, then the rest.
+function jobCard(l) {
+  const d = l.data;
+  const head = `<span class="pk">job ${l.job}${l.env === "dev" ? " · dev" : ""}</span>
+    ${d && d.name ? `<span class="pdim">${esc(d.name)}</span>` : ""}
+    <span class="grow"></span>
+    ${d && d.dashboard ? `<a class="popen" href="${esc(d.dashboard)}" target="_blank" rel="noreferrer">tracker</a>` : ""}`;
+  if (l.error) return card("tall", head, `<div class="pempty"><p class="pfail">${esc(l.error)}</p></div>`);
+  if (!d) return card("tall", head, `<div class="pempty"><p>reading the job…</p></div>`);
+
+  const steps = d.steps || [];
+  const c = d.counts || {};
+  const lights = steps.map(s => {
+    const tip = `${s.name} — ${s.status}${s.attempts > 1 ? ` · ${s.attempts} attempts` : ""}`
+      + (s.last && s.last !== s.status && s.last !== "succeeded" ? ` · last ${s.last}` : "");
+    const cls = `jl ${STEP_TONE[s.status] || "mute"}${s.last === "failed" && s.status !== "failed" ? " lastbad" : ""}`;
+    return s.run_url
+      ? `<a class="${cls}" href="${esc(s.run_url)}" target="_blank" rel="noreferrer" title="${esc(tip)}"></a>`
+      : `<span class="${cls}" title="${esc(tip)}"></span>`;
+  }).join("");
+
+  const ran = steps.filter(s => s.attempts || s.status === "running" || s.status === "failed");
+  // Loudest first, then the order the pipeline runs them in.
+  const weight = s => s.status === "failed" ? 0 : s.status === "running" ? 1
+    : s.last === "failed" ? 2 : 3;
+  ran.sort((a, b) => weight(a) - weight(b));
+  const row = s => `<div class="jrow">
+      <span class="jdot ${STEP_TONE[s.status] || "mute"}"></span>
+      <span class="jname">${esc(s.name)}</span>
+      <span class="jst ${STEP_TONE[s.status] || "mute"}">${esc(s.status)}${
+        s.last && s.last !== s.status ? ` <span class="pdim">(last run ${esc(s.last)})</span>` : ""}</span>
+      <span class="jmeta">${s.attempts > 1 ? `<b>${s.attempts}×</b> · ` : ""}${
+        s.started ? `${esc(isoAgo(s.finished || s.started))} · took ${esc(span(s.started, s.finished))}` : ""}${
+        s.overrides ? ` · ${s.overrides} override${s.overrides > 1 ? "s" : ""}` : ""}</span>
+      ${s.run_url ? `<a class="jrun" href="${esc(s.run_url)}" target="_blank" rel="noreferrer">argo</a>` : ""}
+      ${s.image ? `<span class="jimg pmono" title="${esc(s.image)}">${esc(s.version ? "v" + s.version : s.image)}</span>` : ""}
+    </div>`;
+  const waiting = steps.filter(s => s.status === "waiting");
+
+  const alerts = (l.alerts || []).map(a => alertLine(a)).join("");
+  const facts = [
+    d.customer && esc(d.customer),
+    d.datasets ? `${d.datasets} datasets` : "",
+    d.started ? `started ${esc(isoAgo(d.started))}` : "",
+    d.ended ? `ended ${esc(isoAgo(d.ended))}` : "",
+  ].filter(Boolean).join('<span class="sep">·</span>');
+  const also = (l.also || []).map(u => {
+    const h = u.replace(/^https?:\/\//, "").split("/")[0].split(".")[0];
+    return `<a class="pchip" href="${esc(u)}" target="_blank" rel="noreferrer">${esc(h)}</a>`;
+  }).join("");
+
+  return card("tall wide", head, `
+    <div class="jprog">
+      <div class="jbar"><span style="width:${d.percent}%"></span></div>
+      <span class="jcounts">
+        <span class="cgood">✓ ${c.succeeded || 0}</span>
+        ${c.running ? `<span class="crun">● ${c.running} running</span>` : ""}
+        ${c.failed ? `<span class="cbad">✗ ${c.failed} failed</span>` : ""}
+        <span class="cmute">${c.waiting || 0} waiting</span>
+        <span class="pdim">· ${d.percent}% of ${steps.length}</span>
+      </span>
+    </div>
+    <div class="jlights">${lights}</div>
+    ${facts ? `<div class="prmeta">${facts}</div>` : ""}
+    ${ran.length ? `<div class="jsec">steps that have run</div>${ran.map(row).join("")}` : ""}
+    ${waiting.length ? `<div class="jsec">waiting · ${waiting.length}</div>
+      <div class="jwait">${waiting.map(s => esc(s.name)).join('<span class="sep">·</span>')}</div>` : ""}
+    ${also ? `<div class="jsec">linked as</div><div class="jalso">${also}</div>` : ""}`,
+    "", "job|" + l.job, situationLine(d.situation) + alerts);
+}
+
+const ALERT_TONE = {firing: "bad", new: "bad", acknowledged: "warn",
+                    resolved: "good", silenced: "mute"};
+
+function alertLine(a) {
+  const d = a.data || {};
+  if (!d.state) return "";
+  return `<div class="jalert">${badge(ALERT_TONE[d.state] || "mute", "alert " + d.state)}
+    <span>${esc(d.title || "")}</span>
+    ${d.failed_step ? `<span class="pdim">failed step <b>${esc(d.failed_step)}</b></span>` : ""}
+    <span class="grow"></span>
+    ${d.slack ? `<a class="pchip" href="${esc(d.slack)}" target="_blank" rel="noreferrer">slack</a>` : ""}
+    <a class="pchip" href="${esc(a.url)}" target="_blank" rel="noreferrer">irm</a></div>`;
+}
+
+function alertCard(l) {
+  const head = `<span class="pk" title="${esc(l.alert)}">alert group</span>
+    <span class="grow"></span>
+    <a class="popen" href="${esc(l.url)}" target="_blank" rel="noreferrer">IRM</a>`;
+  if (l.error) return card("", head, `<div class="pempty"><p class="pfail">${esc(l.error)}</p></div>`);
+  const d = l.data;
+  if (!d) return card("", head, `<div class="pempty"><p>reading the alert…</p></div>`);
+  if (d.needs) return card("", head, needsToken("Grafana", "board grafana-auth",
+    "its state and failed step"));
+  const fields = Object.entries(d.fields || {}).map(([k, v]) =>
+    `<div class="jrow"><span class="jname pdim">${esc(k)}</span><span class="pmono">${esc(String(v))}</span></div>`).join("");
+  return card("tall", head, `
+    <div class="prtitle">${badge(ALERT_TONE[d.state] || "mute", d.state)}<span>${esc(d.title || "")}</span></div>
+    <div class="prmeta">${[
+      d.created ? `raised ${esc(isoAgo(d.created))}` : "",
+      d.acknowledged ? `acknowledged ${esc(isoAgo(d.acknowledged))}` : "",
+      d.resolved ? `resolved ${esc(isoAgo(d.resolved))}` : "",
+      d.alerts ? `${d.alerts} alert${d.alerts > 1 ? "s" : ""}` : "",
+    ].filter(Boolean).join('<span class="sep">·</span>')}</div>
+    ${fields}
+    ${d.slack ? `<p><a href="${esc(d.slack)}" target="_blank" rel="noreferrer">alert thread in Slack</a></p>` : ""}`);
+}
+
+// Linear hands back its own state colour, so a state pill looks like Linear's.
+function linState(st) {
+  if (!st) return "";
+  return `<span class="lstate" style="--t:${esc(st.color || "var(--faint)")}">${esc(st.name)}</span>`;
+}
+
+function linearCard(l) {
+  const head = `<span class="pk">${esc(l.issue)}</span>
+    ${l.found ? '<span class="pfound">in the notes</span>' : ""}
+    <span class="grow"></span>
+    <a class="popen" href="${esc(l.url)}" target="_blank" rel="noreferrer">open in Linear</a>`;
+  if (l.error) return card("", head, `<div class="pempty"><p class="pfail">${esc(l.error)}</p></div>`);
+  const d = l.data;
+  if (!d) return card("", head, `<div class="pempty"><p>reading the issue…</p></div>`);
+  if (d.needs) return card("", head, needsToken("Linear", "board linear-auth",
+    "state, assignee, sub-issues and comments"));
+  const meta = [
+    d.assignee ? `<b>${esc(d.assignee)}</b>` : '<span class="pdim">unassigned</span>',
+    d.priority && d.priority !== "No priority" ? esc(d.priority) : "",
+    d.team ? esc(d.team) : "",
+    d.cycle ? `cycle ${esc(String(d.cycle.number))}` : "",
+    d.project ? esc(d.project.name) : "",
+    d.estimate != null ? `${d.estimate} pt` : "",
+    d.due ? `due ${esc(d.due)}` : "",
+    d.updated ? `updated ${esc(isoAgo(d.updated))}` : "",
+  ].filter(Boolean).join('<span class="sep">·</span>');
+  const labels = (d.labels || []).map(x =>
+    `<span class="llabel" style="--t:${esc(x.color || "var(--faint)")}">${esc(x.name)}</span>`).join("");
+  const kids = (d.children || []).map(k => `<div class="jrow">
+      ${linState(k.state)}<span class="pmono">${esc(k.identifier)}</span>
+      <span class="jname">${esc(k.title)}</span>
+      <span class="jmeta">${esc((k.assignee || {}).name || "")}</span></div>`).join("");
+  const comments = (d.comments || []).slice().reverse().map(c => `<div class="pev">
+      <div class="pevhead"><b>${esc((c.user || {}).name || "someone")}</b>
+        <span class="pdim">${esc(isoAgo(c.createdAt))}</span></div>
+      <div class="pev-body">${md(c.body || "")}</div></div>`).join("");
+  return card("tall wide", head, `
+    <div class="prtitle">${linState(d.state)}<span>${esc(d.title || "")}</span></div>
+    <div class="prmeta">${meta}</div>
+    ${labels ? `<div class="llabels">${labels}</div>` : ""}
+    ${d.parent ? `<div class="prmeta">sub-issue of <span class="pmono">${esc(d.parent.identifier)}</span> ${esc(d.parent.title)}</div>` : ""}
+    ${d.description ? `<div class="prdesc">${md(d.description)}</div>` : ""}
+    ${kids ? `<div class="jsec">sub-issues · ${d.children.length}</div>${kids}` : ""}
+    ${comments ? `<div class="jsec">latest comments</div>${comments}` : ""}`, "", "lin|" + l.issue);
+}
+
+const LIN_TYPES = [["started", "in progress", "crun"], ["unstarted", "todo", "cmute"],
+  ["backlog", "backlog", "cmute"], ["completed", "done", "cgood"], ["canceled", "canceled", "cmute"]];
+
+function linearProjectCard(l) {
+  const head = `<span class="pk">linear</span>
+    ${l.found ? '<span class="pfound">in the notes</span>' : ""}
+    <span class="grow"></span>
+    <a class="popen" href="${esc(l.url)}" target="_blank" rel="noreferrer">open in Linear</a>`;
+  if (l.error) return card("", head, `<div class="pempty"><p class="pfail">${esc(l.error)}</p></div>`);
+  const d = l.data;
+  if (!d) return card("", head, `<div class="pempty"><p>reading the project…</p></div>`);
+  if (d.needs) return card("", head, needsToken("Linear", "board linear-auth",
+    "progress, open issues and updates"));
+  const types = LIN_TYPES.filter(([t]) => (d.by_type || {})[t])
+    .map(([t, word, cls]) => `<span class="${cls}">${d.by_type[t]} ${word}</span>`).join("");
+  const open = (d.open || []).map(i => `<div class="jrow">
+      <span class="jdot ${(i.state || {}).type === "started" ? "run" : "mute"}"></span>
+      <span class="pmono">${esc(i.identifier)}</span><span class="jname">${esc(i.title)}</span>
+      <span class="jmeta">${esc((i.assignee || {}).name || "")}</span></div>`).join("");
+  const updates = (d.updates || []).slice().reverse().map(u => `<div class="pev">
+      <div class="pevhead"><b>${esc((u.user || {}).name || "someone")}</b>
+        ${u.health ? `<span class="pdim">${esc(u.health)}</span>` : ""}
+        <span class="pdim">${esc(isoAgo(u.createdAt))}</span></div>
+      <div class="pev-body">${md(u.body || "")}</div></div>`).join("");
+  return card("tall wide", head, `
+    <div class="prtitle">${d.status ? linState(d.status) : ""}<span>${esc(d.name || "")}</span></div>
+    <div class="jprog"><div class="jbar"><span style="width:${d.progress}%"></span></div>
+      <span class="jcounts">${types}<span class="pdim">· ${d.progress}% of ${d.issues}</span></span></div>
+    <div class="prmeta">${[
+      d.lead ? `lead <b>${esc(d.lead)}</b>` : "",
+      d.health ? esc(d.health.replace(/([A-Z])/g, " $1").toLowerCase()) : "",
+      d.target ? `target ${esc(d.target)}` : "",
+      (d.teams || []).join(", "),
+    ].filter(Boolean).join('<span class="sep">·</span>')}</div>
+    ${d.description ? `<div class="prdesc">${md(d.description)}</div>` : ""}
+    ${open ? `<div class="jsec">open issues</div>${open}` : ""}
+    ${updates ? `<div class="jsec">latest updates</div>${updates}` : ""}`, "", "linp|" + l.slug);
+}
+
+// ---- @mentions in a Slack reply -------------------------------------------
+//
+// Typing @ in a thread's reply box opens a picker over the workspace's people,
+// narrowed as you type. Ctrl-n / ctrl-p (or the arrows) move, Tab or Enter
+// picks, Esc closes. The box shows the name; the reply that is sent carries
+// Slack's <@id> form, which is what actually notifies them.
+let pPeople = null;          // [{id, name, real, handle, avatar}] once fetched
+const pMentions = {};        // draft key -> {"@Name": user id}
+let pPick = null;            // {ta, key, start, items, i} while the picker is open
+
+async function loadPeople() {
+  if (pPeople) return pPeople;
+  try {
+    const d = await (await fetch("/api/people")).json();
+    pPeople = d.people || [];
+  } catch (e) { pPeople = []; }
+  return pPeople;
+}
+
+function mentionQuery(ta) {
+  const upto = ta.value.slice(0, ta.selectionStart);
+  const m = /(^|\s)@([^\s@]{0,30})$/.exec(upto);
+  return m ? {start: upto.length - m[2].length - 1, q: m[2].toLowerCase()} : null;
+}
+
+function closePick() {
+  const el = document.getElementById("pmention");
+  if (el) el.remove();
+  pPick = null;
+}
+
+async function openPick(ta) {
+  const at = mentionQuery(ta);
+  if (!at) return closePick();
+  const people = await loadPeople();
+  const hits = people.filter(p => [p.name, p.real, p.handle]
+    .some(s => (s || "").toLowerCase().split(/[\s._-]+/).some(w => w.startsWith(at.q))
+               || (s || "").toLowerCase().startsWith(at.q))).slice(0, 7);
+  if (!hits.length) return closePick();
+  const keep = pPick && pPick.ta === ta ? Math.min(pPick.i, hits.length - 1) : 0;
+  pPick = {ta, key: ta.dataset.draft, start: at.start, items: hits, i: keep};
+  drawPick();
+}
+
+function drawPick() {
+  let el = document.getElementById("pmention");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "pmention";
+    document.body.appendChild(el);
+  }
+  const r = pPick.ta.getBoundingClientRect();
+  el.style.left = r.left + "px";
+  el.style.width = Math.min(340, r.width) + "px";
+  el.style.bottom = (innerHeight - r.top + 4) + "px";
+  el.innerHTML = pPick.items.map((p, i) => `<div class="pmrow${i === pPick.i ? " on" : ""}" data-i="${i}">
+      ${p.avatar ? `<img src="${esc(p.avatar)}" alt="">` : ""}<b>${esc(p.name)}</b>
+      ${p.real && p.real !== p.name ? `<span class="pdim">${esc(p.real)}</span>` : ""}</div>`).join("");
+  for (const row of el.querySelectorAll(".pmrow")) {
+    row.addEventListener("mousedown", e => { e.preventDefault(); pickMention(+row.dataset.i); });
+  }
+}
+
+function pickMention(i) {
+  const {ta, key, start} = pPick;
+  const p = pPick.items[i];
+  const label = "@" + p.name;
+  const end = ta.selectionStart;
+  ta.value = ta.value.slice(0, start) + label + " " + ta.value.slice(end);
+  const caret = start + label.length + 1;
+  ta.setSelectionRange(caret, caret);
+  (pMentions[key] = pMentions[key] || {})[label] = p.id;
+  pDraft[key] = ta.value;
+  closePick();
+}
+
+// Called first from a reply box's keydown; true means the picker took the key.
+function pickKey(e) {
+  if (!pPick || e.target !== pPick.ta) return false;
+  const n = pPick.items.length;
+  if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) pPick.i = (pPick.i + 1) % n;
+  else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) pPick.i = (pPick.i + n - 1) % n;
+  else if (e.key === "Tab" || e.key === "Enter") { pickMention(pPick.i); }
+  else if (e.key === "Escape") closePick();
+  else return false;
+  e.preventDefault();
+  if (pPick) drawPick();
+  return true;
+}
+
+// "@Connor Smith" back to <@U123> for the send, longest names first so one
+// name that prefixes another cannot swallow it.
+function withMentions(key, text) {
+  const m = pMentions[key] || {};
+  for (const label of Object.keys(m).sort((a, b) => b.length - a.length)) {
+    text = text.split(label).join(`<@${m[label]}>`);
+  }
+  return text;
+}
+
+// ---- keys on the project page ---------------------------------------------
+//
+// Two levels, the way kitty and vim split a screen. Each card is a pane:
+// shift-hjkl moves between panes, and plain hjkl moves inside the one you are
+// in -- j/k walk its items (messages, reviews, steps), l opens its conversation
+// and h folds it. j past the last item drops into the pane's reply box, and Esc
+// climbs back out one level. Nothing uses ctrl, which is the browser's.
+let pFocus = null;           // link id of the pane the keys act on
+let pItem = -1;              // index of the item under the cursor inside it
+const pUndo = [];            // ids hidden by key, most recent last
+let pPending = "", pPendingAt = 0;
+const ITEMS = ".sgroup, .smore, .pev, .jrow, .jalert, .pconvtoggle, .prdesc";
+
+const PKEYS = [
+  ["shift + h j k l", "move between panes (cards)"],
+  ["1–9", "jump to the nth pane"],
+  ["j k", "move through the pane's items"],
+  ["gg  G   {  }", "first / last item · five up / down"],
+  ["l  h", "open / fold the conversation"],
+  ["j past the end, i, a", "into the reply box"],
+  ["enter", "in the reply box: send, and stay in it"],
+  ["@", "in a Slack reply: mention someone (ctrl-n/p, tab)"],
+  ["esc", "out of the box · off the item · back to the board"],
+  ["s", "into a Slack reply box (again for the next thread)"],
+  ["o  enter", "open the item's link, or the pane's"],
+  ["O", "open the pane in its app (Slack)"],
+  ["<  >", "move the pane earlier / later"],
+  ["dd  x", "hide the pane"],
+  ["u", "bring back the last one hidden"],
+  ["yy  yb", "copy its link · a PR's branch"],
+  ["r", "refresh"],
+  ["?", "this list"],
+];
+
+function cardEls() { return [...document.querySelectorAll("#project [data-lid]")]; }
+function focusedEl() {
+  return pFocus && document.querySelector(`#project [data-lid="${CSS.escape(pFocus)}"]`);
+}
+function itemEls(el) { return el ? [...el.querySelectorAll(ITEMS)] : []; }
+
+function applyFocus() {
+  for (const x of document.querySelectorAll("#project .pfocus, #project .pitem"))
+    x.classList.remove("pfocus", "pitem");
+  const el = focusedEl();
+  if (!el) { pFocus = null; pItem = -1; return; }
+  el.classList.add("pfocus");
+  const items = itemEls(el);
+  if (pItem >= items.length) pItem = items.length - 1;
+  if (pItem >= 0) items[pItem].classList.add("pitem");
+}
+
+function setFocus(el) {
+  if (!el) return;
+  if (el.dataset.lid !== pFocus) pItem = -1;
+  pFocus = el.dataset.lid;
+  applyFocus();
+  el.scrollIntoView({block: "nearest", inline: "nearest"});
+}
+
+function setItem(i) {
+  const el = focusedEl();
+  const items = itemEls(el);
+  if (!items.length) return;
+  pItem = Math.max(0, Math.min(items.length - 1, i));
+  applyFocus();
+  items[pItem].scrollIntoView({block: "nearest"});
+}
+
+function intoReply(el) {
+  const ta = el && el.querySelector(".psend textarea");
+  if (!ta) return false;
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+  return true;
+}
+
+// Move the focused pane one place within its own tier, and save that order.
+function nudge(step) {
+  const el = focusedEl();
+  if (!el) return;
+  const sibs = [...el.parentElement.children].filter(x => x.dataset.lid);
+  const i = sibs.indexOf(el), j = i + step;
+  if (j < 0 || j >= sibs.length) return;
+  const other = sibs[j].dataset.lid;
+  const a = pLinks.findIndex(x => x.id === pFocus), b = pLinks.findIndex(x => x.id === other);
+  [pLinks[a], pLinks[b]] = [pLinks[b], pLinks[a]];
+  saveView();
+  drawProject();
+}
+
+function focusedLink() { return pFocus && (pLinks || []).find(x => x.id === pFocus); }
+function toggleHelp(force) { showKeys("keys on this page", PKEYS, force); }
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); } catch (e) {}
+}
+
+const PANE_DIR = {H: "h", J: "j", K: "k", L: "l",
+                  ArrowLeft: "h", ArrowDown: "j", ArrowUp: "k", ArrowRight: "l"};
+
+// True when the key was the project page's to handle.
+function projectKey(e) {
+  if (!detailPath || e.target.matches("input, textarea")) return false;
+  if (e.altKey || e.metaKey || e.ctrlKey) return false;
+  const k = e.key;
+  const now = Date.now();
+  const seq = now - pPendingAt < 900 ? pPending + k : k;
+  pPending = ""; pPendingAt = 0;
+  const later = () => { pPending = k; pPendingAt = now; return true; };
+  if (!pFocus) setFocus(cardEls()[0]);
+  const el = focusedEl();
+  const items = itemEls(el);
+
+  if (k === "?") { toggleHelp(); return true; }
+  if (k === "Escape") {
+    if (document.getElementById("pkeys")) { toggleHelp(false); return true; }
+    if (pItem >= 0) { pItem = -1; applyFocus(); return true; }
+    return false;                     // the global handler goes back to the board
+  }
+  // Outer level: between panes.
+  const pane = (k.startsWith("Arrow") ? e.shiftKey : true) && PANE_DIR[k];
+  if (pane && (k.length === 1 || e.shiftKey)) { setFocus(nearestEl(cardEls(), el, pane)); return true; }
+  if (/^[1-9]$/.test(k)) { setFocus(cardEls()[+k - 1]); return true; }
+  if (!el) return false;
+  // Inner level: inside the pane.
+  if (k === "j" || k === "ArrowDown") {
+    if (pItem >= items.length - 1 && intoReply(el)) return true;
+    setItem(pItem + 1);
+    return true;
+  }
+  if (k === "k" || k === "ArrowUp") { setItem(pItem <= 0 ? 0 : pItem - 1); return true; }
+  if (k === "}") { setItem(pItem + 5); return true; }
+  if (k === "{") { setItem(pItem - 5); return true; }
+  if (k === "G") { setItem(items.length - 1); return true; }
+  if (seq === "gg") { setItem(0); return true; }
+  if (k === "l" || k === "ArrowRight" || k === "h" || k === "ArrowLeft") {
+    const b = el.querySelector("[data-conv]");
+    const open = b && !!pConvOpen[b.dataset.conv];
+    const want = k === "l" || k === "ArrowRight";
+    if (b && open !== want) b.click();
+    else if (want && pItem >= 0 && items[pItem].matches(".smore")) items[pItem].click();
+    return true;
+  }
+  if (k === "<") { nudge(-1); return true; }
+  if (k === ">") { nudge(1); return true; }
+  if (k === "g" || k === "z" || (k === "d" && seq !== "dd") || (k === "y" && seq !== "yy")) return later();
+  if (k === "s") { replyInThread(true); e.preventDefault(); return true; }
+  if (seq === "dd" || k === "x") {
+    const els = cardEls(), i = els.indexOf(el);
+    const next = els[i + 1] || els[i - 1];
+    pUndo.push(pFocus);
+    pFocus = next ? next.dataset.lid : null;
+    pItem = -1;
+    setHidden(pUndo[pUndo.length - 1], true);
+    return true;
+  }
+  if (k === "u") return undoHide();
+  if (k === "i" || k === "a") { e.preventDefault(); intoReply(el); return true; }
+  if (seq === "za" || k === " ") {
+    const b = el.querySelector("[data-conv]");
+    if (b) b.click();
+    e.preventDefault();
+    return true;
+  }
+  const l = focusedLink();
+  if (k === "o" || k === "Enter") {
+    const it = pItem >= 0 ? items[pItem] : null;
+    if (it && it.matches("button, .smore")) { it.click(); return true; }
+    const a = it && it.querySelector("a[href^='http']");
+    const url = a ? a.href : l && l.url;
+    if (url) window.open(url, "_blank", "noopener");
+    return true;
+  }
+  if (k === "O") { if (l) window.open(l.app_url || l.url, "_blank", "noopener"); return true; }
+  if (seq === "yy") { if (l) copyText(l.url); return true; }
+  if (seq === "yb") { if (l && l.data && l.data.branch) copyText(l.data.branch); return true; }
+  return false;
+}
+
+// Focus a Slack thread's reply box: the focused card's if it is a thread, else
+// the next thread after it, so pressing s again walks through them.
+function replyInThread(next) {
+  const threads = cardEls().filter(el => el.querySelector('.psend textarea:not([data-draft^="gh|"])'));
+  if (!threads.length) return false;
+  const cur = focusedEl();
+  let i = threads.indexOf(cur);
+  if (i < 0) i = 0;
+  else if (next && document.activeElement === document.body && cur.dataset.lid === pLastReply) i = (i + 1) % threads.length;
+  const el = threads[i];
+  setFocus(el);
+  const ta = el.querySelector(".psend textarea");
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+  pLastReply = el.dataset.lid;
+  return true;
+}
+let pLastReply = null;
+
+function undoHide() {
+  const id = pUndo.pop();
+  if (!id) return true;
+  pFocus = id;
+  setHidden(id, false);
+  return true;
+}
+
+// Esc in a reply box drops back to the card rather than off the page, and the
+// card keeps the keys. Clicking a card focuses it too, so mouse and keys agree.
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape" || !detailPath) return;
+  if (!e.target.matches(".psend textarea") || pPick) return;
+  const sec = e.target.closest("[data-lid]");
+  e.target.blur();
+  // Back to the thread, on its newest item, so k reads up from where you wrote.
+  if (sec) { setFocus(sec); setItem(itemEls(sec).length - 1); }
+  e.preventDefault();
+  e.stopPropagation();
+}, true);
+document.addEventListener("mousedown", e => {
+  if (!detailPath) return;
+  const sec = e.target.closest && e.target.closest("#project [data-lid]");
+  if (sec && sec.dataset.lid !== pFocus) { pFocus = sec.dataset.lid; applyFocus(); }
+});
+
+// ---- keys on the board ----------------------------------------------------
+//
+// The same grammar as the project page: hjkl between cards, the shifted
+// letters move the card (here, to the next status column), Enter opens it, and
+// s goes straight to replying in its Slack thread.
+let bFocus = null;           // path of the board card the keys act on
+const bUndo = [];            // paths hidden from the board by key
+
+const BKEYS = [
+  ["shift + h l  (or h l)", "move between columns"],
+  ["j k", "move through the column's cards"],
+  ["gg  G", "top / bottom of the column"],
+  ["1–9", "first card of the nth column"],
+  ["enter  o", "open the project"],
+  ["s", "open it in its Slack reply box"],
+  ["<  >", "move the card to the previous / next status"],
+  ["t", "track / stop tracking"],
+  ["m", "the card's menu (status, priority, links)"],
+  ["dd  x", "hide the card from the board"],
+  ["u", "bring back the last one hidden"],
+  ["D", "go to its desktop, or start claude on a free one"],
+  ["/", "filter"],
+  ["b  c  r", "tree · columns · refresh"],
+  ["esc", "unfocus"],
+  ["?", "this list"],
+];
+
+// Nearest element in a direction by box centres, favouring ones in line on the
+// other axis, which is how a tiling window manager picks a neighbour.
+function nearestEl(els, cur, dir) {
+  if (!cur) return els[0];
+  const c = cur.getBoundingClientRect();
+  const cx = c.left + c.width / 2, cy = c.top + c.height / 2;
+  let best = null, score = Infinity;
+  for (const el of els) {
+    if (el === cur) continue;
+    const r = el.getBoundingClientRect();
+    const dx = r.left + r.width / 2 - cx, dy = r.top + r.height / 2 - cy;
+    const ok = dir === "h" ? dx < -1 : dir === "l" ? dx > 1 : dir === "k" ? dy < -1 : dy > 1;
+    if (!ok) continue;
+    const horiz = dir === "h" || dir === "l";
+    const s = (horiz ? Math.abs(dx) : Math.abs(dy)) + (horiz ? Math.abs(dy) : Math.abs(dx)) * 3;
+    if (s < score) { score = s; best = el; }
+  }
+  return best;
+}
+
+function boardEls() { return [...document.querySelectorAll("#board .card[data-path]")]; }
+function bFocusedEl() {
+  return bFocus && document.querySelector(`#board .card[data-path="${CSS.escape(bFocus)}"]`);
+}
+function applyBoardFocus() {
+  for (const el of document.querySelectorAll("#board .bfocus")) el.classList.remove("bfocus");
+  const el = bFocusedEl();
+  if (el) el.classList.add("bfocus");
+}
+function setBoardFocus(el) {
+  if (!el) return;
+  bFocus = el.dataset.path;
+  applyBoardFocus();
+  el.scrollIntoView({block: "nearest", inline: "nearest"});
+}
+
+function showKeys(title, rows, force) {
+  let el = document.getElementById("pkeys");
+  if (el && force !== true) { el.remove(); return; }
+  if (el || force === false) return;
+  el = document.createElement("div");
+  el.id = "pkeys";
+  el.innerHTML = `<b>${esc(title)}</b>` + rows.map(([k, what]) =>
+    `<div class="pkrow"><kbd>${esc(k)}</kbd><span>${esc(what)}</span></div>`).join("");
+  el.addEventListener("click", () => el.remove());
+  document.body.appendChild(el);
+}
+
+// Open a project with its first Slack thread's reply box already focused.
+let pReplyOnOpen = false;
+function openToReply(path) {
+  pReplyOnOpen = true;
+  gotoNode(path);
+}
+
+function boardKey(e) {
+  if (detailPath || e.target.matches("input, textarea")) return false;
+  if (e.altKey || e.metaKey || document.getElementById("ctx")) return false;
+  const k = e.key, ctrl = e.ctrlKey;
+  const now = Date.now();
+  const seq = now - pPendingAt < 900 ? pPending + k : k;
+  pPending = ""; pPendingAt = 0;
+  if (k === "?") { showKeys("keys on the board", BKEYS); return true; }
+  if (k === "Escape") {
+    if (document.getElementById("pkeys")) { showKeys("", [], false); return true; }
+    if (bFocus) { bFocus = null; applyBoardFocus(); return true; }
+    return false;
+  }
+  if (ctrl) return false;
+  // Columns are the panes here. They have nothing to move through sideways, so
+  // h and l move between them as well as the shifted pair does.
+  const dir = {h: "h", j: "j", k: "k", l: "l", H: "h", L: "l", ArrowLeft: "h",
+               ArrowDown: "j", ArrowUp: "k", ArrowRight: "l"}[k];
+  if (dir) {
+    setBoardFocus(nearestEl(boardEls(), bFocusedEl(), dir));
+    return true;
+  }
+  if (/^[1-9]$/.test(k)) {
+    const col = document.querySelectorAll("#board .col")[+k - 1];
+    setBoardFocus(col && col.querySelector(".card[data-path]"));
+    return true;
+  }
+  if ((k === "d" && seq !== "dd") || (k === "g" && seq !== "gg")) {
+    pPending = k; pPendingAt = now; return true;
+  }
+  // Top and bottom of the focused card's column, or of the first column.
+  if (seq === "gg" || k === "G") {
+    const col = (bFocusedEl() || boardEls()[0] || {}).closest?.(".col");
+    const cards = col ? [...col.querySelectorAll(".card[data-path]")] : [];
+    setBoardFocus(k === "G" ? cards[cards.length - 1] : cards[0]);
+    return true;
+  }
+  if (k === "u") {
+    const p = bUndo.pop();
+    if (p) { off.delete(p); save("off", [...off]); bFocus = p; render(); }
+    return true;
+  }
+  const el = bFocusedEl();
+  if (!el) {
+    if (["Enter", "o", "s", "<", ">", "t", "m", "x", "D"].includes(k)) {
+      setBoardFocus(boardEls()[0]);
+      return true;
+    }
+    return false;
+  }
+  const c = board.cards.find(x => x.path === bFocus);
+  if (!c) return false;
+  if (k === "Enter" || k === "o") { gotoNode(c.path); return true; }
+  if (k === "s") { openToReply(c.path); return true; }
+  if (k === "<" || k === ">") {
+    const cols = columns();
+    const i = cols.indexOf(c.status), j = i + (k === "<" ? -1 : 1);
+    if (i >= 0 && j >= 0 && j < cols.length) move(c.path, cols[j]);
+    return true;
+  }
+  if (k === "t") { trackNode(c.path, !c.tracked); return true; }
+  if (k === "m") {
+    const r = el.getBoundingClientRect();
+    openCtx(c.path, r.left + 20, r.top + 20);
+    return true;
+  }
+  if (seq === "dd" || k === "x") {
+    const next = nearestEl(boardEls(), el, "j") || nearestEl(boardEls(), el, "k");
+    bUndo.push(c.path);
+    off.add(c.path); save("off", [...off]);
+    bFocus = next ? next.dataset.path : null;
+    render();
+    return true;
+  }
+  if (k === "D") {
+    goOrStart(c);
+    return true;
+  }
+  return false;
+}
+
+// ---- hide and reorder -----------------------------------------------------
+
+const GRIP = `<svg viewBox="0 0 10 14" width="10" height="14" fill="currentColor"><circle cx="3" cy="3" r="1.2"/><circle cx="7" cy="3" r="1.2"/><circle cx="3" cy="7" r="1.2"/><circle cx="7" cy="7" r="1.2"/><circle cx="3" cy="11" r="1.2"/><circle cx="7" cy="11" r="1.2"/></svg>`;
+
+// Every card gets a drag grip and a hide control in its head. Added around the
+// card rather than threaded through every renderer, since it is the same for
+// all of them and none of them needs to know.
+function withControls(l, html) {
+  return html
+    .replace('<section class="pcard', `<section data-lid="${esc(l.id || "")}" class="pcard`)
+    .replace("<h3>", `<h3><span class="pgrip" title="drag to reorder">${GRIP}</span>`)
+    .replace("</h3>", `<button class="phide" data-hide="${esc(l.id || "")}" title="hide this card">hide</button></h3>`);
+}
+
+function linkName(l) {
+  if (l.kind === "github-pr" || l.kind === "github-issue") return `${l.repo.split("/")[1]} #${l.number}`;
+  if (l.kind === "job") return `job ${l.job}`;
+  if (l.kind === "alert-group") return `alert ${l.alert}`;
+  if (l.kind === "linear-issue") return l.issue;
+  if (l.kind === "linear-project") return "linear";
+  if (l.kind === "slack-thread") return "slack thread";
+  return l.key || l.host;
+}
+
+function saveView() {
+  const hidden = pLinks.filter(l => l.hidden).map(l => l.id);
+  const order = pLinks.map(l => l.id);
+  pOrdered = true;
+  fetch("/api/linkview", {method: "POST", body: JSON.stringify(
+    {path: detailPath, hidden, order})}).catch(() => {});
+}
+
+function setHidden(id, on) {
+  const l = pLinks.find(x => x.id === id);
+  if (!l) return;
+  l.hidden = on;
+  saveView();
+  drawProject();
+}
+
+function moveLink(id, beforeId) {
+  const from = pLinks.findIndex(x => x.id === id);
+  if (from < 0 || id === beforeId) return;
+  const [l] = pLinks.splice(from, 1);
+  const to = pLinks.findIndex(x => x.id === beforeId);
+  pLinks.splice(to < 0 ? pLinks.length : to, 0, l);
+  saveView();
+  drawProject();
+}
+
+// A card is only draggable while its grip is held, so text in a card can still
+// be selected and its links and buttons still click.
+//
+// Dragging moves the card itself through its tier as the pointer goes, the way
+// a kanban board does: the others slide aside to show where it will land, and
+// the card being carried stays in place as a dashed slot with a bar on its
+// leading edge. Nothing is saved until the drop.
+let pDrag = null;        // {id, sec, box, dropped} while a card is carried
+
+function flipMove(box, move) {
+  const kids = [...box.children];
+  const before = new Map(kids.map(k => [k, k.getBoundingClientRect()]));
+  move();
+  for (const k of kids) {
+    const a = before.get(k), b = k.getBoundingClientRect();
+    const dx = a.left - b.left, dy = a.top - b.top;
+    if (!dx && !dy) continue;
+    k.style.transition = "none";
+    k.style.transform = `translate(${dx}px, ${dy}px)`;
+    requestAnimationFrame(() => {
+      k.style.transition = "transform 160ms ease";
+      k.style.transform = "";
+    });
+  }
+}
+
+function wireReorder() {
+  for (const g of document.querySelectorAll(".pgrip")) {
+    const sec = g.closest("[data-lid]");
+    g.addEventListener("mousedown", () => { sec.draggable = true; });
+    g.addEventListener("mouseup", () => { sec.draggable = false; });
+  }
+  for (const sec of document.querySelectorAll("#project [data-lid]")) {
+    sec.addEventListener("dragstart", e => {
+      e.dataTransfer.setData("text/x-lid", sec.dataset.lid);
+      e.dataTransfer.effectAllowed = "move";
+      pDrag = {id: sec.dataset.lid, sec, box: sec.parentElement, dropped: false};
+      // After the browser has taken its drag image, so the image is the card
+      // and not the slot.
+      requestAnimationFrame(() => sec.classList.add("pslot"));
+    });
+    sec.addEventListener("dragend", () => {
+      sec.draggable = false;
+      const d = pDrag;
+      pDrag = null;
+      if (d && !d.dropped) drawProject();   // put back what the drag moved
+    });
+  }
+  for (const box of document.querySelectorAll("#project .pgrid, #project .pmini")) {
+    box.addEventListener("dragover", e => {
+      if (!pDrag || pDrag.box !== box) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const over = e.target.closest && e.target.closest("[data-lid]");
+      if (!over || over === pDrag.sec || over.parentElement !== box) return;
+      const r = over.getBoundingClientRect();
+      const after = e.clientX > r.left + r.width / 2;
+      const ref = after ? over.nextElementSibling : over;
+      if (ref === pDrag.sec || (ref === null && box.lastElementChild === pDrag.sec)) return;
+      flipMove(box, () => box.insertBefore(pDrag.sec, ref));
+    });
+    box.addEventListener("drop", e => {
+      if (!pDrag || pDrag.box !== box) return;
+      e.preventDefault();
+      pDrag.dropped = true;
+      pDrag.sec.classList.remove("pslot");
+      const shown = [...document.querySelectorAll("#project [data-lid]")].map(x => x.dataset.lid);
+      const rank = new Map(shown.map((id, i) => [id, i]));
+      pLinks.sort((a, b) => (rank.has(a.id) ? rank.get(a.id) : 1e9)
+                          - (rank.has(b.id) ? rank.get(b.id) : 1e9));
+      saveView();
+      drawProject();
+    });
+  }
+  for (const b of document.querySelectorAll("[data-hide]")) {
+    b.addEventListener("click", () => setHidden(b.dataset.hide, true));
+  }
+  for (const b of document.querySelectorAll("[data-unhide]")) {
+    b.addEventListener("click", () => setHidden(b.dataset.unhide, false));
+  }
+}
+
 // ---- the page -------------------------------------------------------------
+
+// The trail above the title, one link per segment. Only a segment that is a
+// node of its own is a link: the path runs through directories that hold no head
+// file, and linking one of those would land on a blank page.
+function crumbs(c) {
+  return (c.trail || []).map((seg, i) => {
+    const path = "projects/" + c.trail.slice(0, i + 1).join("/");
+    const isNode = board && board.cards.some(x => x.path === path);
+    return isNode
+      ? `<a class="pcrumb" href="${NODE_URL(path)}" data-nav="${esc(path)}">${esc(seg)}</a>`
+      : esc(seg);
+  }).join(" / ");
+}
 
 function drawProject() {
   const path = detailPath;
@@ -3675,29 +5651,40 @@ function drawProject() {
     }
   };
   if (!c) {
-    host.innerHTML = `<div class="phead"><button class="pback" id="pback">${BACK} board</button>
+    host.innerHTML = `<div class="phead"><a class="pback" id="pback" href="/">${BACK} board</a>
       <h2>${esc(path || "")}</h2></div>`;
-    document.getElementById("pback").addEventListener("click", gotoBoard);
+    document.getElementById("pback").addEventListener("click",
+    e => { if (plainClick(e)) { e.preventDefault(); gotoBoard(); } });
     return;
   }
 
-  const links = pLinks !== null ? pLinks : [];
+  const all = pLinks !== null ? pLinks : [];
+  const links = all.filter(l => !l.hidden);
+  const hidden = all.filter(l => l.hidden);
   // Two tiers, because they want different room. Threads and pull requests are
   // worked in, so they get large, uniform cards; a plain link is a chip. Each
   // tier is its own grid so one tall card cannot leave a hole beside a short
   // one -- the ragged-grid problem is solved by not mixing the two heights.
-  const isBig = l => l.kind === "slack-thread"
-    || l.kind === "github-pr" || l.kind === "github-issue";
-  const rank = l => l.kind === "slack-thread" ? 0
-    : l.kind === "github-pr" ? 1 : 2;
-  const big = links.filter(isBig).sort((a, b) => rank(a) - rank(b));
+  // A card that still needs a token is a chip until it has one: it has nothing
+  // to show that earns the room.
+  const needs = l => l.data && l.data.needs;
+  const isBig = l => !needs(l) && (l.kind === "slack-thread" || l.kind === "job"
+    || l.kind === "github-pr" || l.kind === "github-issue"
+    || l.kind === "linear-issue" || l.kind === "linear-project"
+    || (l.kind === "alert-group" && l.data));
+  // Once Kai has dragged anything the saved order is the order; until then,
+  // the loudest kinds lead.
+  const rank = l => l.kind === "job" ? 0 : l.kind === "slack-thread" ? 1
+    : l.kind === "github-pr" ? 2 : 3;
+  const big = links.filter(isBig);
+  if (!pOrdered) big.sort((a, b) => rank(a) - rank(b));
   const mini = links.filter(l => !isBig(l));
 
   host.innerHTML = `
     <div class="phead" style="--c:${cssVar(c.status)}">
       <div class="pline">
-        <button class="pback" id="pback">${BACK} board</button>
-        <span class="trail mono">${esc(c.trail.join(" / "))}</span>
+        <a class="pback" id="pback" href="/">${BACK} board</a>
+        <span class="trail mono">${crumbs(c)}</span>
         <span class="grow"></span>
         ${c.agent
           ? `<span class="agent${c.agent.state === "idle" ? " waits" : ""}">
@@ -3710,7 +5697,11 @@ function drawProject() {
           ? `<button class="jump" data-pid="${c.agent && c.agent.desktop ? c.agent.pid : ""}"
                data-desk="${esc((c.agent && c.agent.desktop) || c.open)}"
                >desktop ${esc((c.agent && c.agent.desktop) || c.open)}</button>`
-          : ""}
+          : c.agent ? ""
+          : `<button class="jump" data-start="${esc(c.path)}"
+               title="claude in a terminal and this page, on a free desktop; you stay here"
+               ${isStarting(c.path) ? "disabled" : ""}
+               >${isStarting(c.path) ? "starting…" : "start session"}</button>`}
       </div>
       <div class="pline ptop">
         <h2>${esc(c.slug)}</h2>
@@ -3733,24 +5724,52 @@ function drawProject() {
     </div>
     <div class="pscroll" data-scroll="page">
       ${pLinks === null ? '<div class="pdim pquiet">reading the node…</div>' : ""}
-      ${big.length ? `<div class="pgrid">${big.map(linkCard).join("")}</div>` : ""}
-      ${mini.length ? `<div class="pmini">${mini.map(linkCard).join("")}</div>` : ""}
+      ${big.length ? `<div class="pgrid" data-scroll="grid">${big.map(l => withControls(l, linkCard(l))).join("")}</div>` : ""}
+      ${mini.length ? `<div class="pmini">${mini.map(l => withControls(l, linkCard(l))).join("")}</div>` : ""}
+      ${hidden.length ? `<div class="phidden"><span class="pdim">${hidden.length} hidden</span>
+        ${hidden.map(l => `<button class="pchip" data-unhide="${esc(l.id)}" title="show it again">${esc(linkName(l))} ↺</button>`).join("")}</div>` : ""}
       ${pLinks !== null && !links.length
         ? `<div class="pquiet"><b>Nothing linked.</b> This node names no pull request,
              thread or issue — not in its frontmatter and not anywhere in its notes.</div>` : ""}
     </div>`;
-  document.getElementById("pback").addEventListener("click", gotoBoard);
+  document.getElementById("pback").addEventListener("click",
+    e => { if (plainClick(e)) { e.preventDefault(); gotoBoard(); } });
   wireProject();
+  wireReorder();
   wire();
   restore();
+  // Opening a page puts the keys on its first card, so hjkl work at once.
+  if (!pFocus && pLinks !== null) {
+    const first = document.querySelector("#project [data-lid]");
+    if (first) pFocus = first.dataset.lid;
+  }
+  applyFocus();
+  if (pReplyOnOpen && pLinks !== null
+      && (replyInThread(false) || !pLinks.some(l => l.kind === "slack-thread"))) {
+    pReplyOnOpen = false;
+  }
+  // After restore(), which would otherwise put the pre-toggle position back.
+  if (pAnchor) {
+    const el = host.querySelector(`[data-scroll="${CSS.escape(pAnchor)}"]`);
+    if (el) el.scrollTop = el.scrollHeight;
+    pAnchor = null;
+  }
 }
 
 function wireProject() {
+  for (const a of document.querySelectorAll("[data-nav]")) {
+    a.addEventListener("click", e => {
+      if (!plainClick(e)) return;
+      e.preventDefault();
+      gotoNode(a.dataset.nav);
+    });
+  }
   // The whole conversation toggles as one, collapsed by default, so the card
   // leads with state and reads short until the thread is actually wanted.
   for (const b of document.querySelectorAll("[data-conv]")) {
     b.addEventListener("click", () => {
       pConvOpen[b.dataset.conv] = !pConvOpen[b.dataset.conv];
+      pAnchor = b.dataset.conv;
       drawProject();
     });
   }
@@ -3760,10 +5779,16 @@ function wireProject() {
     b.addEventListener("click", () => b.classList.remove("clamp"));
   }
   for (const t of document.querySelectorAll("[data-draft]")) {
-    t.addEventListener("input", () => { pDraft[t.dataset.draft] = t.value; });
+    const slack = !t.dataset.draft.startsWith("gh|");
+    t.addEventListener("input", () => {
+      pDraft[t.dataset.draft] = t.value;
+      if (slack) openPick(t);
+    });
+    t.addEventListener("blur", () => setTimeout(() => { if (pPick && pPick.ta === t) closePick(); }, 100));
     // Enter sends and shift-enter breaks the line, which is what the box it is
     // standing in for does.
     t.addEventListener("keydown", e => {
+      if (pickKey(e)) { e.stopPropagation(); return; }
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(t.dataset.draft); }
       e.stopPropagation();
     });
@@ -3810,18 +5835,27 @@ async function send(key) {
     } else {
       const [channel, ts] = key.split("|");
       const r = await fetch("/api/reply", {method: "POST", body: JSON.stringify(
-        {channel, ts, text})});
+        {channel, ts, text: withMentions(key, text)})});
       const d = await r.json();
       if (d.error) throw new Error(d.error);
       pDraft[key] = "";
+      delete pMentions[key];
       if (d.permalink) pSent[key] = d.permalink;
-      loadThread(channel, ts, true);
+      await loadThread(channel, ts, true);
+      pRefocus = key;
     }
   } catch (e) {
     fail(e.message);
   }
   drawProject();
+  // A sent reply leaves you in the box, ready for the next line; esc leaves it.
+  if (pRefocus) {
+    const ta = document.querySelector(`[data-draft="${CSS.escape(pRefocus)}"]`);
+    if (ta) ta.focus();
+    pRefocus = null;
+  }
 }
+let pRefocus = null;
 
 // One implementation of each write, so the cards, the panel and the menu cannot
 // drift apart.
@@ -3854,6 +5888,39 @@ async function jumpTo(pid, desktop) {
     if (d.error) throw new Error(d.error);
     fail("");
   } catch (err) { fail(err.message); }
+}
+
+// A node with nothing open gets one: claude and this page, on a free desktop,
+// without leaving this one. The window read that would show it lags by a few
+// seconds, so a node that was just started is remembered for a while rather
+// than offered again, which would set up a second copy.
+const starting = new Map();
+const STARTING_MS = 30000;
+function isStarting(path) {
+  const at = starting.get(path);
+  return at != null && Date.now() - at < STARTING_MS;
+}
+async function startSession(path) {
+  if (isStarting(path)) return;
+  starting.set(path, Date.now());
+  try {
+    const r = await fetch("/api/session", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    fail("");
+  } catch (err) { starting.delete(path); fail(err.message); }
+  location.pathname.startsWith("/node/") ? drawProject() : render();
+}
+function openWhere(c) {
+  return (c.agent && c.agent.desktop) || c.open;
+}
+function goOrStart(c) {
+  if (openWhere(c))
+    return jumpTo(c.agent && c.agent.desktop ? c.agent.pid : null, openWhere(c));
+  return startSession(c.path);
 }
 
 // ---- right-click menu ---------------------------------------------------
@@ -3889,12 +5956,13 @@ function openCtx(path, x, y) {
     <div id="ctx">
       <div class="ctxhead"><b>${esc(c.slug)}</b><span>${esc(c.trail.join(" / ") || "projects")}</span></div>
       <button data-act="open">${PIN.replace(RIBBON, "M2 3h10v10H2z")}open detail</button>
-      <button data-act="jump" ${(live && c.agent.desktop) || c.open ? "" : "disabled"}>
+      <button data-act="jump" ${(live && c.agent.desktop) || c.open || !live ? "" : "disabled"}>
         <span class="${live ? "rlive" : ""}"></span>${
           live && c.agent.desktop ? "go to desktop " + esc(c.agent.desktop)
           : c.open ? "go to desktop " + esc(c.open)
           : live ? "session here, no window found"
-          : "nothing open here"}</button>
+          : isStarting(c.path) ? "starting on a free desktop…"
+          : "start claude on a free desktop"}</button>
       <hr>
       <div class="ctxlabel">move to</div>
       <div class="ctxrow">${statuses}</div>
@@ -3927,9 +5995,7 @@ function openCtx(path, x, y) {
     if (act === "track") return trackNode(path, !c.tracked).then(reopen);
     closeCtx();
     if (act === "open") return gotoNode(path);
-    if (act === "jump")
-      return jumpTo(c.agent && c.agent.desktop ? c.agent.pid : null,
-                    (c.agent && c.agent.desktop) || c.open);
+    if (act === "jump") return goOrStart(c);
     if (act === "hide") {
       // The one node, never its children: this is the discoverable form of the
       // alt-click, and the answer to a grouping node like `cyvl` showing up as
@@ -3947,9 +6013,10 @@ addEventListener("resize", closeCtx);
 
 // ---- drag, drop, and the write -------------------------------------------
 function wire() {
-  for (const b of document.querySelectorAll(".jump, .state.jumpable")) {
+  for (const b of document.querySelectorAll(".jump, .state.jumpable, .state.startable")) {
     b.addEventListener("click", e => {
       e.stopPropagation();
+      if (b.dataset.start) return startSession(b.dataset.start);
       jumpTo(b.dataset.pid, b.dataset.desk);
     });
   }
@@ -3976,7 +6043,11 @@ function wire() {
     });
   }
   for (const card of document.querySelectorAll(".card")) {
-    card.addEventListener("click", () => gotoNode(card.dataset.path));
+    card.addEventListener("click", e => {
+      if (!plainClick(e)) return;
+      e.preventDefault();
+      gotoNode(card.dataset.path);
+    });
     card.addEventListener("contextmenu", e => {
       e.preventDefault();
       openCtx(card.dataset.path, e.clientX, e.clientY);
@@ -4068,10 +6139,25 @@ async function move(path, status) {
   if (detailPath === path) drawProject();
 }
 
+// The server restarts itself when a new board is installed, and a page drawn by
+// the old one would keep running old code until reloaded by hand. So the page
+// reloads itself on the first answer from a newer server -- unless a reply is
+// half-written, which a reload would throw away; it goes once that is sent.
+let build = null;
+function newerBuild(b) {
+  if (!b) return false;
+  if (build === null) build = b;
+  if (b === build) return false;
+  const composing = document.activeElement
+    && document.activeElement.matches(".psend textarea");
+  return !composing && !Object.values(pDraft).some(Boolean);
+}
+
 async function refresh() {
   if (Date.now() < holdUntil) return;
   try {
     const r = await fetch("/api/board");
+    if (newerBuild(r.headers.get("X-Board-Build"))) return location.reload();
     const data = await r.json();
     if (data.error) throw new Error(data.error);
     board = data;
@@ -4081,11 +6167,8 @@ async function refresh() {
     // it shows actually changed. Rebuilding its DOM every two seconds threw
     // away the scroll position inside a long conversation, which read as the
     // page jumping to the top. And never while a reply is being typed.
-    if (detailPath) {
-      const composing = document.activeElement
-        && document.activeElement.matches(".psend textarea");
-      if (!composing && projectSig() !== pRendered) drawProject();
-    } else if (signature(board) === rendered) tick();
+    if (detailPath) redrawProject();
+    else if (signature(board) === rendered) tick();
     else render();
   } catch (e) {
     fail(e.message);
@@ -4098,8 +6181,21 @@ q.addEventListener("input", () => {
   query = q.value.trim().toLowerCase();
   render();
 });
+// Esc or Enter in the filter leaves it the way vim leaves a search: the filter
+// stays applied and the keys land on the first card it kept, so j/k walk the
+// results. Esc again, out of the box, is what clears it.
+q.addEventListener("keydown", e => {
+  if (e.key !== "Escape" && e.key !== "Enter") return;
+  e.preventDefault();
+  e.stopPropagation();
+  q.blur();
+  if (detailPath) return;
+  bFocus = null;
+  setBoardFocus(boardEls()[0]);
+});
 
 addEventListener("keydown", e => {
+  if (projectKey(e) || boardKey(e)) { e.preventDefault(); return; }
   if (e.key === "Escape") {
     if (detailPath) return gotoBoard();
     if (!document.getElementById("colsmenu").hidden) return toggleMenu(false);
@@ -4128,11 +6224,18 @@ function fromHash() {
     history.replaceState(null, "", NODE_URL(decodeURIComponent(m[1])));
   } catch (e) {}
 }
+document.querySelector("h1 .pnav").addEventListener("click", e => {
+  if (!plainClick(e)) return;
+  e.preventDefault();
+  gotoBoard();
+});
+
 addEventListener("hashchange", () => { fromHash(); route(); });
 addEventListener("popstate", route);
 fromHash();
 refresh().then(route);
 setInterval(refresh, 2000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 </script>
 </body>
 </html>

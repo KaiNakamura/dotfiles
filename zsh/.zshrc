@@ -78,6 +78,7 @@ alias thv="th vault"
 alias tho="th open"
 alias thd="th doctor"
 alias thda="th doctor --all"
+alias thb="board open"
 
 # k8s
 alias k="kubectl"

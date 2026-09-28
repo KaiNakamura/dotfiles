@@ -5,6 +5,7 @@ A kanban board over the thoughts vault.
 ```
 board serve      # http://127.0.0.1:8788, opens a browser
 board list       # the same board in the terminal
+board open [node]  # a node's page, else the one you stand in (alias thb)
 board mv <node> <status>
 ```
 
