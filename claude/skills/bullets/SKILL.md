@@ -1,12 +1,21 @@
 ---
 name: bullets
-description: Rewrite the last reply, or given text, as short skimmable bullet points. Use when the user invokes /bullets, says "bullet skill", "bullets skill", "bullet points", or "seven words per bullet".
+description: Give the requested answer as short, skimmable bullet points. Use when the user invokes /bullets or says "bullet skill", "bullets skill", "bullet points", or "seven words per bullet" alongside a request.
 ---
 
-Rewrite as bullet points.
-- No more than seven words per bullet. Strict.
-- Choose bullet count and nesting to fit the problem.
-- Work from the original text, not an earlier summary, so every bullet makes sense without it.
-- No jargon or internal names the reader would have to look up.
-- Lead with the answer.
-- Follow any spoken override, like "five bullets max" or "keep it flat".
+Answer the user's current request in bullets.
+
+- Aim for seven words or fewer
+- Answer first, reasons after
+- Fit count and nesting to the problem
+  - Small answer, a few bullets
+  - Many parts, group under parent bullets
+  - Nest only when children explain parents
+  - Easy skimming beats a strict count
+- Every bullet readable on its own
+  - Say what things are, plainly
+  - No unexplained internal names
+  - Never compress an earlier summary further
+- Spoken overrides win
+  - "Five bullets max"
+  - "Keep it flat"
