@@ -1,0 +1,102 @@
+#!/bin/bash
+# Put the next new window of each class on a desktop and a screen, maximized.
+#
+#   kwin-place-new <ready-file> <desktop> <class> <x> <y> <w> <h> [<class> ...]
+#
+# Run it in the background, wait for <ready-file> to appear, then launch the
+# programs. The first normal window of each class to open afterwards is sent to
+# <desktop> and maximized on the screen at x,y. The current desktop never
+# changes, which is the point: the setup happens somewhere else while you stay
+# where you are. Exits when every class has been placed, or after 20 seconds.
+#
+# Placing a window as it is added, rather than launching and then hunting for
+# it, is what keeps an unrelated window that opens meanwhile out of it: the
+# script only listens while the launch is happening, and a class is taken once.
+
+set -u
+
+command -v qdbus > /dev/null 2>&1 || exit 1
+
+READY=$1 DESKTOP=$2
+shift 2
+
+TOKEN="KWINPLACE_$$_$(date +%s%N)"
+SCRIPT_FILE=$(mktemp /tmp/kwin-place-new-XXXXXX.js) || exit 1
+chmod 600 "$SCRIPT_FILE"
+
+wants=""
+count=0
+while (( $# >= 5 )); do
+    wants+="{cls: \"$1\", g: {x: $2, y: $3, width: $4, height: $5}, done: false},"
+    count=$((count + 1))
+    shift 5
+done
+
+# Plasma 5 speaks clientAdded and a desktop number; Plasma 6 renamed the signal
+# to windowAdded and made the desktop an array of objects.
+cat > "$SCRIPT_FILE" << EOF
+var plasma6 = (typeof workspace.windowList === "function");
+var want = [$wants];
+var left = want.length;
+function put(w, g) {
+    if (plasma6) w.desktops = [workspace.desktops[$DESKTOP - 1]];
+    else w.desktop = $DESKTOP;
+    w.setMaximize(false, false);
+    workspace.sendClientToScreen(w, workspace.screenAt({x: g.x + 1, y: g.y + 1}));
+    w.frameGeometry = g;
+    w.setMaximize(true, true);
+}
+// Chrome restores its own last bounds a moment after its window appears,
+// which lands it back on whichever screen it was last closed on. Placing it
+// again once that has happened is what makes the placement stick.
+function later(fn) {
+    var t = new QTimer();
+    t.singleShot = true;
+    t.interval = 800;
+    t.timeout.connect(fn);
+    t.start();
+}
+function place(w) {
+    if (!w.normalWindow) return;
+    var cls = String(w.resourceClass);
+    for (var i = 0; i < want.length; i++) {
+        var t = want[i];
+        if (t.done || t.cls !== cls) continue;
+        t.done = true;
+        put(w, t.g);
+        later(function () {
+            put(w, t.g);
+            console.info("$TOKEN:placed:" + cls);
+            if (--left === 0) console.info("$TOKEN:done");
+        });
+        return;
+    }
+}
+(plasma6 ? workspace.windowAdded : workspace.clientAdded).connect(place);
+EOF
+
+SCRIPT_NAME="kwin-place-new-$$"
+cleanup() {
+    qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript \
+        "$SCRIPT_NAME" > /dev/null 2>&1
+    rm -f "$SCRIPT_FILE"
+}
+trap cleanup EXIT
+
+SCRIPT_ID=$(qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \
+    "$SCRIPT_FILE" "$SCRIPT_NAME" 2>/dev/null)
+[[ "$SCRIPT_ID" =~ ^[0-9]+$ ]] || exit 1
+qdbus org.kde.KWin "/$SCRIPT_ID" org.kde.kwin.Script.run > /dev/null 2>&1
+
+touch "$READY"
+
+for _ in $(seq 40); do
+    sleep 0.5
+    journalctl --sync 2>/dev/null
+    if journalctl --since "30 sec ago" --no-pager -o cat 2>/dev/null \
+            | grep -q "$TOKEN:done"; then
+        exit 0
+    fi
+done
+echo "kwin-place-new: not every window appeared" >&2
+exit 1

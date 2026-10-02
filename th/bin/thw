@@ -3,8 +3,13 @@
 #
 #   thw                     pick a node and switch to the desktop it is on
 #   thw <slug>              switch to that node's desktop
+#   thw to <pid>            switch to the desktop the window owning <pid> is on
+#   thw desk <n>            switch to desktop <n>
+#   thw desks               print each running agent's pid and desktop
+#   thw windows             print pid, desktop and directory for everything open in the vault
 #   thw open [slug] [desk]  open a terminal in that node, on that desktop
 #   thw free                print the first desktop with nothing on it
+#   thw setup <node> [url]  start claude and the board page on a free desktop, staying here
 #
 # `th agents` knows which node each running agent is working in; it deliberately
 # knows nothing about windows, so that it still works over ssh on a box with no
@@ -22,7 +27,11 @@
 
 set -uo pipefail
 
-WINDOW_LIST="$(dirname "$(readlink -f "$0")")/kwin-window-list"
+HERE="$(dirname "$(readlink -f "$0")")"
+WINDOW_LIST="$HERE/kwin-window-list"
+PLACE_NEW="$HERE/kwin-place-new"
+SCREEN_ROLES="$HERE/screen-roles"
+BOARD_URL="http://127.0.0.1:8788"
 
 for tool in jq fzf qdbus; do
     if ! command -v "$tool" > /dev/null 2>&1; then
@@ -32,7 +41,7 @@ for tool in jq fzf qdbus; do
 done
 
 usage() {
-    sed -n '3,7p' "$(readlink -f "$0")" | sed 's/^# \?//'
+    sed -n '3,12p' "$(readlink -f "$0")" | sed 's/^# \?//'
 }
 
 # --- windows -----------------------------------------------------------------
@@ -150,6 +159,68 @@ cmd_go() {
     go_to_desktop "$(desktop_for "$pid")"
 }
 
+# Switching by pid rather than by slug, for a caller that already knows which
+# agent it means. `cmd_go` has to search by name, which cannot tell two nodes
+# with the same slug apart; a pid is unambiguous by construction.
+cmd_to() {
+    local pid=${1:-}
+    if [[ -z "$pid" || ! -d "/proc/$pid" ]]; then
+        echo "thw to <pid>: no such process" >&2
+        exit 1
+    fi
+    go_to_desktop "$(desktop_for "$pid")"
+}
+
+# pid and desktop for every running agent, one per line. Reading, not moving:
+# this is what lets something else show where an agent is without switching to
+# it. "-" means no window was found within the ancestor walk, "all" means the
+# window is on every desktop and so is on no particular one.
+cmd_desks() {
+    local agents pid desktop
+    agents=$(agents_json) || exit 1
+    while read -r pid; do
+        desktop=$(desktop_for "$pid")
+        [[ "$desktop" == "-1" ]] && desktop="all"
+        printf '%s\t%s\n' "$pid" "$desktop"
+    done < <(jq -r '.[].pid' <<< "$agents")
+}
+
+# One line per process of yours running inside the vault: its pid, the desktop
+# of the window that owns it, and its working directory.
+#
+# `thw desks` answers the desktop question for agents only, because it starts
+# from the agent list, so a window sitting at a shell is invisible to it while
+# being just as open. This starts from the other end -- every process whose
+# working directory is inside the vault -- which makes it a superset, and lets
+# one KWin round trip answer both "where is this agent" and "what is open".
+# That matters because the round trip is the expensive part: KWin has no read
+# API, so each call injects a script and reads the journal back.
+cmd_windows() {
+    load_windows
+    local vault pid dir desktop
+    vault=$(th vault --print 2>/dev/null) || vault="$HOME/repos/thoughts"
+    for pid in $(ls /proc 2>/dev/null | grep -E '^[0-9]+$'); do
+        dir=$(readlink "/proc/$pid/cwd" 2>/dev/null) || continue
+        [[ "$dir" == "$vault"/* ]] || continue
+        desktop=$(desktop_for "$pid")
+        [[ "$desktop" == "-" ]] && continue
+        [[ "$desktop" == "-1" ]] && desktop="all"
+        printf '%s\t%s\t%s\n' "$pid" "$desktop" "$dir"
+    done
+}
+
+# Switch to a desktop by number. `thw to` covers the case where what you know is
+# a pid; this covers the case where a window is open in a node but nothing is
+# running in it, so there is no pid to ask about.
+cmd_desk() {
+    local desktop=${1:-}
+    if [[ -z "$desktop" ]]; then
+        echo "thw desk <n> needs a desktop number" >&2
+        exit 1
+    fi
+    go_to_desktop "$desktop" || exit 1
+}
+
 cmd_open() {
     local target=${1:-} desktop=${2:-} dir
     if [[ -n "$target" ]]; then
@@ -186,10 +257,75 @@ cmd_free() {
     return 1
 }
 
+# The browser that open-browser is set to, as a binary and the window class
+# KWin will see for it.
+browser() {
+    local name
+    name=$(head -1 "$HOME/.config/open-browser/browser" 2>/dev/null | tr -d '[:space:]')
+    case "$name" in
+        firefox)  echo "firefox firefox" ;;
+        chromium) echo "chromium chromium" ;;
+        *)        echo "google-chrome-stable google-chrome" ;;
+    esac
+}
+
+# A claude session in the node and its board page, on the first empty desktop,
+# each on the screen screen-roles gives its role. Nothing moves you: the
+# windows are placed as they open and the current desktop never changes, so a
+# setup can be started from the board without losing your place. `thw <slug>`
+# or the board's jump goes there when you want it.
+cmd_setup() {
+    local target=${1:-} url=${2:-} dir vault desktop bin cls ready placer
+    if [[ -z "$target" ]]; then
+        echo "thw setup <node> needs a node" >&2
+        exit 1
+    fi
+    if [[ -d "$target" ]]; then
+        dir=$target
+    else
+        dir=$(th path --no-cd "$target") || exit 1
+    fi
+    if [[ -z "$url" ]]; then
+        vault=$(th vault --print 2>/dev/null) || vault="$HOME/repos/thoughts"
+        url="$BOARD_URL/node/${dir#"$vault"/}"
+    fi
+    desktop=$(cmd_free) || exit 1
+    read -r bin cls < <(browser)
+
+    local -a places=()
+    local role x y w h
+    while IFS=$'\t' read -r role x y w h _; do
+        case $role in
+            terminal) places+=(kitty "$x" "$y" "$w" "$h") ;;
+            browser)  places+=("$cls" "$x" "$y" "$w" "$h") ;;
+        esac
+    done < <("$SCREEN_ROLES") || exit 1
+
+    ready=$(mktemp -u /tmp/thw-setup-XXXXXX)
+    "$PLACE_NEW" "$ready" "$desktop" "${places[@]}" &
+    placer=$!
+    for _ in $(seq 50); do
+        [[ -e "$ready" ]] && break
+        kill -0 "$placer" 2> /dev/null || { echo "could not reach KWin" >&2; exit 1; }
+        sleep 0.1
+    done
+    rm -f "$ready"
+
+    kitty --detach --directory "$dir" zsh -ic 'claude; exec zsh'
+    setsid "$bin" --new-window "$url" < /dev/null > /dev/null 2>&1 &
+    echo "desktop $desktop"
+    wait "$placer"
+}
+
 case "${1:-}" in
     "")          cmd_pick ;;
+    to)          shift; cmd_to "$@" ;;
+    desk)        shift; cmd_desk "$@" ;;
+    desks)       cmd_desks ;;
+    windows)     cmd_windows ;;
     open)        shift; cmd_open "$@" ;;
     free)        cmd_free ;;
+    setup)       shift; cmd_setup "$@" ;;
     -h | --help) usage ;;
     *)           cmd_go "$1" ;;
 esac
