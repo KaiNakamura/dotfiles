@@ -1,0 +1,87 @@
+#!/bin/bash
+# Move windows to a desktop, and optionally onto a screen.
+#
+#   kwin-move-windows <desktop> <pid|id:window-id>[@x,y,w,h]...
+#
+# Every window owned by a named pid goes to <desktop>, and so does the one
+# window with a named id, as kwin-window-list prints it. With a geometry it is
+# also sent to the screen at x,y and maximized there. The current desktop
+# never changes. Prints how many windows moved.
+
+set -u
+
+command -v qdbus > /dev/null 2>&1 || exit 1
+
+DESKTOP=$1
+shift
+
+wants=""
+while (( $# )); do
+    pid=${1%%@*}
+    [[ "$pid" =~ ^([0-9]+|id:\{[0-9a-f-]+\})$ ]] \
+        || { echo "kwin-move-windows: bad window $1" >&2; exit 1; }
+    if [[ "$1" == *@* ]]; then
+        IFS=, read -r x y w h <<< "${1#*@}"
+        wants+="\"$pid\": {x: $x, y: $y, width: $w, height: $h},"
+    else
+        wants+="\"$pid\": null,"
+    fi
+    shift
+done
+
+TOKEN="KWINMOVE_$$_$(date +%s%N)"
+SCRIPT_FILE=$(mktemp /tmp/kwin-move-windows-XXXXXX.js) || exit 1
+chmod 600 "$SCRIPT_FILE"
+
+# Plasma 5 speaks clientList and a desktop number; Plasma 6 renamed the list
+# and made the desktop an array of objects.
+cat > "$SCRIPT_FILE" << KWINJS
+var plasma6 = (typeof workspace.windowList === "function");
+var ws = plasma6 ? workspace.windowList() : workspace.clientList();
+var want = {$wants};
+var moved = 0;
+for (var i = 0; i < ws.length; i++) {
+    var w = ws[i];
+    if (!w.normalWindow) continue;
+    var key = "id:" + String(w.internalId);
+    if (!want.hasOwnProperty(key)) key = String(w.pid);
+    if (!want.hasOwnProperty(key)) continue;
+    if (plasma6) w.desktops = [workspace.desktops[$DESKTOP - 1]];
+    else w.desktop = $DESKTOP;
+    var g = want[key];
+    if (g) {
+        w.setMaximize(false, false);
+        workspace.sendClientToScreen(w, workspace.screenAt({x: g.x + 1, y: g.y + 1}));
+        w.frameGeometry = g;
+        w.setMaximize(true, true);
+    }
+    moved++;
+}
+console.info("$TOKEN:" + moved);
+KWINJS
+
+SCRIPT_NAME="kwin-move-windows-$$"
+cleanup() {
+    qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript \
+        "$SCRIPT_NAME" > /dev/null 2>&1
+    rm -f "$SCRIPT_FILE"
+}
+trap cleanup EXIT
+
+SCRIPT_ID=$(qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \
+    "$SCRIPT_FILE" "$SCRIPT_NAME" 2>/dev/null)
+[[ "$SCRIPT_ID" =~ ^[0-9]+$ ]] || { echo "could not reach KWin" >&2; exit 1; }
+qdbus org.kde.KWin "/$SCRIPT_ID" org.kde.kwin.Script.run > /dev/null 2>&1
+
+journalctl --sync 2>/dev/null
+for _retry in 1 2 3 4 5; do
+    MOVED=$(journalctl --since "30 sec ago" --no-pager -o cat 2>/dev/null \
+        | sed -n "s/.*$TOKEN:\([0-9]*\).*/\1/p" | tail -1)
+    [[ -n "$MOVED" ]] && break
+    sleep 0.1
+done
+if [[ -z "${MOVED:-}" ]]; then
+    echo "KWin did not answer" >&2
+    exit 1
+fi
+echo "moved $MOVED"

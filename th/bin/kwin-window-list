@@ -1,5 +1,8 @@
 #!/bin/bash
-# Print one line per managed window: pid, virtual desktop, window class, caption.
+# Print one line per managed window: pid, virtual desktop, window class, caption,
+# then the x and y of the window's centre, which is what says which screen it is
+# on, then KWin's own id for the window, the one thing that tells two windows of
+# one process apart.
 #
 # A virtual desktop of -1 means the window is on all of them.
 #
@@ -31,7 +34,13 @@ for (var i = 0; i < ws.length; i++) {
     } else if (!w.onAllDesktops) {
         desktop = w.desktop;
     }
-    out.push([w.pid, desktop, w.resourceClass, w.caption].join("\t"));
+    // No field may be empty or hold a tab: the reader splits on tabs, and the
+    // shell collapses a run of them into one.
+    var g = w.frameGeometry;
+    out.push([w.pid, desktop, String(w.resourceClass) || "-",
+              String(w.caption).replace(/\s+/g, " ") || "-",
+              Math.round(g.x + g.width / 2), Math.round(g.y + g.height / 2),
+              String(w.internalId)].join("\t"));
 }
 console.info("$TOKEN" + "\n" + out.join("\n"));
 EOF

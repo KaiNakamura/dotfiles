@@ -7,6 +7,8 @@
 #   thw desk <n>            switch to desktop <n>
 #   thw desks               print each running agent's pid and desktop
 #   thw windows             print pid, desktop and directory for everything open in the vault
+#   thw where               the same with screens: which monitor, which window, what is free
+#   thw move <desk> <pid|id:..>[@screen]...  move those windows to a desktop, and a screen if named
 #   thw open [slug] [desk]  open a terminal in that node, on that desktop
 #   thw free                print the first desktop with nothing on it
 #   thw setup <node> [url]  start claude and the board page on a free desktop, staying here
@@ -30,6 +32,7 @@ set -uo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"
 WINDOW_LIST="$HERE/kwin-window-list"
 PLACE_NEW="$HERE/kwin-place-new"
+MOVE_WINDOWS="$HERE/kwin-move-windows"
 SCREEN_ROLES="$HERE/screen-roles"
 BOARD_URL="http://127.0.0.1:8788"
 
@@ -41,31 +44,44 @@ for tool in jq fzf qdbus; do
 done
 
 usage() {
-    sed -n '3,12p' "$(readlink -f "$0")" | sed 's/^# \?//'
+    sed -n '3,14p' "$(readlink -f "$0")" | sed 's/^# \?//'
 }
 
 # --- windows -----------------------------------------------------------------
 
-declare -A desktop_of
+declare -A desktop_of class_of x_of y_of
+declare -a window_lines=()
 windows_loaded=""
 
 load_windows() {
     [[ -n "$windows_loaded" ]] && return
     windows_loaded=1
-    local pid desktop
-    while IFS=$'\t' read -r pid desktop _class _caption; do
-        [[ -n "${pid:-}" ]] && desktop_of[$pid]=$desktop
+    local pid desktop cls x y
+    while IFS=$'\t' read -r pid desktop cls _caption x y id; do
+        [[ -z "${pid:-}" ]] && continue
+        window_lines+=("$pid"$'\t'"$desktop"$'\t'"${cls:--}"$'\t'"${x:-}"$'\t'"${y:-}"$'\t'"${id:--}"$'\t'"$_caption")
+        desktop_of[$pid]=$desktop
+        class_of[$pid]=${cls:--}
+        x_of[$pid]=${x:-} y_of[$pid]=${y:-}
     done < <("$WINDOW_LIST" 2>/dev/null)
 }
 
 # The desktop of the nearest ancestor of $1 that owns a window.
 desktop_for() {
+    local owner
+    owner=$(owner_for "$1")
+    [[ "$owner" == "-" ]] && { echo "-"; return; }
+    echo "${desktop_of[$owner]}"
+}
+
+# The pid of the nearest ancestor of $1 that owns a window.
+owner_for() {
     load_windows
     local pid=$1
     for _hop in 1 2 3 4 5 6 7 8; do
         [[ -z "$pid" || "$pid" == "0" || "$pid" == "1" ]] && break
         if [[ -n "${desktop_of[$pid]:-}" ]]; then
-            echo "${desktop_of[$pid]}"
+            echo "$pid"
             return
         fi
         # Field 4 of /proc/<pid>/stat is the parent. The comm field before it
@@ -209,6 +225,94 @@ cmd_windows() {
     done
 }
 
+# Everything a picture of the workspace needs, from one KWin round trip:
+#
+#   #  <current desktop>  <desktop count>  <first free desktop, or ->
+#   @  <screen>  <x>  <y>  <width>  <height>          one per screen, left to right
+#   w  <pid>  <desktop>  <screen>  <class>  <window pid>  <directory>
+#   o  <desktop>  <screen>  <class>  <window pid>  <window id>  <caption>
+#
+# The `w` lines are `thw windows` with two things added: the screen the window
+# is on, and the pid that owns the window, which is what `thw move` takes. The
+# `o` lines are every window on one desktop, the vault's or not, so a browser
+# or a game shows up beside the terminal it belongs with.
+screen_at() {
+    local px=$1 py=$2 s name x y w h
+    [[ -z "$px" || -z "$py" ]] && { echo "-"; return; }
+    for s in "${screens[@]}"; do
+        read -r name x y w h <<< "$s"
+        if (( px >= x && px < x + w && py >= y && py < y + h )); then
+            echo "$name"
+            return
+        fi
+    done
+    echo "-"
+}
+
+cmd_where() {
+    load_windows
+    local vault pid dir owner desktop free name x y w h cls caption line id
+    vault=$(th vault --print 2>/dev/null) || vault="$HOME/repos/thoughts"
+    free=$(cmd_free 2>/dev/null) || free="-"
+    printf '#\t%s\t%s\t%s\n' "$(qdbus org.kde.KWin /KWin currentDesktop)" \
+        "$(qdbus org.kde.KWin /VirtualDesktopManager count)" "$free"
+    screens=()
+    while IFS=$'\t' read -r name _id x y w h; do
+        screens+=("$name $x $y $w $h")
+        printf '@\t%s\t%s\t%s\t%s\t%s\n' "$name" "$x" "$y" "$w" "$h"
+    done < <("$SCREEN_ROLES" --list 2>/dev/null | sort -t$'\t' -k3,3n)
+    for pid in $(ls /proc 2>/dev/null | grep -E '^[0-9]+$'); do
+        dir=$(readlink "/proc/$pid/cwd" 2>/dev/null) || continue
+        [[ "$dir" == "$vault"/* ]] || continue
+        owner=$(owner_for "$pid")
+        [[ "$owner" == "-" ]] && continue
+        desktop=${desktop_of[$owner]}
+        [[ "$desktop" == "-1" ]] && desktop="all"
+        printf 'w\t%s\t%s\t%s\t%s\t%s\t%s\n' "$pid" "$desktop" \
+            "$(screen_at "${x_of[$owner]}" "${y_of[$owner]}")" "${class_of[$owner]}" "$owner" "$dir"
+    done
+    for line in "${window_lines[@]}"; do
+        IFS=$'\t' read -r pid desktop cls x y id caption <<< "$line"
+        [[ "$desktop" == "-1" || "$cls" == "plasmashell" ]] && continue
+        printf 'o\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$desktop" "$(screen_at "$x" "$y")" "$cls" "$pid" "$id" "$caption"
+    done
+}
+
+# Move windows to a desktop, each named by the pid that owns it, or as
+# `id:<window id>` from `thw where` for one window of a process that has
+# several, like a browser. A trailing `@screen` also puts the window on that
+# screen, maximized. You stay where you are.
+cmd_move() {
+    local desktop=${1:-} item pid screen name x y w h geom
+    if [[ ! "$desktop" =~ ^[0-9]+$ ]]; then
+        echo "thw move <desktop> <pid|id:..>[@screen]... needs a desktop number" >&2
+        exit 1
+    fi
+    shift
+    local -a args=()
+    while (( $# )); do
+        item=$1; shift
+        pid=${item%%@*} screen=""
+        [[ "$item" == *@* ]] && screen=${item#*@}
+        if [[ -z "$screen" ]]; then
+            args+=("$pid")
+            continue
+        fi
+        geom=""
+        while IFS=$'\t' read -r name _id x y w h; do
+            [[ "$name" == "$screen" ]] && geom="$x,$y,$w,$h"
+        done < <("$SCREEN_ROLES" --list 2>/dev/null)
+        if [[ -z "$geom" ]]; then
+            echo "no screen called $screen" >&2
+            exit 1
+        fi
+        args+=("$pid@$geom")
+    done
+    (( ${#args[@]} )) || { echo "thw move: nothing to move" >&2; exit 1; }
+    "$MOVE_WINDOWS" "$desktop" "${args[@]}"
+}
+
 # Switch to a desktop by number. `thw to` covers the case where what you know is
 # a pid; this covers the case where a window is open in a node but nothing is
 # running in it, so there is no pid to ask about.
@@ -263,7 +367,10 @@ browser() {
     local name
     name=$(head -1 "$HOME/.config/open-browser/browser" 2>/dev/null | tr -d '[:space:]')
     case "$name" in
-        firefox)  echo "firefox firefox" ;;
+        # The snap build reports its window class as firefox_firefox.
+        firefox)
+            if snap list firefox > /dev/null 2>&1; then echo "firefox firefox_firefox"
+            else echo "firefox firefox"; fi ;;
         chromium) echo "chromium chromium" ;;
         *)        echo "google-chrome-stable google-chrome" ;;
     esac
@@ -323,6 +430,8 @@ case "${1:-}" in
     desk)        shift; cmd_desk "$@" ;;
     desks)       cmd_desks ;;
     windows)     cmd_windows ;;
+    where)       cmd_where ;;
+    move)        shift; cmd_move "$@" ;;
     open)        shift; cmd_open "$@" ;;
     free)        cmd_free ;;
     setup)       shift; cmd_setup "$@" ;;
