@@ -10,6 +10,8 @@
 # to inject a script, run it, and read what it printed out of the journal. That
 # is the same round trip open-browser.sh makes, including the unique token,
 # because journalctl is a shared log and a fixed marker would match old runs.
+# The answer is read up to its own end marker, since two of these running at
+# once write to the same log and one used to read the other's windows as well.
 
 set -u
 
@@ -42,7 +44,7 @@ for (var i = 0; i < ws.length; i++) {
               Math.round(g.x + g.width / 2), Math.round(g.y + g.height / 2),
               String(w.internalId)].join("\t"));
 }
-console.info("$TOKEN" + "\n" + out.join("\n"));
+console.info("$TOKEN" + "\n" + out.join("\n") + "\n" + "$TOKEN:end");
 EOF
 
 SCRIPT_NAME="kwin-window-list-$$"
@@ -59,7 +61,7 @@ qdbus org.kde.KWin "/$SCRIPT_ID" org.kde.kwin.Script.run > /dev/null 2>&1
 journalctl --sync 2>/dev/null
 for _retry in 1 2 3; do
     RESULT=$(journalctl --since "30 sec ago" --no-pager -o cat 2>/dev/null \
-        | sed -n "/$TOKEN/,\$p" | tail -n +2)
+        | sed -n "/$TOKEN\$/,/$TOKEN:end\$/p" | sed '1d;$d')
     [[ -n "$RESULT" ]] && break
     sleep 0.1
 done

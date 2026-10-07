@@ -227,7 +227,7 @@ cmd_windows() {
 
 # Everything a picture of the workspace needs, from one KWin round trip:
 #
-#   #  <current desktop>  <desktop count>  <first free desktop, or ->
+#   #  <current desktop>  <desktop count>  <first free desktop, or ->  <rows>
 #   @  <screen>  <x>  <y>  <width>  <height>          one per screen, left to right
 #   w  <pid>  <desktop>  <screen>  <class>  <window pid>  <directory>
 #   o  <desktop>  <screen>  <class>  <window pid>  <window id>  <caption>
@@ -254,8 +254,9 @@ cmd_where() {
     local vault pid dir owner desktop free name x y w h cls caption line id
     vault=$(th vault --print 2>/dev/null) || vault="$HOME/repos/thoughts"
     free=$(cmd_free 2>/dev/null) || free="-"
-    printf '#\t%s\t%s\t%s\n' "$(qdbus org.kde.KWin /KWin currentDesktop)" \
-        "$(qdbus org.kde.KWin /VirtualDesktopManager count)" "$free"
+    printf '#\t%s\t%s\t%s\t%s\n' "$(qdbus org.kde.KWin /KWin currentDesktop)" \
+        "$(qdbus org.kde.KWin /VirtualDesktopManager count)" "$free" \
+        "$(qdbus org.kde.KWin /VirtualDesktopManager rows)"
     screens=()
     while IFS=$'\t' read -r name _id x y w h; do
         screens+=("$name $x $y $w $h")
