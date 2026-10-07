@@ -262,16 +262,17 @@ cmd_where() {
         screens+=("$name $x $y $w $h")
         printf '@\t%s\t%s\t%s\t%s\t%s\n' "$name" "$x" "$y" "$w" "$h"
     done < <("$SCREEN_ROLES" --list 2>/dev/null | sort -t$'\t' -k3,3n)
-    for pid in $(ls /proc 2>/dev/null | grep -E '^[0-9]+$'); do
-        dir=$(readlink "/proc/$pid/cwd" 2>/dev/null) || continue
-        [[ "$dir" == "$vault"/* ]] || continue
+    # One `find` for every process standing in the vault, rather than a
+    # readlink a process: this runs every few seconds while a board is open.
+    while IFS=$'\t' read -r pid dir; do
+        pid=${pid#/proc/} pid=${pid%/cwd}
         owner=$(owner_for "$pid")
         [[ "$owner" == "-" ]] && continue
         desktop=${desktop_of[$owner]}
         [[ "$desktop" == "-1" ]] && desktop="all"
         printf 'w\t%s\t%s\t%s\t%s\t%s\t%s\n' "$pid" "$desktop" \
             "$(screen_at "${x_of[$owner]}" "${y_of[$owner]}")" "${class_of[$owner]}" "$owner" "$dir"
-    done
+    done < <(find /proc -maxdepth 2 -name cwd -lname "$vault/*" -printf '%h/cwd\t%l\n' 2>/dev/null)
     for line in "${window_lines[@]}"; do
         IFS=$'\t' read -r pid desktop cls x y id caption <<< "$line"
         [[ "$desktop" == "-1" || "$cls" == "plasmashell" ]] && continue
