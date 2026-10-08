@@ -9,9 +9,10 @@
 #   thw windows             print pid, desktop and directory for everything open in the vault
 #   thw where               the same with screens: which monitor, which window, what is free
 #   thw move <desk> <pid|id:..>[@screen]...  move those windows to a desktop, and a screen if named
+#   thw close <pid|id:..>...  ask those windows to close
 #   thw open [slug] [desk]  open a terminal in that node, on that desktop
 #   thw free                print the first desktop with nothing on it
-#   thw setup <node> [url]  start claude and the board page on a free desktop, staying here
+#   thw setup <node> [url] [desk]  start claude and the board page on a free desktop, or that one, staying here
 #
 # `th agents` knows which node each running agent is working in; it deliberately
 # knows nothing about windows, so that it still works over ssh on a box with no
@@ -44,7 +45,7 @@ for tool in jq fzf qdbus; do
 done
 
 usage() {
-    sed -n '3,14p' "$(readlink -f "$0")" | sed 's/^# \?//'
+    sed -n '3,15p' "$(readlink -f "$0")" | sed 's/^# \?//'
 }
 
 # --- windows -----------------------------------------------------------------
@@ -315,6 +316,13 @@ cmd_move() {
     "$MOVE_WINDOWS" "$desktop" "${args[@]}"
 }
 
+# Ask windows to close, named the way `thw move` names them. It is the close
+# button's request, not a kill: an app with something unsaved can still ask.
+cmd_close() {
+    (( $# )) || { echo "thw close <pid|id:..>... needs a window" >&2; exit 1; }
+    "$MOVE_WINDOWS" close "$@"
+}
+
 # Switch to a desktop by number. `thw to` covers the case where what you know is
 # a pid; this covers the case where a window is open in a node but nothing is
 # running in it, so there is no pid to ask about.
@@ -384,7 +392,7 @@ browser() {
 # setup can be started from the board without losing your place. `thw <slug>`
 # or the board's jump goes there when you want it.
 cmd_setup() {
-    local target=${1:-} url=${2:-} dir vault desktop bin cls ready placer
+    local target=${1:-} url=${2:-} desktop=${3:-} dir vault bin cls ready placer
     if [[ -z "$target" ]]; then
         echo "thw setup <node> needs a node" >&2
         exit 1
@@ -398,7 +406,7 @@ cmd_setup() {
         vault=$(th vault --print 2>/dev/null) || vault="$HOME/repos/thoughts"
         url="$BOARD_URL/node/${dir#"$vault"/}"
     fi
-    desktop=$(cmd_free) || exit 1
+    [[ -n "$desktop" ]] || desktop=$(cmd_free) || exit 1
     read -r bin cls < <(browser)
 
     local -a places=()
@@ -434,6 +442,7 @@ case "${1:-}" in
     windows)     cmd_windows ;;
     where)       cmd_where ;;
     move)        shift; cmd_move "$@" ;;
+    close)       shift; cmd_close "$@" ;;
     open)        shift; cmd_open "$@" ;;
     free)        cmd_free ;;
     setup)       shift; cmd_setup "$@" ;;

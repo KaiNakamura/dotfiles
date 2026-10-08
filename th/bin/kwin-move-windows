@@ -2,11 +2,15 @@
 # Move windows to a desktop, and optionally onto a screen.
 #
 #   kwin-move-windows <desktop> <pid|id:window-id>[@x,y,w,h]...
+#   kwin-move-windows close <pid|id:window-id>...
 #
 # Every window owned by a named pid goes to <desktop>, and so does the one
 # window with a named id, as kwin-window-list prints it. With a geometry it is
 # also sent to the screen at x,y and maximized there. The current desktop
 # never changes. Prints how many windows moved.
+#
+# With `close` in place of a desktop the windows are asked to close instead,
+# the way their own close button asks, so an app with unsaved work can object.
 
 set -u
 
@@ -14,6 +18,9 @@ command -v qdbus > /dev/null 2>&1 || exit 1
 
 DESKTOP=$1
 shift
+[[ "$DESKTOP" =~ ^([0-9]+|close)$ ]] || { echo "kwin-move-windows: bad desktop $DESKTOP" >&2; exit 1; }
+CLOSE=false
+if [[ "$DESKTOP" == "close" ]]; then CLOSE=true DESKTOP=1; fi
 
 wants=""
 while (( $# )); do
@@ -46,6 +53,7 @@ for (var i = 0; i < ws.length; i++) {
     var key = "id:" + String(w.internalId);
     if (!want.hasOwnProperty(key)) key = String(w.pid);
     if (!want.hasOwnProperty(key)) continue;
+    if ($CLOSE) { w.closeWindow(); moved++; continue; }
     if (plasma6) w.desktops = [workspace.desktops[$DESKTOP - 1]];
     else w.desktop = $DESKTOP;
     var g = want[key];

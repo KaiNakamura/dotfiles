@@ -35,8 +35,10 @@ ln -sf "$BINARY" ~/.local/bin/godot
 
 # Download icon
 echo "Downloading Godot icon..."
-ICON_URL="https://raw.githubusercontent.com/godotengine/godot/master/icon.svg"
-curl -L "$ICON_URL" -o "$INSTALL_DIR/icon.svg"
+# A release tag, not master: the icon is no longer at the root of master, and
+# without -f curl saved the 404 page as the icon.
+ICON_URL="https://raw.githubusercontent.com/godotengine/godot/4.5-stable/icon.svg"
+curl -fL "$ICON_URL" -o "$INSTALL_DIR/icon.svg" || echo "Could not download the Godot icon"
 
 # Create .desktop file
 echo "Creating .desktop file..."
