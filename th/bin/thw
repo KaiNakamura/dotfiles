@@ -70,9 +70,12 @@ load_windows() {
 # The desktop of the nearest ancestor of $1 that owns a window.
 desktop_for() {
     local owner
+    # Loaded here, not only inside owner_for: that runs in a subshell, and what
+    # it loads there is gone by the time the desktop is looked up.
+    load_windows
     owner=$(owner_for "$1")
     [[ "$owner" == "-" ]] && { echo "-"; return; }
-    echo "${desktop_of[$owner]}"
+    echo "${desktop_of[$owner]:--}"
 }
 
 # The pid of the nearest ancestor of $1 that owns a window.
@@ -94,7 +97,7 @@ owner_for() {
 
 go_to_desktop() {
     local desktop=$1
-    if [[ "$desktop" == "-" || "$desktop" == "-1" ]]; then
+    if [[ -z "$desktop" || "$desktop" == "-" || "$desktop" == "-1" ]]; then
         echo "that window is not on a single desktop" >&2
         return 1
     fi
