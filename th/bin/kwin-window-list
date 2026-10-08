@@ -2,7 +2,7 @@
 # Print one line per managed window: pid, virtual desktop, window class, caption,
 # then the x and y of the window's centre, which is what says which screen it is
 # on, then KWin's own id for the window, the one thing that tells two windows of
-# one process apart.
+# one process apart, then 1 if the window is minimized and 0 if it is showing.
 #
 # A virtual desktop of -1 means the window is on all of them.
 #
@@ -42,7 +42,7 @@ for (var i = 0; i < ws.length; i++) {
     out.push([w.pid, desktop, String(w.resourceClass) || "-",
               String(w.caption).replace(/\s+/g, " ") || "-",
               Math.round(g.x + g.width / 2), Math.round(g.y + g.height / 2),
-              String(w.internalId)].join("\t"));
+              String(w.internalId), w.minimized ? 1 : 0].join("\t"));
 }
 console.info("$TOKEN" + "\n" + out.join("\n") + "\n" + "$TOKEN:end");
 EOF

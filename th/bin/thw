@@ -57,9 +57,9 @@ load_windows() {
     [[ -n "$windows_loaded" ]] && return
     windows_loaded=1
     local pid desktop cls x y
-    while IFS=$'\t' read -r pid desktop cls _caption x y id; do
+    while IFS=$'\t' read -r pid desktop cls _caption x y id min; do
         [[ -z "${pid:-}" ]] && continue
-        window_lines+=("$pid"$'\t'"$desktop"$'\t'"${cls:--}"$'\t'"${x:-}"$'\t'"${y:-}"$'\t'"${id:--}"$'\t'"$_caption")
+        window_lines+=("$pid"$'\t'"$desktop"$'\t'"${cls:--}"$'\t'"${x:-}"$'\t'"${y:-}"$'\t'"${id:--}"$'\t'"${min:-0}"$'\t'"$_caption")
         desktop_of[$pid]=$desktop
         class_of[$pid]=${cls:--}
         x_of[$pid]=${x:-} y_of[$pid]=${y:-}
@@ -230,7 +230,7 @@ cmd_windows() {
 #   #  <current desktop>  <desktop count>  <first free desktop, or ->  <rows>
 #   @  <screen>  <x>  <y>  <width>  <height>          one per screen, left to right
 #   w  <pid>  <desktop>  <screen>  <class>  <window pid>  <directory>
-#   o  <desktop>  <screen>  <class>  <window pid>  <window id>  <caption>
+#   o  <desktop>  <screen>  <class>  <window pid>  <window id>  <minimized 0|1>  <caption>
 #
 # The `w` lines are `thw windows` with two things added: the screen the window
 # is on, and the pid that owns the window, which is what `thw move` takes. The
@@ -251,7 +251,7 @@ screen_at() {
 
 cmd_where() {
     load_windows
-    local vault pid dir owner desktop free name x y w h cls caption line id
+    local vault pid dir owner desktop free name x y w h cls caption line id min
     vault=$(th vault --print 2>/dev/null) || vault="$HOME/repos/thoughts"
     free=$(cmd_free 2>/dev/null) || free="-"
     printf '#\t%s\t%s\t%s\t%s\n' "$(qdbus org.kde.KWin /KWin currentDesktop)" \
@@ -274,10 +274,10 @@ cmd_where() {
             "$(screen_at "${x_of[$owner]}" "${y_of[$owner]}")" "${class_of[$owner]}" "$owner" "$dir"
     done < <(find /proc -maxdepth 2 -name cwd -lname "$vault/*" -printf '%h/cwd\t%l\n' 2>/dev/null)
     for line in "${window_lines[@]}"; do
-        IFS=$'\t' read -r pid desktop cls x y id caption <<< "$line"
+        IFS=$'\t' read -r pid desktop cls x y id min caption <<< "$line"
         [[ "$desktop" == "-1" || "$cls" == "plasmashell" ]] && continue
-        printf 'o\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-            "$desktop" "$(screen_at "$x" "$y")" "$cls" "$pid" "$id" "$caption"
+        printf 'o\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$desktop" "$(screen_at "$x" "$y")" "$cls" "$pid" "$id" "$min" "$caption"
     done
 }
 
