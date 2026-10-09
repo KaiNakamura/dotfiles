@@ -90,7 +90,13 @@ owner_for() {
         fi
         # Field 4 of /proc/<pid>/stat is the parent. The comm field before it
         # can contain spaces and parentheses, so cut after the last ')'.
-        pid=$(sed 's/.*) //' "/proc/$pid/stat" 2>/dev/null | cut -d' ' -f2)
+        # Read with builtins: this runs for every process in the vault on every
+        # window read, and a sed and a cut per hop were most of that read.
+        local stat=""
+        read -r stat < "/proc/$pid/stat" 2>/dev/null || stat=""
+        stat=${stat##*) }
+        pid=${stat#* } pid=${pid%% *}
+        [[ -z "$stat" ]] && pid=""
     done
     echo "-"
 }
@@ -254,6 +260,10 @@ screen_at() {
 }
 
 cmd_where() {
+    # The screens are asked for first and read later, so kscreen-doctor answers
+    # while the KWin round trip is under way rather than after it.
+    local screens_fd
+    exec {screens_fd}< <("$SCREEN_ROLES" --list 2>/dev/null | sort -t$'\t' -k3,3n)
     load_windows
     local vault pid dir owner desktop free name x y w h cls caption line id min
     vault=$(th vault --print 2>/dev/null) || vault="$HOME/repos/thoughts"
@@ -265,7 +275,8 @@ cmd_where() {
     while IFS=$'\t' read -r name _id x y w h; do
         screens+=("$name $x $y $w $h")
         printf '@\t%s\t%s\t%s\t%s\t%s\n' "$name" "$x" "$y" "$w" "$h"
-    done < <("$SCREEN_ROLES" --list 2>/dev/null | sort -t$'\t' -k3,3n)
+    done <&"$screens_fd"
+    exec {screens_fd}<&-
     # One `find` for every process standing in the vault, rather than a
     # readlink a process: this runs every few seconds while a board is open.
     while IFS=$'\t' read -r pid dir; do
