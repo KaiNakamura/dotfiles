@@ -93,7 +93,7 @@ owner_for() {
         # Read with builtins: this runs for every process in the vault on every
         # window read, and a sed and a cut per hop were most of that read.
         local stat=""
-        read -r stat < "/proc/$pid/stat" 2>/dev/null || stat=""
+        { read -r stat < "/proc/$pid/stat"; } 2>/dev/null || stat=""
         stat=${stat##*) }
         pid=${stat#* } pid=${pid%% *}
         [[ -z "$stat" ]] && pid=""
