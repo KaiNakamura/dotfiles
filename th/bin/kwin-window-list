@@ -56,6 +56,10 @@ if [[ ! "$SCRIPT_ID" =~ ^[0-9]+$ ]]; then
 fi
 
 qdbus org.kde.KWin "/$SCRIPT_ID" org.kde.kwin.Script.run > /dev/null 2>&1
+# KWin 5 numbers a script by how many are loaded, so while another script is
+# being unloaded this one can share its number and the run above reaches the
+# other. Starting every loaded script that is not yet running covers that.
+qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.start > /dev/null 2>&1
 
 # The journal is written asynchronously, so a first read can miss the line.
 journalctl --sync 2>/dev/null

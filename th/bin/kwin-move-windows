@@ -80,6 +80,10 @@ SCRIPT_ID=$(qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \
     "$SCRIPT_FILE" "$SCRIPT_NAME" 2>/dev/null)
 [[ "$SCRIPT_ID" =~ ^[0-9]+$ ]] || { echo "could not reach KWin" >&2; exit 1; }
 qdbus org.kde.KWin "/$SCRIPT_ID" org.kde.kwin.Script.run > /dev/null 2>&1
+# KWin 5 numbers a script by how many are loaded, so while another script is
+# being unloaded this one can share its number and the run above reaches the
+# other. Starting every loaded script that is not yet running covers that.
+qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.start > /dev/null 2>&1
 
 journalctl --sync 2>/dev/null
 for _retry in 1 2 3 4 5; do
