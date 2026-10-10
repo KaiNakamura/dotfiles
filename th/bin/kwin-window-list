@@ -1,5 +1,8 @@
 #!/bin/bash
-# Print one line per managed window: pid, virtual desktop, window class, caption.
+# Print one line per managed window: pid, virtual desktop, window class, caption,
+# then the x and y of the window's centre, which is what says which screen it is
+# on, then KWin's own id for the window, the one thing that tells two windows of
+# one process apart, then 1 if the window is minimized and 0 if it is showing.
 #
 # A virtual desktop of -1 means the window is on all of them.
 #
@@ -7,6 +10,8 @@
 # to inject a script, run it, and read what it printed out of the journal. That
 # is the same round trip open-browser.sh makes, including the unique token,
 # because journalctl is a shared log and a fixed marker would match old runs.
+# The answer is read up to its own end marker, since two of these running at
+# once write to the same log and one used to read the other's windows as well.
 
 set -u
 
@@ -31,9 +36,15 @@ for (var i = 0; i < ws.length; i++) {
     } else if (!w.onAllDesktops) {
         desktop = w.desktop;
     }
-    out.push([w.pid, desktop, w.resourceClass, w.caption].join("\t"));
+    // No field may be empty or hold a tab: the reader splits on tabs, and the
+    // shell collapses a run of them into one.
+    var g = w.frameGeometry;
+    out.push([w.pid, desktop, String(w.resourceClass) || "-",
+              String(w.caption).replace(/\s+/g, " ") || "-",
+              Math.round(g.x + g.width / 2), Math.round(g.y + g.height / 2),
+              String(w.internalId), w.minimized ? 1 : 0].join("\t"));
 }
-console.info("$TOKEN" + "\n" + out.join("\n"));
+console.info("$TOKEN" + "\n" + out.join("\n") + "\n" + "$TOKEN:end");
 EOF
 
 SCRIPT_NAME="kwin-window-list-$$"
@@ -45,12 +56,16 @@ if [[ ! "$SCRIPT_ID" =~ ^[0-9]+$ ]]; then
 fi
 
 qdbus org.kde.KWin "/$SCRIPT_ID" org.kde.kwin.Script.run > /dev/null 2>&1
+# KWin 5 numbers a script by how many are loaded, so while another script is
+# being unloaded this one can share its number and the run above reaches the
+# other. Starting every loaded script that is not yet running covers that.
+qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.start > /dev/null 2>&1
 
 # The journal is written asynchronously, so a first read can miss the line.
 journalctl --sync 2>/dev/null
 for _retry in 1 2 3; do
     RESULT=$(journalctl --since "30 sec ago" --no-pager -o cat 2>/dev/null \
-        | sed -n "/$TOKEN/,\$p" | tail -n +2)
+        | sed -n "/$TOKEN\$/,/$TOKEN:end\$/p" | sed '1d;$d')
     [[ -n "$RESULT" ]] && break
     sleep 0.1
 done

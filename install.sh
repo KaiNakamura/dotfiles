@@ -35,6 +35,7 @@ INSTALL_ORDER=(
     "fzf"
     "worktrunk"
     "th"
+    "board"
     "tldr"
     "aws"
     "earlyoom"

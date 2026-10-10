@@ -1,0 +1,125 @@
+#!/bin/bash
+# Print where each window role goes, one line per role:
+#   role  x  y  width  height  connector  monitor
+#
+# A role is named in ~/.config/thw/screens, one per line as `role monitor`,
+# where monitor is the serial the panel reports in its EDID. `screen-roles
+# --list` prints the serial of every connected monitor, for writing that file.
+#
+# Connector names are not identities. HDMI-A-1 and DP-5 swap when a cable or a
+# dock does, and two panels of the same model are indistinguishable by maker
+# and model, so the serial is the one thing that follows a physical monitor
+# around. When the named monitor is not connected the role falls back to a
+# position on the top row: the browser to its left end, the terminal to its
+# right, and anything else to the primary screen. With one screen, everything
+# lands on it.
+
+set -uo pipefail
+
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/thw/screens"
+ROLES=(browser terminal)
+
+command -v kscreen-doctor > /dev/null 2>&1 || { echo "screen-roles needs kscreen-doctor" >&2; exit 1; }
+command -v jq > /dev/null 2>&1 || { echo "screen-roles needs jq" >&2; exit 1; }
+
+# The display-name serial (descriptor 0xff) when the panel has one, else maker
+# and product code. A laptop panel often carries no serial at all, and there
+# is only ever one of it, so its model is identity enough.
+monitor_id() {
+    local edid=$1 bytes i
+    read -r -a bytes < <(od -An -tx1 -v "$edid" 2>/dev/null | tr -s ' \n' ' ')
+    (( ${#bytes[@]} >= 128 )) || { echo "-"; return; }
+    for i in 54 72 90 108; do
+        if [[ "${bytes[i]}${bytes[i+1]}${bytes[i+2]}${bytes[i+3]}" == "000000ff" ]]; then
+            local s="" j
+            for ((j = i + 5; j < i + 18; j++)); do
+                [[ "${bytes[j]}" == "0a" ]] && break
+                s+=$(printf "\\x${bytes[j]}")
+            done
+            s=${s// /}
+            [[ -n "$s" ]] && { echo "$s"; return; }
+        fi
+    done
+    echo "${bytes[8]}${bytes[9]}-${bytes[11]}${bytes[10]}"
+}
+
+# connector x y width height primary, one per enabled output. Size is the
+# current mode divided by the scale, which is what the desktop lays out in.
+outputs() {
+    kscreen-doctor -j 2>/dev/null | jq -r '
+        .outputs[] | select(.connected and .enabled)
+        | . as $o
+        | ($o.modes[] | select(.id == $o.currentModeId) | .size) as $s
+        | ($o.rotation == 2 or $o.rotation == 8) as $turned
+        | [$o.name, $o.pos.x, $o.pos.y,
+           ((if $turned then $s.height else $s.width end) / $o.scale | floor),
+           ((if $turned then $s.width else $s.height end) / $o.scale | floor),
+           $o.priority]
+        | @tsv'
+}
+
+declare -A geom id_of
+connectors=()
+primary=""
+while IFS=$'\t' read -r name x y w h priority; do
+    [[ -z "$name" ]] && continue
+    connectors+=("$name")
+    geom[$name]="$x"$'\t'"$y"$'\t'"$w"$'\t'"$h"
+    edid=$(ls /sys/class/drm/card*-"$name"/edid 2>/dev/null | head -1)
+    id_of[$name]=$([[ -n "$edid" ]] && monitor_id "$edid" || echo "-")
+    [[ "$priority" == "1" ]] && primary=$name
+done < <(outputs)
+
+(( ${#connectors[@]} )) || { echo "no screens found" >&2; exit 1; }
+[[ -z "$primary" ]] && primary=${connectors[0]}
+
+if [[ "${1:-}" == "--list" ]]; then
+    for name in "${connectors[@]}"; do
+        printf '%s\t%s\t%s\n' "$name" "${id_of[$name]}" "${geom[$name]}"
+    done
+    exit 0
+fi
+
+# The top row is the screens whose top edge is highest; its ends are the
+# leftmost and rightmost of those.
+top_end() {
+    local side=$1 name x y best="" bx="" top=""
+    for name in "${connectors[@]}"; do
+        IFS=$'\t' read -r x y _ _ <<< "${geom[$name]}"
+        [[ -z "$top" || "$y" -lt "$top" ]] && top=$y
+    done
+    for name in "${connectors[@]}"; do
+        IFS=$'\t' read -r x y _ _ <<< "${geom[$name]}"
+        [[ "$y" != "$top" ]] && continue
+        if [[ -z "$best" ]] || { [[ "$side" == left ]] && (( x < bx )); } \
+                            || { [[ "$side" == right ]] && (( x > bx )); }; then
+            best=$name bx=$x
+        fi
+    done
+    echo "$best"
+}
+
+fallback() {
+    case $1 in
+        browser)  top_end left ;;
+        terminal) top_end right ;;
+        *)        echo "$primary" ;;
+    esac
+}
+
+declare -A wanted
+if [[ -f "$CONFIG" ]]; then
+    while read -r role monitor _; do
+        [[ -z "${role:-}" || "$role" == \#* ]] && continue
+        wanted[$role]=$monitor
+    done < "$CONFIG"
+fi
+
+for role in "${ROLES[@]}"; do
+    screen=""
+    for name in "${connectors[@]}"; do
+        [[ -n "${wanted[$role]:-}" && "${id_of[$name]}" == "${wanted[$role]}" ]] && screen=$name
+    done
+    [[ -z "$screen" ]] && screen=$(fallback "$role")
+    printf '%s\t%s\t%s\t%s\n' "$role" "${geom[$screen]}" "$screen" "${id_of[$screen]}"
+done
