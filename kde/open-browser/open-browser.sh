@@ -16,6 +16,8 @@ URL="$1"
 if [[ -z "$URL" ]]; then exit 1; fi
 
 # Step 3: Browser detection via config file with fallback
+# RESOURCE_CLASS is a comma-separated list: the Firefox snap reports
+# "firefox_firefox" on X11 and "firefox" on Wayland
 BROWSER_BIN=""
 RESOURCE_CLASS=""
 
@@ -28,7 +30,7 @@ resolve_browser() {
             ;;
         firefox)
             BROWSER_BIN="firefox"
-            RESOURCE_CLASS="firefox"
+            RESOURCE_CLASS="firefox,firefox_firefox"
             ;;
         chromium)
             if command -v chromium-browser &> /dev/null; then
@@ -53,7 +55,7 @@ fi
 if [[ -z "$BROWSER_BIN" ]] || ! command -v "$BROWSER_BIN" &> /dev/null; then
     BROWSER_BIN=""
     RESOURCE_CLASS=""
-    for candidate in google-chrome-stable:google-chrome firefox:firefox chromium-browser:chromium-browser chromium:chromium; do
+    for candidate in google-chrome-stable:google-chrome firefox:firefox,firefox_firefox chromium-browser:chromium-browser chromium:chromium; do
         bin="${candidate%%:*}"
         class="${candidate##*:}"
         if command -v "$bin" &> /dev/null; then
@@ -92,17 +94,20 @@ read_journal_token() {
 }
 
 # Step 4+5: KWin detection script, check for browser on current desktop
-UNIQUE_TOKEN="OPEN_BROWSER_$$_$(date +%s%N)"
-SCRIPT_FILE=$(mktemp /tmp/open-browser-kwin-XXXXXX.js)
-chmod 600 "$SCRIPT_FILE"
-cat > "$SCRIPT_FILE" << EOF
+# Sets RESULT to the journal line, or empty if the answer never showed up
+detect_browser_window() {
+    local UNIQUE_TOKEN="OPEN_BROWSER_$$_$(date +%s%N)"
+    local SCRIPT_FILE=$(mktemp /tmp/open-browser-kwin-XXXXXX.js)
+    chmod 600 "$SCRIPT_FILE"
+    cat > "$SCRIPT_FILE" << EOF
+var classes = "$RESOURCE_CLASS".split(",");
 var currentDesktop = workspace.currentDesktop;
 var clients = workspace.clientList();
 var found = false;
 var ids = [];
 for (var i = 0; i < clients.length; i++) {
     var c = clients[i];
-    if (c.resourceClass !== "$RESOURCE_CLASS") continue;
+    if (classes.indexOf(c.resourceClass) === -1) continue;
     ids.push(c.internalId.toString());
     if (c.desktop !== currentDesktop && !c.onAllDesktops) continue;
     workspace.activeClient = c;
@@ -116,27 +121,34 @@ if (found) {
 }
 EOF
 
-# Inject and run the KWin script
-SCRIPT_NAME="open-browser-$$"
-SCRIPT_ID=$(qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \
-    "$SCRIPT_FILE" "$SCRIPT_NAME" 2>/dev/null)
+    # Inject and run the KWin script
+    local SCRIPT_NAME="open-browser-$$"
+    local SCRIPT_ID=$(qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \
+        "$SCRIPT_FILE" "$SCRIPT_NAME" 2>/dev/null)
 
-# Step 5: Validate SCRIPT_ID is a valid integer
-if [[ ! "$SCRIPT_ID" =~ ^[0-9]+$ ]]; then
+    # Step 5: Validate SCRIPT_ID is a valid integer
+    if [[ ! "$SCRIPT_ID" =~ ^[0-9]+$ ]]; then
+        rm -f "$SCRIPT_FILE"
+        exec "$BROWSER_BIN" "$URL"
+    fi
+
+    qdbus org.kde.KWin "/$SCRIPT_ID" org.kde.kwin.Script.run > /dev/null 2>&1
+
+    # Step 4: Read result from journal with hardened retry
+    read_journal_token "$UNIQUE_TOKEN"
+    RESULT="$JOURNAL_RESULT"
+
+    # Cleanup
+    qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript \
+        "$SCRIPT_NAME" > /dev/null 2>&1
     rm -f "$SCRIPT_FILE"
-    exec "$BROWSER_BIN" "$URL"
+}
+
+# Another KWin script loader running at the same moment can swallow the answer
+detect_browser_window
+if [[ -z "$RESULT" ]]; then
+    detect_browser_window
 fi
-
-qdbus org.kde.KWin "/$SCRIPT_ID" org.kde.kwin.Script.run > /dev/null 2>&1
-
-# Step 4: Read result from journal with hardened retry
-read_journal_token "$UNIQUE_TOKEN"
-RESULT="$JOURNAL_RESULT"
-
-# Cleanup
-qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript \
-    "$SCRIPT_NAME" > /dev/null 2>&1
-rm -f "$SCRIPT_FILE"
 
 # Open the URL
 if [[ "$RESULT" == *"FOUND"* && "$RESULT" != *"NOT_FOUND"* ]]; then
@@ -175,13 +187,14 @@ for attempt in 1 2 3 4 5; do
     MOVE_FILE=$(mktemp /tmp/open-browser-move-XXXXXX.js)
     chmod 600 "$MOVE_FILE"
     cat > "$MOVE_FILE" << MEOF
+var classes = "$RESOURCE_CLASS".split(",");
 var known = "$KNOWN_IDS".split(",");
 var target = $TARGET_DESKTOP;
 var clients = workspace.clientList();
 var moved = false;
 for (var i = 0; i < clients.length; i++) {
     var c = clients[i];
-    if (c.resourceClass !== "$RESOURCE_CLASS") continue;
+    if (classes.indexOf(c.resourceClass) === -1) continue;
     var id = c.internalId.toString();
     var isKnown = false;
     for (var j = 0; j < known.length; j++) {
