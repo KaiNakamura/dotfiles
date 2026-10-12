@@ -37,4 +37,41 @@ for script in "$WORKDIR"/bin/*; do
     chmod +x "$TARGET_BIN/$name"
 done
 
+# kwin-window-list prints what this pair keeps current: a KWin script that
+# stays loaded and publishes every window change, and the D-Bus service that
+# writes what it publishes to a file.
+echo "  Installing: window-list service"
+SERVICE_DST="$TARGET_BIN/window-list-service.py"
+mkdir -p "$HOME/.local/share/dbus-1/services" "$HOME/.config/systemd/user"
+cp "$WORKDIR/scripts/window-list-service.py" "$SERVICE_DST"
+chmod +x "$SERVICE_DST"
+cat > "$HOME/.local/share/dbus-1/services/org.hjkl.WindowList.service" << EOF
+[D-BUS Service]
+Name=org.hjkl.WindowList
+Exec=/usr/bin/python3 $SERVICE_DST
+SystemdService=window-list.service
+EOF
+cp "$WORKDIR/systemd/window-list.service" "$HOME/.config/systemd/user/window-list.service"
+systemctl --user daemon-reload
+systemctl --user enable window-list.service
+# A copy already running holds the old code until it is restarted.
+systemctl --user restart window-list.service
+
+echo "  Installing: window-list-publisher KWin script"
+if command -v kpackagetool6 > /dev/null 2>&1; then
+    KPKG=kpackagetool6
+    KWRITECONFIG=kwriteconfig6
+else
+    KPKG=kpackagetool5
+    KWRITECONFIG=kwriteconfig5
+fi
+"$KPKG" --type KWin/Script -r window-list-publisher > /dev/null 2>&1 || true
+"$KPKG" --type KWin/Script -i "$WORKDIR/kwin-scripts/window-list-publisher"
+# Toggled off then on, so a KWin already running drops the old copy and loads
+# this one.
+"$KWRITECONFIG" --file kwinrc --group Plugins --key window-list-publisherEnabled false
+qdbus org.kde.KWin /KWin reconfigure
+"$KWRITECONFIG" --file kwinrc --group Plugins --key window-list-publisherEnabled true
+qdbus org.kde.KWin /KWin reconfigure
+
 echo "Done."
