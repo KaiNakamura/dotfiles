@@ -12,6 +12,7 @@ Sync this machine with the other machines the user names, so each has the same c
 
 ## Rules
 
+- Sync only the machines this one can reach. Push this machine's work so an unreachable machine can pull it later.
 - Never force-push, and never discard uncommitted work.
 - Resolve conflicts, keeping both sides' work. Ask the user only when the two sides cannot both be kept.
 
