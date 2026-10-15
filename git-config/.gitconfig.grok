@@ -1,0 +1,16 @@
+# Non-identity settings for Grok Bot boxes.
+# Layered via include.path so any pre-set identity survives.
+# No https→ssh rewrites: Grok uses gh HTTPS tokens, not SSH keys.
+[core]
+	editor = vim
+	excludesFile = ~/.gitignore_global
+[init]
+	defaultBranch = main
+[pull]
+	rebase = false
+[pager]
+	branch = false
+[delta]
+	navigate = true
+	side-by-side = true
+	line-numbers = true
