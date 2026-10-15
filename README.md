@@ -56,13 +56,19 @@ Different machines can have different configurations (e.g., work vs home). Set a
 echo "work" > ~/.dotfiles-profile
 ```
 
-Available profiles: `home` (default), `work`, `coder`, `grok`
+Available profiles (see `profiles/*.conf`): `home` (default), `work`, `coder`, `grok`
 
 ### What profiles affect
 
-- **Default browser**: `home` = Firefox, `work` = Chrome (in `kde/settings.sh` and `kde/open-browser/open-browser.sh`)
-- **Starship prompt**: `starship/install.sh` copies `starship.<profile>.toml` to `~/.config/starship.toml` when it exists, else falls back to `starship.toml`. `grok` reuses `starship.coder.toml`.
-- **Grok profile**: headless Grok Bot boxes. Same module list as `coder`, plus `th`. No KDE/GUI. Bootstrap Homebrew first (like Coder). Uses gh HTTPS auth (no SSH url rewrites).
+Profiles are declarative `key=value` files under `profiles/`. A profile can `extends` another (e.g. `grok` → `coder`). Tools resolve assets via the profile chain and never hard-code profile names.
+
+- **Modules**: listed in each conf (`coder` includes `th`, docker, obsidian)
+- **Git**: `git_mode=include` layers via `include.path`; asset files decide SSH rewrites (`.gitconfig.coder` has them, `.gitconfig.grok` does not)
+- **Shell**: `wire_shell_rc=true` appends an idempotent block to `~/.bashrc` (agent boxes without an external shim)
+- **Starship / Claude settings**: `resolve_asset` walks profile → parent → default
+- **Default browser** (desktop only): `home` = Firefox, `work` = Chrome in KDE helpers
+
+To add a framework: create one file, e.g. `profiles/hermes.conf` with `extends = coder` and any flag overrides.
 
 ### Machine-specific shell config
 

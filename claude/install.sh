@@ -14,17 +14,13 @@ WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Install plugins
 "$WORKDIR/install-plugins.sh"
 
-# Copy settings.json (use profile-specific version if available)
-source "$(dirname "$0")/../lib/profile.sh"
-settings_source="$WORKDIR/settings.json.${DOTFILES_PROFILE}"
-if [[ ! -f "$settings_source" && "$DOTFILES_PROFILE" == "grok" ]]; then
-    # Reuse coder settings; no separate grok copy to keep in sync.
-    settings_source="$WORKDIR/settings.json.coder"
-fi
-if [[ ! -f "$settings_source" ]]; then
-    settings_source="$WORKDIR/settings.json"
-fi
-cp "$settings_source" ~/.claude/settings.json
+# Copy settings.json (profile → parent → default via resolve_asset)
+DOTFILES_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=../lib/profile.sh
+. "$DOTFILES_ROOT/lib/profile.sh"
+# shellcheck source=../lib/asset.sh
+. "$DOTFILES_ROOT/lib/asset.sh"
+cp "$(resolve_asset "$WORKDIR/settings.json")" ~/.claude/settings.json
 
 # Copy keybindings.json
 cp "$WORKDIR/keybindings.json" ~/.claude/keybindings.json
