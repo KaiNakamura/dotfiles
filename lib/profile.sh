@@ -1,6 +1,7 @@
 # Profile loader (POSIX). Source after setting DOTFILES_ROOT.
 # Exports: DOTFILES_PROFILE PROFILE_CHAIN PROFILE_MODULES
 #          PROFILE_GIT_MODE PROFILE_WIRE_SHELL_RC PROFILE_SHELL
+#          PROFILE_START_DOCKER
 #
 # Conf format: key = value
 # Multi-line values: continuation lines start with whitespace (one token per line).
@@ -125,6 +126,7 @@ load_profile() {
     PROFILE_GIT_MODE=replace
     PROFILE_WIRE_SHELL_RC=false
     PROFILE_SHELL=zsh
+    PROFILE_START_DOCKER=false
     _add=
     _remove=
 
@@ -142,6 +144,8 @@ load_profile() {
         [ -n "$_w" ] && PROFILE_WIRE_SHELL_RC=$_w
         _s=$(_profile_get "$_cf" shell)
         [ -n "$_s" ] && PROFILE_SHELL=$_s
+        _d=$(_profile_get "$_cf" start_docker)
+        [ -n "$_d" ] && PROFILE_START_DOCKER=$_d
     done
 
     PROFILE_MODULES=$(_profile_trim "$PROFILE_MODULES $_add")
@@ -149,7 +153,7 @@ load_profile() {
         PROFILE_MODULES=$(printf '%s\n' $PROFILE_MODULES | _profile_list_remove $_remove)
     fi
 
-    export PROFILE_MODULES PROFILE_GIT_MODE PROFILE_WIRE_SHELL_RC PROFILE_SHELL
+    export PROFILE_MODULES PROFILE_GIT_MODE PROFILE_WIRE_SHELL_RC PROFILE_SHELL PROFILE_START_DOCKER
 }
 
 if [ -n "${DOTFILES_ROOT:-}" ]; then
