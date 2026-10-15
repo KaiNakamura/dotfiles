@@ -208,6 +208,10 @@ main() {
     elif [[ "$profile" == "coder" ]]; then
         modules=("${INSTALL_ORDER_CODER[@]}")
         print_info "Installing Coder subset: ${modules[*]}"
+    elif [[ "$profile" == "grok" ]]; then
+        # Headless Grok Bot box: same as coder, plus th for the thoughts vault.
+        modules=("${INSTALL_ORDER_CODER[@]}" "th")
+        print_info "Installing Grok subset: ${modules[*]}"
     else
         # Use default installation order
         modules=("${INSTALL_ORDER[@]}")

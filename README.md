@@ -56,12 +56,13 @@ Different machines can have different configurations (e.g., work vs home). Set a
 echo "work" > ~/.dotfiles-profile
 ```
 
-Available profiles: `home` (default), `work`, `coder`
+Available profiles: `home` (default), `work`, `coder`, `grok`
 
 ### What profiles affect
 
 - **Default browser**: `home` = Firefox, `work` = Chrome (in `kde/settings.sh` and `kde/open-browser/open-browser.sh`)
-- **Starship prompt**: `starship/install.sh` copies `starship.<profile>.toml` to `~/.config/starship.toml` when it exists, else falls back to `starship.toml`.
+- **Starship prompt**: `starship/install.sh` copies `starship.<profile>.toml` to `~/.config/starship.toml` when it exists, else falls back to `starship.toml`. `grok` reuses `starship.coder.toml`.
+- **Grok profile**: headless Grok Bot boxes. Same module list as `coder`, plus `th`. No KDE/GUI. Bootstrap Homebrew first (like Coder). Uses gh HTTPS auth (no SSH url rewrites).
 
 ### Machine-specific shell config
 

@@ -11,6 +11,9 @@ profile=""
 src="./starship.toml"
 if [ -n "$profile" ] && [ -f "./starship.${profile}.toml" ]; then
     src="./starship.${profile}.toml"
+elif [ "$profile" = "grok" ] && [ -f "./starship.coder.toml" ]; then
+    # Reuse coder prompt; no separate grok toml to keep in sync.
+    src="./starship.coder.toml"
 fi
 
 cp "$src" "$HOME/.config/starship.toml"

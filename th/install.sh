@@ -25,13 +25,30 @@ if ! command -v cargo > /dev/null 2>&1; then
     . "$HOME/.cargo/env"
 fi
 
+# Prefer rustup's toolchain over any older system rustc (e.g. Debian's).
+export PATH="$HOME/.cargo/bin:$PATH"
+if [ -f "$HOME/.cargo/env" ]; then
+    # shellcheck disable=SC1091
+    . "$HOME/.cargo/env"
+fi
+
 echo "  Installing: th"
 # Fetch through the git CLI rather than cargo's bundled libgit2. The git-config
-# module rewrites https://github.com/KaiNakamura/ to ssh:// so our own repos
-# bypass the Coder git proxy, and libgit2 can only offer an ssh-agent for that,
-# which a non-interactive install shell does not have. The git CLI reads
-# ~/.ssh/ directly and authenticates.
-CARGO_NET_GIT_FETCH_WITH_CLI=true cargo install --git "$TH_REPO"
+# module may rewrite https://github.com/KaiNakamura/ to ssh:// (coder profile),
+# and libgit2 can only offer an ssh-agent for that, which a non-interactive
+# install shell does not have. The git CLI reads ~/.ssh/ directly.
+# On Grok boxes there is often no SSH key; fall back to `gh repo clone`.
+if ! CARGO_NET_GIT_FETCH_WITH_CLI=true cargo install --git "$TH_REPO"; then
+    echo "  cargo --git failed; cloning via gh and installing from path"
+    TH_SRC="${TH_SRC:-$HOME/repos/th}"
+    mkdir -p "$(dirname "$TH_SRC")"
+    if [ ! -d "$TH_SRC/.git" ]; then
+        gh repo clone KaiNakamura/th "$TH_SRC"
+    else
+        git -C "$TH_SRC" pull --ff-only || true
+    fi
+    cargo install --path "$TH_SRC"
+fi
 
 # The helpers below drive KWin over D-Bus, so they are meaningless anywhere
 # else. th is already in by this point and works without them.
