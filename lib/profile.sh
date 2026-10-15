@@ -1,27 +1,72 @@
 # Profile loader (POSIX). Source after setting DOTFILES_ROOT.
 # Exports: DOTFILES_PROFILE PROFILE_CHAIN PROFILE_MODULES
 #          PROFILE_GIT_MODE PROFILE_WIRE_SHELL_RC PROFILE_SHELL
+#
+# Conf format: key = value
+# Multi-line values: continuation lines start with whitespace (one token per line).
 
 # shellcheck shell=sh
 
 _profile_trim() {
-    # trim leading/trailing whitespace
     printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
 }
 
 _profile_get() {
     # _profile_get <file> <key> -> value (empty if missing)
+    # Supports continuation lines that begin with whitespace.
     _f=$1
     _k=$2
     [ -f "$_f" ] || return 0
-    # strip comments, match key =
-    _line=$(grep -E "^[[:space:]]*${_k}[[:space:]]*=" "$_f" | tail -n 1) || true
-    [ -n "$_line" ] || return 0
-    _profile_trim "${_line#*=}"
+
+    awk -v key="$_k" '
+        BEGIN { found = 0; val = "" }
+        /^[[:space:]]*#/ { next }
+        /^[[:space:]]*$/ {
+            if (found) exit
+            next
+        }
+        {
+            raw = $0
+            # Continuation: leading whitespace after key was seen
+            if (raw ~ /^[[:space:]]/) {
+                if (found) {
+                    line = raw
+                    sub(/^[[:space:]]+/, "", line)
+                    sub(/[[:space:]]+#.*$/, "", line)
+                    if (line != "") {
+                        if (val != "") val = val " " line
+                        else val = line
+                    }
+                }
+                next
+            }
+            # New assignment at column 0 (no leading whitespace)
+            if (raw ~ /^[^=]+=/) {
+                k = raw
+                sub(/[[:space:]]*=.*/, "", k)
+                sub(/^[[:space:]]+/, "", k)
+                rest = raw
+                sub(/^[^=]*=[[:space:]]*/, "", rest)
+                sub(/[[:space:]]+#.*$/, "", rest)
+                if (found) exit
+                if (k == key) {
+                    found = 1
+                    val = rest
+                }
+                next
+            }
+            if (found) exit
+        }
+        END {
+            if (found) {
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
+                print val
+            }
+        }
+    ' "$_f"
 }
 
 _profile_list_remove() {
-    # stdin words, args = words to remove
     _out=
     while read -r _w; do
         [ -z "$_w" ] && continue
@@ -35,7 +80,6 @@ _profile_list_remove() {
 }
 
 load_profile() {
-    # optional arg overrides ~/.dotfiles-profile
     if [ -n "${1:-}" ]; then
         DOTFILES_PROFILE=$1
     else
@@ -68,7 +112,8 @@ load_profile() {
         _cur=$_parent
         _guard=$((_guard + 1))
     done
-    # _chain is root ... leaf; PROFILE_CHAIN for assets is leaf ... root
+
+    # PROFILE_CHAIN for assets is leaf ... root
     PROFILE_CHAIN=
     for _p in $_chain; do
         PROFILE_CHAIN="$_p $PROFILE_CHAIN"
@@ -76,7 +121,6 @@ load_profile() {
     PROFILE_CHAIN=$(_profile_trim "$PROFILE_CHAIN")
     export PROFILE_CHAIN
 
-    # Merge flags/modules root → leaf (child overrides)
     PROFILE_MODULES=
     PROFILE_GIT_MODE=replace
     PROFILE_WIRE_SHELL_RC=false
@@ -108,7 +152,6 @@ load_profile() {
     export PROFILE_MODULES PROFILE_GIT_MODE PROFILE_WIRE_SHELL_RC PROFILE_SHELL
 }
 
-# Auto-load when sourced if DOTFILES_ROOT is set
 if [ -n "${DOTFILES_ROOT:-}" ]; then
     load_profile
 fi
