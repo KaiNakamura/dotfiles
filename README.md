@@ -65,6 +65,7 @@ Profiles are declarative `key=value` files under `profiles/`. A profile can `ext
 - **Modules**: listed in each conf (`coder` includes `th`, docker, obsidian)
 - **Git**: `git_mode=include` layers via `include.path`; asset files decide SSH rewrites (`.gitconfig.coder` has them, `.gitconfig.grok` does not)
 - **Shell**: `wire_shell_rc=true` appends an idempotent block to `~/.bashrc` (agent boxes without an external shim)
+- **Docker**: `start_docker=true` idempotently starts `dockerd` when systemd/`policy-rc.d` will not (see `lib/shell_rc.sh`)
 - **Starship / Claude settings**: `resolve_asset` walks profile → parent → default
 - **Default browser** (desktop only): `home` = Firefox, `work` = Chrome in KDE helpers
 

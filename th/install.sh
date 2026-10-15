@@ -1,44 +1,38 @@
-#!/bin/bash
-# The `th` thoughts vault CLI, plus the desktop-side helpers that go with it.
-#
-# th lives in its own repo and is installed from there, since it is a Rust
-# binary and no package manager carries it. What lives here besides is the part
-# th deliberately leaves out: the KDE and KWin knowledge that turns a list of
-# agents into a list of windows. th itself stays portable and works over ssh on
-# a box with no display, which is why the two halves are installed separately.
-
+#!/bin/sh
+# The `th` thoughts vault CLI, plus optional KDE helpers.
 set -e
 
-WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKDIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 TARGET_BIN="$HOME/.local/bin"
 TH_REPO="https://github.com/KaiNakamura/th"
 
-# Rust is this module's prerequisite the way brew is elsewhere, so install it
-# rather than skipping: an explicit `./install.sh th` bypasses the profile
-# ordering, so nothing else is going to put cargo there first. rustup is left to
-# amend the shell profiles itself, since which one is in play differs per box
-# (the Coder workspaces source their bash init from another repo entirely).
-if ! command -v cargo > /dev/null 2>&1; then
+if ! command -v cargo >/dev/null 2>&1; then
     echo "  Installing: rust (prerequisite for th)"
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    # shellcheck disable=SC1091
-    . "$HOME/.cargo/env"
 fi
 
 # Prefer rustup's toolchain over any older system rustc (e.g. Debian's).
+# shellcheck disable=SC1091
+[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 export PATH="$HOME/.cargo/bin:$PATH"
-if [ -f "$HOME/.cargo/env" ]; then
-    # shellcheck disable=SC1091
-    . "$HOME/.cargo/env"
+
+# Fetch git deps with the git CLI so gh HTTPS credentials apply (private repos).
+mkdir -p "$HOME/.cargo"
+if [ -f "$HOME/.cargo/config.toml" ]; then
+    if ! grep -q 'git-fetch-with-cli' "$HOME/.cargo/config.toml" 2>/dev/null; then
+        printf '\n[net]\ngit-fetch-with-cli = true\n' >> "$HOME/.cargo/config.toml"
+    fi
+else
+    printf '[net]\ngit-fetch-with-cli = true\n' > "$HOME/.cargo/config.toml"
 fi
+# Point git at gh's credential helper when available (no tokens in the script).
+if command -v gh >/dev/null 2>&1; then
+    gh auth setup-git >/dev/null 2>&1 || true
+fi
+export CARGO_NET_GIT_FETCH_WITH_CLI=true
 
 echo "  Installing: th"
-# Fetch through the git CLI rather than cargo's bundled libgit2. The git-config
-# module may rewrite https://github.com/KaiNakamura/ to ssh:// (coder profile),
-# and libgit2 can only offer an ssh-agent for that, which a non-interactive
-# install shell does not have. The git CLI reads ~/.ssh/ directly.
-# On Grok boxes there is often no SSH key; fall back to `gh repo clone`.
-if ! CARGO_NET_GIT_FETCH_WITH_CLI=true cargo install --git "$TH_REPO"; then
+if ! cargo install --git "$TH_REPO"; then
     echo "  cargo --git failed; cloning via gh and installing from path"
     TH_SRC="${TH_SRC:-$HOME/repos/th}"
     mkdir -p "$(dirname "$TH_SRC")"
@@ -50,16 +44,19 @@ if ! CARGO_NET_GIT_FETCH_WITH_CLI=true cargo install --git "$TH_REPO"; then
     cargo install --path "$TH_SRC"
 fi
 
-# The helpers below drive KWin over D-Bus, so they are meaningless anywhere
-# else. th is already in by this point and works without them.
-if [[ "${XDG_CURRENT_DESKTOP:-}" != *"KDE"* ]]; then
-    echo "Current desktop: ${XDG_CURRENT_DESKTOP:-unknown}"
-    echo "Skipping th desktop helpers (KDE not detected)"
-    exit 0
-fi
+# KWin helpers only on KDE.
+case ${XDG_CURRENT_DESKTOP:-} in
+    *KDE*) ;;
+    *)
+        echo "Current desktop: ${XDG_CURRENT_DESKTOP:-unknown}"
+        echo "Skipping th desktop helpers (KDE not detected)"
+        exit 0
+        ;;
+esac
 
 mkdir -p "$TARGET_BIN"
 for script in "$WORKDIR"/bin/*; do
+    [ -f "$script" ] || continue
     name=$(basename "$script")
     echo "  Installing: $name"
     cp "$script" "$TARGET_BIN/$name"
