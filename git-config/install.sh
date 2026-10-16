@@ -1,14 +1,20 @@
-#!/bin/bash
+#!/bin/sh
+set -e
+DOTFILES_ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
+# shellcheck source=../lib/profile.sh
+. "$DOTFILES_ROOT/lib/profile.sh"
+# shellcheck source=../lib/asset.sh
+. "$DOTFILES_ROOT/lib/asset.sh"
 
-source "$(dirname "$0")/../lib/profile.sh"
+src=$(resolve_asset ./.gitconfig)
+cp ./.gitignore_global ~/.gitignore_global
 
-if [[ "$DOTFILES_PROFILE" == "coder" ]]; then
-    # Cyvl Coder workspaces set work identity in ~/.gitconfig via other tooling.
-    # Layer non-identity settings on via include.path so identity survives.
-    cp ./.gitconfig.coder ~/.gitconfig-personal
-    git config --global include.path '~/.gitconfig-personal'
-    cp ./.gitignore_global ~/.gitignore_global
-else
-    cp ./.gitconfig ~/.gitconfig
-    cp ./.gitignore_global ~/.gitignore_global
-fi
+case $PROFILE_GIT_MODE in
+    include)
+        cp "$src" ~/.gitconfig-personal
+        git config --global include.path '~/.gitconfig-personal'
+        ;;
+    *)
+        cp "$src" ~/.gitconfig
+        ;;
+esac

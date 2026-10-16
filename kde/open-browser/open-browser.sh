@@ -1,9 +1,15 @@
 #!/bin/bash
-# open-browser.sh - Open URL in browser on current virtual desktop
+# open-browser.sh - Open URL in browser on the caller's virtual desktop
 #
-# If the preferred browser has a window on the current desktop, focus it
-# and open the URL as a new tab. Otherwise, open a new browser window
-# and move it to the current desktop.
+# The caller's desktop is the desktop of the nearest ancestor process that
+# owns a window, so a link opened from a terminal lands on that terminal's
+# desktop even while you are looking at another one. Without such an
+# ancestor (a click in Slack, say), it is the current desktop.
+#
+# If that is the current desktop and the preferred browser has a window on
+# it, focus it and open the URL as a new tab. Otherwise, open a new browser
+# window and move it there. A window moved to another desktop is not
+# focused, since focusing it would switch you to that desktop.
 
 # Step 2: Guard against broken file descriptors from Electron apps (Slack, Discord)
 [ -e /dev/fd/1 ] || exec 1>/dev/null
@@ -16,6 +22,8 @@ URL="$1"
 if [[ -z "$URL" ]]; then exit 1; fi
 
 # Step 3: Browser detection via config file with fallback
+# RESOURCE_CLASS is a comma-separated list: the Firefox snap reports
+# "firefox_firefox" on X11 and "firefox" on Wayland
 BROWSER_BIN=""
 RESOURCE_CLASS=""
 
@@ -28,7 +36,7 @@ resolve_browser() {
             ;;
         firefox)
             BROWSER_BIN="firefox"
-            RESOURCE_CLASS="firefox"
+            RESOURCE_CLASS="firefox,firefox_firefox"
             ;;
         chromium)
             if command -v chromium-browser &> /dev/null; then
@@ -53,7 +61,7 @@ fi
 if [[ -z "$BROWSER_BIN" ]] || ! command -v "$BROWSER_BIN" &> /dev/null; then
     BROWSER_BIN=""
     RESOURCE_CLASS=""
-    for candidate in google-chrome-stable:google-chrome firefox:firefox chromium-browser:chromium-browser chromium:chromium; do
+    for candidate in google-chrome-stable:google-chrome firefox:firefox,firefox_firefox chromium-browser:chromium-browser chromium:chromium; do
         bin="${candidate%%:*}"
         class="${candidate##*:}"
         if command -v "$bin" &> /dev/null; then
@@ -91,19 +99,45 @@ read_journal_token() {
     return 1
 }
 
-# Step 4+5: KWin detection script, check for browser on current desktop
-UNIQUE_TOKEN="OPEN_BROWSER_$$_$(date +%s%N)"
-SCRIPT_FILE=$(mktemp /tmp/open-browser-kwin-XXXXXX.js)
-chmod 600 "$SCRIPT_FILE"
-cat > "$SCRIPT_FILE" << EOF
+# Our own pid and every ancestor's, nearest first. The KWin script picks the
+# first one that owns a window, which for a terminal session is the terminal.
+ANCESTOR_PIDS=""
+pid=$$
+for _hop in $(seq 1 32); do
+    [[ -z "$pid" || "$pid" -le 1 ]] && break
+    ANCESTOR_PIDS+="${ANCESTOR_PIDS:+,}$pid"
+    # Field 4 of /proc/<pid>/stat is the parent. The comm field before it
+    # can contain spaces and parentheses, so cut after the last ')'.
+    pid=$(sed 's/.*) //' "/proc/$pid/stat" 2>/dev/null | cut -d' ' -f2)
+done
+
+# Step 4+5: KWin detection script, check for browser on the caller's desktop
+# Sets RESULT to the journal line, or empty if the answer never showed up
+detect_browser_window() {
+    local UNIQUE_TOKEN="OPEN_BROWSER_$$_$(date +%s%N)"
+    local SCRIPT_FILE=$(mktemp /tmp/open-browser-kwin-XXXXXX.js)
+    chmod 600 "$SCRIPT_FILE"
+    cat > "$SCRIPT_FILE" << EOF
+var classes = "$RESOURCE_CLASS".split(",");
+var ancestors = "$ANCESTOR_PIDS".split(",");
 var currentDesktop = workspace.currentDesktop;
 var clients = workspace.clientList();
+var targetDesktop = currentDesktop;
+var owner = null;
+for (var a = 0; a < ancestors.length && !owner; a++) {
+    for (var i = 0; i < clients.length; i++) {
+        if (clients[i].pid.toString() === ancestors[a]) { owner = clients[i]; break; }
+    }
+}
+if (owner && !owner.onAllDesktops) targetDesktop = owner.desktop;
+var focus = (targetDesktop === currentDesktop) ? 1 : 0;
 var found = false;
 var ids = [];
 for (var i = 0; i < clients.length; i++) {
     var c = clients[i];
-    if (c.resourceClass !== "$RESOURCE_CLASS") continue;
+    if (classes.indexOf(c.resourceClass) === -1) continue;
     ids.push(c.internalId.toString());
+    if (!focus) continue;
     if (c.desktop !== currentDesktop && !c.onAllDesktops) continue;
     workspace.activeClient = c;
     found = true;
@@ -112,31 +146,38 @@ for (var i = 0; i < clients.length; i++) {
 if (found) {
     console.info("$UNIQUE_TOKEN:FOUND");
 } else {
-    console.info("$UNIQUE_TOKEN:NOT_FOUND:" + currentDesktop + ":" + ids.join(","));
+    console.info("$UNIQUE_TOKEN:NOT_FOUND:" + targetDesktop + ":" + focus + ":" + ids.join(","));
 }
 EOF
 
-# Inject and run the KWin script
-SCRIPT_NAME="open-browser-$$"
-SCRIPT_ID=$(qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \
-    "$SCRIPT_FILE" "$SCRIPT_NAME" 2>/dev/null)
+    # Inject and run the KWin script
+    local SCRIPT_NAME="open-browser-$$"
+    local SCRIPT_ID=$(qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \
+        "$SCRIPT_FILE" "$SCRIPT_NAME" 2>/dev/null)
 
-# Step 5: Validate SCRIPT_ID is a valid integer
-if [[ ! "$SCRIPT_ID" =~ ^[0-9]+$ ]]; then
+    # Step 5: Validate SCRIPT_ID is a valid integer
+    if [[ ! "$SCRIPT_ID" =~ ^[0-9]+$ ]]; then
+        rm -f "$SCRIPT_FILE"
+        exec "$BROWSER_BIN" "$URL"
+    fi
+
+    qdbus org.kde.KWin "/$SCRIPT_ID" org.kde.kwin.Script.run > /dev/null 2>&1
+
+    # Step 4: Read result from journal with hardened retry
+    read_journal_token "$UNIQUE_TOKEN"
+    RESULT="$JOURNAL_RESULT"
+
+    # Cleanup
+    qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript \
+        "$SCRIPT_NAME" > /dev/null 2>&1
     rm -f "$SCRIPT_FILE"
-    exec "$BROWSER_BIN" "$URL"
+}
+
+# Another KWin script loader running at the same moment can swallow the answer
+detect_browser_window
+if [[ -z "$RESULT" ]]; then
+    detect_browser_window
 fi
-
-qdbus org.kde.KWin "/$SCRIPT_ID" org.kde.kwin.Script.run > /dev/null 2>&1
-
-# Step 4: Read result from journal with hardened retry
-read_journal_token "$UNIQUE_TOKEN"
-RESULT="$JOURNAL_RESULT"
-
-# Cleanup
-qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript \
-    "$SCRIPT_NAME" > /dev/null 2>&1
-rm -f "$SCRIPT_FILE"
 
 # Open the URL
 if [[ "$RESULT" == *"FOUND"* && "$RESULT" != *"NOT_FOUND"* ]]; then
@@ -144,12 +185,14 @@ if [[ "$RESULT" == *"FOUND"* && "$RESULT" != *"NOT_FOUND"* ]]; then
     exec "$BROWSER_BIN" "$URL"
 fi
 
-# Step 6: NOT_FOUND path, open new window and move to current desktop
+# Step 6: NOT_FOUND path, open new window and move to the caller's desktop
 
-# Extract target desktop and known window IDs from detection result
-# Format: NOT_FOUND:<desktop>:<id1>,<id2>,...
+# Extract target desktop, whether to focus, and known window IDs
+# Format: NOT_FOUND:<desktop>:<focus>:<id1>,<id2>,...
 TARGET_DESKTOP=$(echo "$RESULT" | sed "s/.*NOT_FOUND:\([0-9]*\):.*/\1/")
-KNOWN_IDS=$(echo "$RESULT" | sed "s/.*NOT_FOUND:[0-9]*://")
+FOCUS=$(echo "$RESULT" | sed "s/.*NOT_FOUND:[0-9]*:\([01]\):.*/\1/")
+KNOWN_IDS=$(echo "$RESULT" | sed "s/.*NOT_FOUND:[0-9]*:[01]://")
+[[ "$FOCUS" =~ ^[01]$ ]] || FOCUS=1
 
 # If parsing failed (e.g., journal read failed entirely), just open the browser
 if [[ -z "$TARGET_DESKTOP" || ! "$TARGET_DESKTOP" =~ ^[0-9]+$ ]]; then
@@ -170,18 +213,21 @@ fi
 # Step 7: Poll for the new window and move it to the target desktop
 MOVE_TOKEN="MOVE_$$_$(date +%s%N)"
 
-for attempt in 1 2 3 4 5; do
-    sleep 0.5
+# Poll quickly: until it is moved, the new window sits on the current desktop
+for attempt in $(seq 1 15); do
+    sleep 0.2
     MOVE_FILE=$(mktemp /tmp/open-browser-move-XXXXXX.js)
     chmod 600 "$MOVE_FILE"
     cat > "$MOVE_FILE" << MEOF
+var classes = "$RESOURCE_CLASS".split(",");
 var known = "$KNOWN_IDS".split(",");
 var target = $TARGET_DESKTOP;
+var focus = $FOCUS;
 var clients = workspace.clientList();
 var moved = false;
 for (var i = 0; i < clients.length; i++) {
     var c = clients[i];
-    if (c.resourceClass !== "$RESOURCE_CLASS") continue;
+    if (classes.indexOf(c.resourceClass) === -1) continue;
     var id = c.internalId.toString();
     var isKnown = false;
     for (var j = 0; j < known.length; j++) {
@@ -189,7 +235,7 @@ for (var i = 0; i < clients.length; i++) {
     }
     if (!isKnown) {
         c.desktop = target;
-        workspace.activeClient = c;
+        if (focus) workspace.activeClient = c;
         moved = true;
         console.info("$MOVE_TOKEN:MOVED:" + id);
         break;

@@ -56,12 +56,21 @@ Different machines can have different configurations (e.g., work vs home). Set a
 echo "work" > ~/.dotfiles-profile
 ```
 
-Available profiles: `home` (default), `work`, `coder`
+Available profiles (see `profiles/*.conf`): `home` (default), `work`, `coder`, `grok`
 
 ### What profiles affect
 
-- **Default browser**: `home` = Firefox, `work` = Chrome (in `kde/settings.sh` and `kde/open-browser/open-browser.sh`)
-- **Starship prompt**: `starship/install.sh` copies `starship.<profile>.toml` to `~/.config/starship.toml` when it exists, else falls back to `starship.toml`.
+Profiles are declarative `key=value` files under `profiles/`. A profile can `extends` another (e.g. `grok` -> `coder`). Tools resolve assets via the profile chain and never hard-code profile names.
+
+- **Modules**: listed in each conf (`coder` includes `th`, docker, obsidian)
+- **Git**: `git_mode=include` layers via `include.path`; asset files decide SSH rewrites (`.gitconfig.coder` has them, `.gitconfig.grok` does not)
+- **Shell**: `wire_shell_rc=true` appends an idempotent block to `~/.bashrc` (agent boxes without an external shim)
+- **Docker**: `start_docker=true` idempotently starts `dockerd` when systemd/`policy-rc.d` will not (see `lib/shell_rc.sh`)
+- **Tailscale**: `start_tailscale=true` idempotently starts `tailscaled` the same way; tailnet setup and switching in `docs/tailscale.md`
+- **Starship / Claude settings**: `resolve_asset` walks profile -> parent -> default
+- **Default browser** (desktop only): `home` = Firefox, `work` = Chrome in KDE helpers
+
+To add a framework: create one file, e.g. `profiles/hermes.conf` with `extends = coder` and any flag overrides.
 
 ### Machine-specific shell config
 

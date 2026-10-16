@@ -1,6 +1,10 @@
-#!/bin/bash
-# Files in this module are sourced in-place from the clone path
-# (~/repos/dotfiles/bash/) by the roadgnar/dotfiles@KaiNakamura branch's
-# shell/init.bash. Nothing to copy here; install is a no-op so the
-# orchestrator's per-module validation passes.
-:
+#!/bin/sh
+# Coder: roadgnar shim sources bash/ in-place (wire_shell_rc=false).
+# Agent boxes with wire_shell_rc=true get an idempotent ~/.bashrc block.
+set -e
+DOTFILES_ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
+# shellcheck source=../lib/profile.sh
+. "$DOTFILES_ROOT/lib/profile.sh"
+# shellcheck source=../lib/shell_rc.sh
+. "$DOTFILES_ROOT/lib/shell_rc.sh"
+wire_shell_rc bash

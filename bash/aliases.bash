@@ -28,6 +28,9 @@ alias wtl='wt list'
 alias wtc='wt switch --create'
 alias wtr='wt remove'
 
+# Tailscale
+alias ts='tailscale'
+
 # Thoughts vault CLI
 alias ths='th status'
 alias thsa='th status --all'

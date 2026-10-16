@@ -23,6 +23,11 @@ eval "$(starship init zsh)"
 # Explorer
 e() {
   local target="${1:-.}"
+  # Dolphin adds a tab to a running instance even when it is on another desktop
+  if [[ -d "$target" ]] && (( $+commands[dolphin] )); then
+    command dolphin --new-window "$target" </dev/null >/dev/null 2>&1 &!
+    return
+  fi
   command xdg-open "$target" </dev/null >/dev/null 2>&1 &!
 }
 
