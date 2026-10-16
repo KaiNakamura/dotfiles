@@ -4,6 +4,10 @@
     "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1"
   },
   "voiceEnabled": true,
+  "voice": {
+    "enabled": true,
+    "mode": "tap"
+  },
   "permissions": {
     "defaultMode": "auto",
     "allow": [
