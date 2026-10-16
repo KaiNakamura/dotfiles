@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y \
 
 # Pin Obsidian via build arg. Bump in obsidian/install.sh.
 # AppImage-extract path (works); .deb migration deferred.
-ARG OBSIDIAN_VERSION=1.12.7
+ARG OBSIDIAN_VERSION=1.14.4
 RUN wget -q "https://github.com/obsidianmd/obsidian-releases/releases/download/v${OBSIDIAN_VERSION}/Obsidian-${OBSIDIAN_VERSION}.AppImage" -O /opt/obsidian.AppImage \
     && chmod +x /opt/obsidian.AppImage \
     && cd /opt && /opt/obsidian.AppImage --appimage-extract \
