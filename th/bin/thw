@@ -218,9 +218,7 @@ cmd_desks() {
 # from the agent list, so a window sitting at a shell is invisible to it while
 # being just as open. This starts from the other end -- every process whose
 # working directory is inside the vault -- which makes it a superset, and lets
-# one KWin round trip answer both "where is this agent" and "what is open".
-# That matters because the round trip is the expensive part: KWin has no read
-# API, so each call injects a script and reads the journal back.
+# one window list answer both "where is this agent" and "what is open".
 cmd_windows() {
     load_windows
     local vault pid dir desktop
