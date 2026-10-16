@@ -40,5 +40,8 @@ for _n in personal work; do
 done
 unset _key
 
+# Let this user run status/switch without sudo. Per profile, so set after login.
+sudo tailscale set --operator="${USER:-$(id -un)}" >/dev/null 2>&1 || true
+
 tailscale status >/dev/null 2>&1 ||
     echo "tailscale: not connected. See docs/tailscale.md"

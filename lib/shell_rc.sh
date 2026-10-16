@@ -56,7 +56,7 @@ ensure_tailscaled() {
         *) return 0 ;;
     esac
     [ -x /usr/sbin/tailscaled ] || { echo "tailscaled: not installed yet; skip"; return 0; }
-    if tailscale status >/dev/null 2>&1 || [ -S /var/run/tailscale/tailscaled.sock ]; then
+    if [ -S /var/run/tailscale/tailscaled.sock ]; then
         echo "tailscaled: already running"
         return 0
     fi
@@ -66,15 +66,15 @@ ensure_tailscaled() {
     # Kernel tun when /dev/net/tun exists, else userspace networking.
     _tun=
     [ -c /dev/net/tun ] || _tun=--tun=userspace-networking
+    # nftables mode: the iptables-nft shim lacks connmark (health warning).
     # shellcheck disable=SC2086
-    sudo /usr/sbin/tailscaled --state=/var/lib/tailscale/tailscaled.state \
+    sudo env TS_DEBUG_FIREWALL_MODE=nftables /usr/sbin/tailscaled --state=/var/lib/tailscale/tailscaled.state \
         --socket=/var/run/tailscale/tailscaled.sock $_tun \
         >>"$HOME/.local/share/tailscaled.log" 2>&1 &
 
     _i=0
     while [ "$_i" -lt 15 ]; do
         if [ -S /var/run/tailscale/tailscaled.sock ]; then
-            # Let this user run status/switch without sudo.
             sudo tailscale set --operator="${USER:-$(id -un)}" >/dev/null 2>&1 || true
             echo "tailscaled: ready"
             return 0
