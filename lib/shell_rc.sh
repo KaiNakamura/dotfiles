@@ -1,7 +1,7 @@
 # Shell helpers for agent/headless boxes (POSIX).
-# wire_shell_rc — idempotent rc block when PROFILE_WIRE_SHELL_RC=true
-# ensure_dockerd — start dockerd when PROFILE_START_DOCKER=true (no systemd)
-# ensure_tailscaled — start tailscaled when PROFILE_START_TAILSCALE=true (no systemd)
+# wire_shell_rc: idempotent rc block when PROFILE_WIRE_SHELL_RC=true
+# ensure_dockerd: start dockerd when PROFILE_START_DOCKER=true (no systemd)
+# ensure_tailscaled: start tailscaled when PROFILE_START_TAILSCALE=true (no systemd)
 # shellcheck shell=sh
 
 ensure_dockerd() {
