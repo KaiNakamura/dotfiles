@@ -1,0 +1,11 @@
+{
+    "KPlugin": {
+        "Name": "Window List Publisher",
+        "Description": "Hands every managed window's pid, desktop and place to the window-list service whenever one changes.",
+        "Id": "window-list-publisher",
+        "ServiceTypes": ["KWin/Script"],
+        "Version": "1.0"
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js"
+}

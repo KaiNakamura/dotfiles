@@ -1,0 +1,13 @@
+[Unit]
+Description=KWin window list D-Bus service
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=org.hjkl.WindowList
+ExecStart=/usr/bin/python3 %h/.local/bin/window-list-service.py
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

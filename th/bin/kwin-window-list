@@ -1,63 +1,25 @@
 #!/bin/bash
-# Print one line per managed window: pid, virtual desktop, window class, caption.
+# Print one line per managed window: pid, virtual desktop, window class, caption,
+# then the x and y of the window's centre, which is what says which screen it is
+# on, then KWin's own id for the window, the one thing that tells two windows of
+# one process apart, then 1 if the window is minimized and 0 if it is showing.
 #
 # A virtual desktop of -1 means the window is on all of them.
 #
-# KWin has no read API on the session bus, so the only way to ask it anything is
-# to inject a script, run it, and read what it printed out of the journal. That
-# is the same round trip open-browser.sh makes, including the unique token,
-# because journalctl is a shared log and a fixed marker would match old runs.
+# KWin has no read API on the session bus. The window-list-publisher KWin
+# script stays loaded and hands the list to window-list-service.py whenever a
+# window changes, which keeps it in a file; this prints that file. Nothing here
+# loads a script into KWin: doing that every couple of seconds crashed it.
 
 set -u
 
-command -v qdbus >/dev/null 2>&1 || exit 1
+SNAPSHOT="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/kwin-window-list"
+# The publisher rewrites the file at least every 5 seconds. Older than this
+# means it is not running, and an old list is worse than none.
+MAX_AGE=15
 
-TOKEN="KWINWL_$$_$(date +%s%N)"
-SCRIPT_FILE=$(mktemp /tmp/kwin-window-list-XXXXXX.js) || exit 1
-chmod 600 "$SCRIPT_FILE"
+[[ -s "$SNAPSHOT" ]] || exit 1
+age=$(( $(date +%s) - $(stat -c %Y "$SNAPSHOT") ))
+(( age <= MAX_AGE )) || exit 1
 
-# Plasma 5 names these clientList/desktop; Plasma 6 renamed them windowList and
-# moved the desktop onto an array. Ask which one this compositor speaks rather
-# than assuming, the way kde/kwin-scripts/hjkl-edge-guard does.
-cat > "$SCRIPT_FILE" << EOF
-var plasma6 = (typeof workspace.windowList === "function");
-var ws = plasma6 ? workspace.windowList() : workspace.clientList();
-var out = [];
-for (var i = 0; i < ws.length; i++) {
-    var w = ws[i];
-    var desktop = -1;
-    if (plasma6) {
-        if (w.desktops && w.desktops.length === 1) desktop = w.desktops[0].x11DesktopNumber;
-    } else if (!w.onAllDesktops) {
-        desktop = w.desktop;
-    }
-    out.push([w.pid, desktop, w.resourceClass, w.caption].join("\t"));
-}
-console.info("$TOKEN" + "\n" + out.join("\n"));
-EOF
-
-SCRIPT_NAME="kwin-window-list-$$"
-SCRIPT_ID=$(qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \
-    "$SCRIPT_FILE" "$SCRIPT_NAME" 2>/dev/null)
-if [[ ! "$SCRIPT_ID" =~ ^[0-9]+$ ]]; then
-    rm -f "$SCRIPT_FILE"
-    exit 1
-fi
-
-qdbus org.kde.KWin "/$SCRIPT_ID" org.kde.kwin.Script.run > /dev/null 2>&1
-
-# The journal is written asynchronously, so a first read can miss the line.
-journalctl --sync 2>/dev/null
-for _retry in 1 2 3; do
-    RESULT=$(journalctl --since "30 sec ago" --no-pager -o cat 2>/dev/null \
-        | sed -n "/$TOKEN/,\$p" | tail -n +2)
-    [[ -n "$RESULT" ]] && break
-    sleep 0.1
-done
-
-qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript \
-    "$SCRIPT_NAME" > /dev/null 2>&1
-rm -f "$SCRIPT_FILE"
-
-[[ -z "${RESULT:-}" ]] && exit 1
-printf '%s\n' "$RESULT" | sed 's/^js: //'
+cat "$SNAPSHOT"
