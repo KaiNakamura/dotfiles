@@ -61,7 +61,7 @@ gwc() {
   git fetch origin
 }
 
-# Worktrunk (git worktree manager). Guarded: the homelab profile skips it.
+# Worktrunk (git worktree manager). Guarded so a shell without wt still starts.
 command -v wt > /dev/null 2>&1 && eval "$(wt config shell init zsh)"
 alias wts="wt switch"
 alias wtl="wt list"

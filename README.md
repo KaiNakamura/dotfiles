@@ -84,7 +84,7 @@ Some other settings you may want to configure:
 
 ## Homelab servers
 
-The `homelab` profile is CLI-only (zsh, starship, nvim, fzf, tailscale, ...) for
+The `homelab` profile is CLI-only (zsh, starship, nvim, fzf, worktrunk, tailscale, ...) for
 Ubuntu Server nodes like `homelab-00`. It expects Homebrew and an authenticated
 `gh` (`gh auth login -p ssh`, needed for `th`). The
 [KaiNakamura/homelab](https://github.com/KaiNakamura/homelab) `bootstrap.sh`
