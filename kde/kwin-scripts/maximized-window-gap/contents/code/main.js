@@ -6,9 +6,14 @@
 var GAP = 3;
 var processing = {};
 
+// Clients that fight the unmaximize + resize: Electron on Wayland restores its
+// own saved size on unmaximize, then re-maximizes, so leave these maximized.
+var SKIP_CLASSES = ["grok-bot"];
+
 function applyGap(client) {
     if (!client || client.fullScreen) return;
     if (!client.normalWindow) return;
+    if (SKIP_CLASSES.indexOf(String(client.resourceClass)) !== -1) return;
 
     var area = workspace.clientArea(KWin.MaximizeArea, client);
 
