@@ -15,6 +15,19 @@
 [ -e /dev/fd/1 ] || exec 1>/dev/null
 [ -e /dev/fd/2 ] || exec 2>/dev/null
 
+# Escape no_new_privs: Grok Bot and other sandboxed Electron apps set
+# NoNewPrivs=1, which every child inherits. The Firefox snap's snap-confine
+# then fails with "required permitted capability cap_dac_override not found",
+# so the link never opens. Re-run this script as a transient systemd --user
+# service, which starts without that flag. The re-run has no window-owning
+# ancestor, so it uses the current desktop (where the click happened).
+if [[ -z "$OPEN_BROWSER_ESCAPED" ]] && grep -q '^NoNewPrivs:[[:space:]]*1' /proc/self/status \
+    && command -v systemd-run &> /dev/null; then
+    exec systemd-run --user --quiet --collect --setenv=OPEN_BROWSER_ESCAPED=1 \
+        --setenv=DISPLAY --setenv=XAUTHORITY --setenv=DBUS_SESSION_BUS_ADDRESS \
+        --setenv=XDG_CURRENT_DESKTOP --setenv=PATH -- "$0" "$@"
+fi
+
 # Clean environment: Electron leaks GDK_BACKEND=x11 into child processes
 unset GDK_BACKEND
 
