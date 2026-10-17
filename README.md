@@ -56,7 +56,7 @@ Different machines can have different configurations (e.g., work vs home). Set a
 echo "work" > ~/.dotfiles-profile
 ```
 
-Available profiles (see `profiles/*.conf`): `home` (default), `work`, `coder`, `grok`
+Available profiles (see `profiles/*.conf`): `home` (default), `work`, `coder`, `grok`, `homelab`
 
 ### What profiles affect
 
@@ -81,6 +81,18 @@ Some other settings you may want to configure:
 - System Settings -> Mouse -> Pointer Speed = -0.4 (Depends on mouse though)
 - Wallpaper & Splash Screen
 - Display Configuration
+
+## Homelab servers
+
+The `homelab` profile is CLI-only (zsh, starship, nvim, fzf, worktrunk, tailscale, ...) for
+Ubuntu Server nodes like `homelab-00`. It expects Homebrew and an authenticated
+`gh` (`gh auth login -p ssh`, needed for `th`). The
+[KaiNakamura/homelab](https://github.com/KaiNakamura/homelab) `bootstrap.sh`
+handles both, then runs:
+
+```sh
+./install.sh --profile homelab
+```
 
 ## First-time Coder workspace setup
 

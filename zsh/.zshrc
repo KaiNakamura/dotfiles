@@ -61,8 +61,8 @@ gwc() {
   git fetch origin
 }
 
-# Worktrunk (git worktree manager)
-eval "$(wt config shell init zsh)"
+# Worktrunk (git worktree manager). Guarded so a shell without wt still starts.
+command -v wt > /dev/null 2>&1 && eval "$(wt config shell init zsh)"
 alias wts="wt switch"
 alias wtl="wt list"
 alias wtc="wt switch --create"
