@@ -15,7 +15,7 @@
 
 set -e
 
-OBSIDIAN_VERSION="1.12.7"
+OBSIDIAN_VERSION="1.14.4"
 
 MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VAULT_HOST="${OBSIDIAN_VAULT_HOST:-$HOME/repos/thoughts}"
