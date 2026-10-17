@@ -1,0 +1,5 @@
+# Homelab servers: copied to ~/.zshrc.local by zsh/install.sh.
+
+# k3s writes its kubeconfig here (bootstrap.sh uses --write-kubeconfig-mode 644),
+# so kubectl, helm, and task work without sudo.
+[[ -r /etc/rancher/k3s/k3s.yaml ]] && export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
