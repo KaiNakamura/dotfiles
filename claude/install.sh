@@ -67,6 +67,11 @@ chmod +x ~/.claude/hooks/*.sh
 cp -r "$WORKDIR/scripts/"* ~/.claude/scripts/
 chmod +x ~/.claude/scripts/*.sh
 
+# Install repo trust helper (headless `claude -p` needs trusted folders)
+mkdir -p ~/.local/bin
+install -m 755 "$WORKDIR/scripts/claude-trust-repos.py" ~/.local/bin/claude-trust-repos
+~/.local/bin/claude-trust-repos
+
 # Compose output style from tracked sources list
 mapfile -t _sources < <(grep -v '^\s*#' "$WORKDIR/output-style-sources.txt" | grep -v '^\s*$')
 "$HOME/.claude/scripts/compose-output-style.sh" "${_sources[@]}"
