@@ -26,5 +26,5 @@ talk-to-script records Kai rambling a video script out loud and splits it into t
 - Put spoken lines after the outline lines already under a heading. Never delete or rewrite Kai's own lines
 - Light cleanup only (drop "um", fix punctuation). The audio is what he said, so keep the wording
 - To swap in a better retake, change the id and the text together. To reorder, move whole lines
-- Afterwards, `GET {url}/api/projects/{id}/note` gives the length of the placed audio. Report it against the project's `target_seconds`
+- Afterwards, `GET {url}/api/projects/{id}/note` gives the length of the placed audio. Report it
 - Don't commit the notes repo unless asked
