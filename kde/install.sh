@@ -62,7 +62,7 @@ echo "Installing dotool..."
 if ! command -v dotool &> /dev/null && ! [[ -x "$HOME/.local/bin/dotool" ]]; then
     if ! command -v go &> /dev/null; then
         echo "Error: Go is required to build dotool but not found."
-        echo "Install Go first: https://go.dev/dl/"
+        echo "Install the go module first: ./install.sh go"
         exit 1
     fi
     if ! pkg-config --exists xkbcommon 2>/dev/null; then
