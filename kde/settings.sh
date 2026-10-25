@@ -93,3 +93,25 @@ kwriteconfig5 --file mimeapps.list --group "Default Applications" --key applicat
 kwriteconfig5 --file mimeapps.list --group "Default Applications" --key text/html "$BROWSER_DESKTOP"
 # NOTE: x-scheme-handler/http and x-scheme-handler/https are intentionally NOT set here.
 # Those are owned by open-browser.desktop (registered via apply-open-browser.sh).
+
+# ===== Input Devices =====
+
+# Logitech K400 Plus: flip trackpad scrolling. Its trackpad reports as a mouse,
+# so the touchpad natural-scroll toggle never reaches it. Keyed to this device only.
+K400_NAME="Logitech K400 Plus"
+# Wayland: KWin reads per-device libinput settings (vendor 0x046d, product 0x404d in decimal)
+kwriteconfig5 --file kcminputrc --group Libinput --group 1133 --group 16461 --group "$K400_NAME" --key NaturalScroll true
+# X11: persistent Xorg rule, plus apply now if the device is connected
+sudo mkdir -p /etc/X11/xorg.conf.d
+sudo tee /etc/X11/xorg.conf.d/40-k400-natural-scroll.conf > /dev/null <<XORG
+Section "InputClass"
+    Identifier "$K400_NAME natural scroll"
+    MatchProduct "$K400_NAME"
+    MatchIsPointer "on"
+    MatchDriver "libinput"
+    Option "NaturalScrolling" "true"
+EndSection
+XORG
+if [[ "$XDG_SESSION_TYPE" == "x11" ]] && command -v xinput &> /dev/null; then
+    xinput set-prop "pointer:$K400_NAME" "libinput Natural Scrolling Enabled" 1 2>/dev/null || true
+fi
