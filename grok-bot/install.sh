@@ -22,3 +22,22 @@ fi
 mkdir -p "$(dirname "$USER_DESKTOP")"
 sed 's|^Exec=grok-bot|Exec=grok-bot --ozone-platform=x11|' "$SYSTEM_DESKTOP" > "$USER_DESKTOP"
 update-desktop-database "$(dirname "$USER_DESKTOP")" 2>/dev/null || true
+
+# Electron's X11 paste waits forever on a CLIPBOARD owner that never answers;
+# clipguard re-owns such a clipboard until Grok Bot ships electron/electron#54914
+WORKDIR="$(cd -- "$(dirname "$0")" && pwd)"
+# clipguard loads libXRes via ctypes and re-owns through xclip
+dpkg -s xclip libxres1 >/dev/null 2>&1 || sudo apt install -y xclip libxres1
+mkdir -p "$HOME/.local/share/clipwatch" "$HOME/.config/systemd/user"
+cp "$WORKDIR"/clipwatch/* "$HOME/.local/share/clipwatch/"
+chmod +x "$HOME"/.local/share/clipwatch/*.py "$HOME"/.local/share/clipwatch/*.sh
+cp "$WORKDIR"/systemd/*.service "$HOME/.config/systemd/user/"
+# reenable drops links from an older [Install] section; a copy already running
+# holds the old code until it is restarted
+if ! { systemctl --user daemon-reload \
+    && systemctl --user reenable clipguard.service clipwatch.service; } 2>/dev/null; then
+    echo "  Warning: no user systemd; enable clipguard and clipwatch after login"
+elif [ -z "${DISPLAY:-}" ] \
+    || ! systemctl --user restart clipguard.service clipwatch.service; then
+    echo "  Warning: no X display; clipguard starts at next graphical login"
+fi
