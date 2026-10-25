@@ -2,6 +2,8 @@
 
 The `tailscale` module installs Tailscale. On boxes without systemd (`start_tailscale = true`), `ensure_tailscaled` starts the daemon in nftables mode (Debian's iptables-nft lacks connmark).
 
+Bash and zsh alias `ts` to `tailscale`.
+
 ## Add tailnets
 
 ```sh
