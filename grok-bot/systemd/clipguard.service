@@ -1,0 +1,13 @@
+[Unit]
+Description=clipboard hang guard (re-own unresponsive X11 CLIPBOARD owners)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.local/share/clipwatch/clipguard.py
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
