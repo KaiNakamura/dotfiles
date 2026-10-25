@@ -68,6 +68,9 @@ alias wtl="wt list"
 alias wtc="wt switch --create"
 alias wtr="wt remove"
 
+# Tailscale
+alias ts="tailscale"
+
 # Thoughts vault CLI. The eval defines the `th` shell function that wraps the
 # binary, and is not optional: a process cannot cd its parent shell, so `th
 # vault` and `th project` hand the destination back through it. Guarded because
