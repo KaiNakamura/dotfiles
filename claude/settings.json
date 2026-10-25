@@ -12,9 +12,7 @@
     "allow": [
       "Read",
       "Edit(~/repos/thoughts/**)",
-      "Write(~/repos/thoughts/**)",
       "Edit(.thoughts/**)",
-      "Write(.thoughts/**)",
       "Bash",
       "WebSearch",
       "WebFetch"
@@ -23,9 +21,7 @@
       "Read(~/.aws/**)",
       "Read(~/.kube/**)",
       "Edit(~/.aws/**)",
-      "Edit(~/.kube/**)",
-      "Write(~/.aws/**)",
-      "Write(~/.kube/**)"
+      "Edit(~/.kube/**)"
     ]
   },
   "model": "sonnet",
