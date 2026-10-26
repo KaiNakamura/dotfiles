@@ -1,0 +1,39 @@
+# Tap Right Alt to start, tap again to transcribe and paste
+[hotkey]
+key = "RIGHTALT"
+mode = "toggle"
+
+[audio]
+max_duration_secs = 300
+
+[audio.feedback]
+enabled = true
+theme = "subtle"
+
+[whisper]
+# install.sh drops this to base.en on machines without an NVIDIA GPU
+model = "large-v3-turbo"
+language = "en"
+# Words Whisper should expect, so it spells them this way
+initial_prompt = "Voxtype, Claude Code, Kai, Cyvl, Pitstop, Supabase, kitty, KDE, dotfiles."
+
+[output]
+# wtype can't type on KDE; paste goes through ydotool, and kitty pastes on ctrl+shift+v
+mode = "paste"
+paste_keys = "ctrl+shift+v"
+fallback_to_clipboard = true
+
+[output.notification]
+on_recording_start = true
+
+[osd]
+# Needs gtk4-layer-shell, which Ubuntu 24.04 doesn't ship
+enabled = false
+
+# Fixes for words it keeps mishearing; find them with
+# journalctl --user -u voxtype -o cat | grep Transcribed:
+[text.replacements]
+"box type" = "Voxtype"
+"fox type" = "Voxtype"
+"vox type" = "Voxtype"
+"cloud code" = "Claude Code"

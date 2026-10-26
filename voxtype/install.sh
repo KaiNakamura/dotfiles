@@ -13,32 +13,19 @@ if [ "$installed" != "$VERSION-1" ]; then
     rm -f "$deb"
 fi
 
+mkdir -p "$HOME/.config/voxtype"
+cp "$(cd -- "$(dirname "$0")" && pwd)/config.toml" "$HOME/.config/voxtype/config.toml"
+
 # The turbo model needs a GPU to keep up; base.en runs fine on CPU
 DROPIN="$HOME/.config/systemd/user/voxtype.service.d/gpu.conf"
 if command -v nvidia-smi >/dev/null; then
-    model="large-v3-turbo"
     mkdir -p "$(dirname "$DROPIN")"
     printf '[Service]\nEnvironment="VOXTYPE_GPU=1"\nEnvironment="VOXTYPE_VULKAN_DEVICE=nvidia"\n' > "$DROPIN"
 else
-    model="base.en"
+    voxtype config set whisper.model base.en >/dev/null
     rm -f "$DROPIN"
 fi
-voxtype setup --download --model "$model" --quiet
-
-set_key() { voxtype config set "$1" "$2" >/dev/null; }
-set_key whisper.model "$model"
-set_key whisper.initial_prompt "Voxtype, Claude Code, Kai, Cyvl, Pitstop, Supabase, kitty, KDE, dotfiles."
-set_key hotkey.key RIGHTALT
-set_key hotkey.mode toggle
-set_key audio.max_duration_secs 300
-set_key audio.feedback.enabled true
-set_key audio.feedback.theme subtle
-# wtype can't type on KDE; paste goes through ydotool, and kitty pastes on ctrl+shift+v
-set_key output.mode paste
-set_key output.paste_keys ctrl+shift+v
-set_key output.notification.on_recording_start true
-# The OSD needs gtk4-layer-shell, which Ubuntu 24.04 doesn't ship
-set_key osd.enabled false
+voxtype setup --download --model "$(voxtype config get whisper.model)" --quiet
 
 [ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/.ydotool_socket" ] \
     || echo "  Warning: ydotoold isn't running; Voxtype will leave transcripts on the clipboard"
