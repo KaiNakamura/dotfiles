@@ -60,8 +60,6 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 # CUDA
 export PATH="/usr/local/cuda-13.1/bin:$PATH"
 
-export YDOTOOL_SOCKET=/tmp/.ydotool_socket
-
 # Google Cloud SDK
 
 # Update PATH for the Google Cloud SDK.
