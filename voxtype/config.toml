@@ -31,5 +31,5 @@ on_recording_start = true
 enabled = false
 
 # Fixes for a word it keeps mishearing the same way, "heard" = "meant";
-# see the voice-word skill
+# see the dictionary skill
 [text.replacements]

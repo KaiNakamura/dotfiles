@@ -1,5 +1,5 @@
 ---
-name: voice-word
+name: dictionary
 description: Teach Voxtype dictation a word it keeps mishearing by opening a dotfiles PR. Use when the user says dictation got a word wrong, e.g. "that should have said Omarchy, fix it in my dotfiles".
 ---
 
