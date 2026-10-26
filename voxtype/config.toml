@@ -30,10 +30,6 @@ on_recording_start = true
 # Needs gtk4-layer-shell, which Ubuntu 24.04 doesn't ship
 enabled = false
 
-# Fixes for words it keeps mishearing; find them with
-# journalctl --user -u voxtype -o cat | grep Transcribed:
+# Fixes for a word it keeps mishearing the same way, "heard" = "meant";
+# see the voice-word skill
 [text.replacements]
-"box type" = "Voxtype"
-"fox type" = "Voxtype"
-"vox type" = "Voxtype"
-"cloud code" = "Claude Code"
