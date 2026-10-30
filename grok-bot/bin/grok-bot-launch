@@ -1,0 +1,7 @@
+#!/bin/bash
+# Desktop-entry launcher. If Grok Bot is already up, hand the args (e.g. a
+# grokbot:// URL) to the running instance; otherwise start it through the logger.
+if pgrep -u "$USER" -f '^/opt/Grok Bot/grok-bot( |$)' > /dev/null; then
+    exec "/opt/Grok Bot/grok-bot" --ozone-platform=x11 -- "$@"
+fi
+exec "$HOME/.local/bin/grok-bot-logged" "$@"
