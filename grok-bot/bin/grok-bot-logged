@@ -1,0 +1,30 @@
+#!/bin/bash
+# Runs Grok Bot with Electron logging into a rotated log and records how it exited,
+# so a paste crash leaves evidence. Exits with the app's status so systemd's
+# Restart=on-failure relaunches crashes but not a clean quit.
+LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/grok-bot"
+LOG="$LOG_DIR/grok-bot.log"
+KEEP=5
+MAX_BYTES=$((50 * 1024 * 1024))
+mkdir -p "$LOG_DIR"
+
+# Rotate on every start: grok-bot.log -> .1 ... .$KEEP (oldest dropped)
+for ((i = KEEP - 1; i >= 1; i--)); do
+    [ -f "$LOG.$i" ] && mv -f "$LOG.$i" "$LOG.$((i + 1))"
+done
+[ -f "$LOG" ] && mv -f "$LOG" "$LOG.1"
+
+export ELECTRON_ENABLE_LOGGING=1
+echo "=== $(date -Is) start pid=$$ args: $* ===" >> "$LOG"
+# head caps the live log so a log storm cannot fill the disk; cat drains the rest
+"/opt/Grok Bot/grok-bot" --ozone-platform=x11 --enable-logging=stderr -- "$@" \
+    > >(head -c "$MAX_BYTES" >> "$LOG"; cat > /dev/null) 2>&1
+status=$?
+sleep 0.5  # let the logger flush
+if ((status > 128)); then
+    how="signal $((status - 128)) ($(kill -l $((status - 128)) 2>/dev/null))"
+else
+    how="code $status"
+fi
+echo "=== $(date -Is) exit $how ===" >> "$LOG"
+exit "$status"
