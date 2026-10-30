@@ -49,7 +49,17 @@ pre_install() {
     export PATH="$PATH:$HOME/.local/bin"
     export XDG_CONFIG_HOME="$HOME/.config"
     export XDG_DATA_HOME="$HOME/.local/share"
+    configure_homebrew
     print_success "Environment prepared"
+}
+
+# Homebrew 7+ asks before every install; the prefix brew.env applies to all brew calls.
+configure_homebrew() {
+    command -v brew >/dev/null || return 0
+    local env_file
+    env_file="$(brew --prefix)/etc/homebrew/brew.env"
+    mkdir -p "$(dirname "$env_file")"
+    grep -qx "HOMEBREW_NO_ASK=1" "$env_file" 2>/dev/null || echo "HOMEBREW_NO_ASK=1" >> "$env_file"
 }
 
 install_module() {
