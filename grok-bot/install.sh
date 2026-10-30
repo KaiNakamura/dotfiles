@@ -20,8 +20,8 @@ fi
 
 # Native Wayland breaks maximize; a user-level launcher survives package upgrades
 mkdir -p "$(dirname "$USER_DESKTOP")"
-# grok-bot-launch starts it through grok-bot.service: Electron logs land in
-# ~/.local/state/grok-bot/grok-bot.log and a crash is relaunched
+# grok-bot-launch runs it through grok-bot-logged: Electron logs land in
+# ~/.local/state/grok-bot/grok-bot.log (no auto-relaunch)
 WORKDIR="$(cd -- "$(dirname "$0")" && pwd)"
 mkdir -p "$HOME/.local/bin"
 install -m 755 "$WORKDIR"/bin/grok-bot-logged "$WORKDIR"/bin/grok-bot-launch "$HOME/.local/bin/"
@@ -36,8 +36,6 @@ mkdir -p "$HOME/.local/share/clipwatch" "$HOME/.config/systemd/user"
 cp "$WORKDIR"/clipwatch/* "$HOME/.local/share/clipwatch/"
 chmod +x "$HOME"/.local/share/clipwatch/*.py "$HOME"/.local/share/clipwatch/*.sh
 cp "$WORKDIR"/systemd/*.service "$HOME/.config/systemd/user/"
-# grok-bot.service has no [Install]: the launcher starts it, so a running
-# instance is never restarted by this install
 # reenable drops links from an older [Install] section; a copy already running
 # holds the old code until it is restarted
 if ! { systemctl --user daemon-reload \

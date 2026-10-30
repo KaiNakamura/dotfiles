@@ -1,7 +1,6 @@
 #!/bin/bash
 # Runs Grok Bot with Electron logging into a rotated log and records how it exited,
-# so a paste crash leaves evidence. Exits with the app's status so systemd's
-# Restart=on-failure relaunches crashes but not a clean quit.
+# so a paste crash leaves evidence. Exits with the app's status.
 LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/grok-bot"
 LOG="$LOG_DIR/grok-bot.log"
 KEEP=5
