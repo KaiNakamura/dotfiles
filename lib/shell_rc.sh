@@ -2,6 +2,7 @@
 # wire_shell_rc: idempotent rc block when PROFILE_WIRE_SHELL_RC=true
 # ensure_dockerd: start dockerd when PROFILE_START_DOCKER=true (no systemd)
 # ensure_tailscaled: start tailscaled when PROFILE_START_TAILSCALE=true (no systemd)
+# ensure_hermes_gateway: start hermes gateway when PROFILE_START_HERMES=true (no systemd)
 # shellcheck shell=sh
 
 ensure_dockerd() {
@@ -86,6 +87,26 @@ ensure_tailscaled() {
     return 0
 }
 
+ensure_hermes_gateway() {
+    case ${PROFILE_START_HERMES:-false} in
+        true|yes|1) ;;
+        *) return 0 ;;
+    esac
+    _hermes=$HOME/.local/bin/hermes
+    [ -x "$_hermes" ] || { echo "hermes gateway: not installed yet; skip"; return 0; }
+    if pgrep -u "$(id -u)" -f 'hermes gateway run' >/dev/null 2>&1; then
+        echo "hermes gateway: already running"
+        return 0
+    fi
+
+    echo "hermes gateway: starting (no systemd)"
+    mkdir -p "$HOME/.local/share"
+    nohup "$_hermes" gateway run --replace --external-supervisor \
+        >>"$HOME/.local/share/hermes-gateway.log" 2>&1 &
+    echo "hermes gateway: started (log ~/.local/share/hermes-gateway.log)"
+    return 0
+}
+
 wire_shell_rc() {
     _shell=${1:-bash}
     case ${PROFILE_WIRE_SHELL_RC:-false} in
@@ -130,13 +151,14 @@ wire_shell_rc() {
         echo 'command -v zoxide >/dev/null && eval "$(zoxide init '"$_shell"')"'
         echo 'command -v th >/dev/null && eval "$(th shell '"$_shell"' 2>/dev/null)"'
         echo '[ -f "$HOME/.fzf.'"$_shell"'" ] && . "$HOME/.fzf.'"$_shell"'"'
-        # Idempotent dockerd/tailscaled start when profile sets start_docker (sourced helper).
+        # Idempotent dockerd/tailscaled/hermes start when profile sets start_docker (sourced helper).
         echo 'if [ -f "$DOTFILES_ROOT/lib/shell_rc.sh" ]; then'
         echo '  # shellcheck source=/dev/null'
         echo '  . "$DOTFILES_ROOT/lib/profile.sh"'
         echo '  . "$DOTFILES_ROOT/lib/shell_rc.sh"'
         echo '  ensure_dockerd >/dev/null'
         echo '  ensure_tailscaled >/dev/null'
+        echo '  ensure_hermes_gateway >/dev/null'
         echo 'fi'
         echo "$_end"
     } >> "$_rc"

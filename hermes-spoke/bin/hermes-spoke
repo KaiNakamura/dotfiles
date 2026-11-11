@@ -1,0 +1,51 @@
+#!/bin/sh
+# Hermes spoke helper. See docs/hermes-spoke.md.
+set -e
+
+HH=${HERMES_HOME:-$HOME/.hermes}
+ENV=$HH/.env
+PORT=8642
+
+envget() { sed -n "s/^$1=//p" "$ENV" 2>/dev/null | tail -1; }
+
+# Tailnet DNS name (Self comes before Peer in the JSON), else hostname.
+ts_name() {
+    _n=$(tailscale status --json 2>/dev/null |
+        sed -n 's/.*"DNSName": *"\([^"]*\)\.".*/\1/p' | head -1)
+    printf '%s\n' "${_n:-$(hostname)}"
+}
+
+hub_url() {
+    [ -f "$HH/hub.env" ] && sed -n 's/^HUB_URL=//p' "$HH/hub.env" | tail -1
+}
+
+case ${1:-status} in
+    status)
+        echo "spoke: $(hostname) ($(ts_name):$PORT)"
+        echo "hub:   $(hub_url)"
+        if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+            systemctl --user is-active hermes-spoke.service || true
+        fi
+        hermes gateway status 2>/dev/null || true
+        hermes peer list 2>/dev/null || true
+        ;;
+    key)
+        _k=$(envget API_SERVER_KEY)
+        [ -n "$_k" ] || { echo "hermes-spoke: no API_SERVER_KEY in $ENV" >&2; exit 1; }
+        printf '%s\n' "$_k"
+        ;;
+    peer-hub)
+        [ -n "${HERMES_HUB_KEY:-}" ] || { echo "hermes-spoke: set HERMES_HUB_KEY" >&2; exit 1; }
+        _u=$(hub_url)
+        [ -n "$_u" ] || { echo "hermes-spoke: no HUB_URL in $HH/hub.env" >&2; exit 1; }
+        hermes peer add hub --url "$_u" --key "$HERMES_HUB_KEY" --note "Hermes hub (Grok Bot)"
+        ;;
+    hub-cmd)
+        printf 'hermes peer add %s --url http://%s:%s --key %s\n' \
+            "$(hostname -s | tr '[:upper:]' '[:lower:]')" "$(ts_name)" "$PORT" "$("$0" key)"
+        ;;
+    *)
+        echo "usage: hermes-spoke [status|key|peer-hub|hub-cmd]" >&2
+        exit 2
+        ;;
+esac

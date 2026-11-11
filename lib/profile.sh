@@ -1,7 +1,7 @@
 # Profile loader (POSIX). Source after setting DOTFILES_ROOT.
 # Exports: DOTFILES_PROFILE PROFILE_CHAIN PROFILE_MODULES
 #          PROFILE_GIT_MODE PROFILE_WIRE_SHELL_RC PROFILE_SHELL
-#          PROFILE_START_DOCKER PROFILE_START_TAILSCALE
+#          PROFILE_START_DOCKER PROFILE_START_TAILSCALE PROFILE_START_HERMES
 #
 # Conf format: key = value
 # Multi-line values: continuation lines start with whitespace (one token per line).
@@ -128,6 +128,7 @@ load_profile() {
     PROFILE_SHELL=zsh
     PROFILE_START_DOCKER=false
     PROFILE_START_TAILSCALE=false
+    PROFILE_START_HERMES=false
     _add=
     _remove=
 
@@ -149,6 +150,8 @@ load_profile() {
         [ -n "$_d" ] && PROFILE_START_DOCKER=$_d
         _t=$(_profile_get "$_cf" start_tailscale)
         [ -n "$_t" ] && PROFILE_START_TAILSCALE=$_t
+        _h=$(_profile_get "$_cf" start_hermes)
+        [ -n "$_h" ] && PROFILE_START_HERMES=$_h
     done
 
     PROFILE_MODULES=$(_profile_trim "$PROFILE_MODULES $_add")
@@ -156,7 +159,7 @@ load_profile() {
         PROFILE_MODULES=$(printf '%s\n' $PROFILE_MODULES | _profile_list_remove $_remove)
     fi
 
-    export PROFILE_MODULES PROFILE_GIT_MODE PROFILE_WIRE_SHELL_RC PROFILE_SHELL PROFILE_START_DOCKER PROFILE_START_TAILSCALE
+    export PROFILE_MODULES PROFILE_GIT_MODE PROFILE_WIRE_SHELL_RC PROFILE_SHELL PROFILE_START_DOCKER PROFILE_START_TAILSCALE PROFILE_START_HERMES
 }
 
 if [ -n "${DOTFILES_ROOT:-}" ]; then

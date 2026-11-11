@@ -1,0 +1,12 @@
+[Unit]
+Description=Hermes spoke gateway (api_server for the hub)
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/hermes gateway run --replace --external-supervisor
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
