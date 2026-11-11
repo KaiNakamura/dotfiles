@@ -67,7 +67,7 @@ Profiles are declarative `key=value` files under `profiles/`. A profile can `ext
 - **Shell**: `wire_shell_rc=true` appends an idempotent block to `~/.bashrc` (agent boxes without an external shim)
 - **Docker**: `start_docker=true` idempotently starts `dockerd` when systemd/`policy-rc.d` will not (see `lib/shell_rc.sh`)
 - **Tailscale**: `start_tailscale=true` idempotently starts `tailscaled` the same way; tailnet setup and switching in `docs/tailscale.md`
-- **Hermes spoke**: `start_hermes=true` starts the spoke gateway where systemd is absent; see `docs/hermes-spoke.md`
+- **Hermes**: `start_hermes=true` starts the spoke gateway where systemd is absent; see `docs/hermes.md`
 - **Starship / Claude settings**: `resolve_asset` walks profile -> parent -> default
 - **Default browser** (desktop only): `home` = Firefox, `work` = Chrome in KDE helpers
 
