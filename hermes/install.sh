@@ -68,6 +68,11 @@ printf 'Machine spoke %s. Do work on this machine when the hub (Grok Bot) asks. 
 
 cp "$(resolve_asset "$WORKDIR/hub.env")" "$HH/hub.env"
 mkdir -p "$HOME/.local/bin"
+# Provider libs now, from public PyPI, so runtime never lazy-installs
+# (work pip.conf -> CodeArtifact, 401 when creds expire). Jobs keep it.
+PIP_CONFIG_FILE=/dev/null UV_NO_CONFIG=1 UV_DEFAULT_INDEX=https://pypi.org/simple \
+    hermes pm install --extra anthropic || echo "hermes: preinstall failed, will lazy-install" >&2
+
 # sshd, so the hub can reach this spoke. Enabled = survives reboots.
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
     if ! systemctl list-unit-files ssh.service sshd.service 2>/dev/null | grep -q -E '^sshd?\.service'; then
