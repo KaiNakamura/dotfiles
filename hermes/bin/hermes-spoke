@@ -44,8 +44,16 @@ case ${1:-status} in
         printf 'hermes peer add %s --url http://%s:%s --key %s\n' \
             "$(hostname -s | tr '[:upper:]' '[:lower:]')" "$(ts_name)" "$PORT" "$("$0" key)"
         ;;
+    work-auth)
+        # Work creds via cyvvy. SSO expired -> device login: prints a URL
+        # (with code) for Kai to open; the hub relays it to his phone.
+        command -v cyvvy >/dev/null || { echo "hermes-spoke: no cyvvy" >&2; exit 1; }
+        cyvvy auth refresh && exit 0
+        aws sso login --sso-session cyvl --no-browser --use-device-code &&
+            cyvvy auth refresh
+        ;;
     *)
-        echo "usage: hermes-spoke [status|key|peer-hub|hub-cmd]" >&2
+        echo "usage: hermes-spoke [status|key|peer-hub|hub-cmd|work-auth]" >&2
         exit 2
         ;;
 esac
