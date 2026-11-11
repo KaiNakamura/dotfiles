@@ -68,6 +68,14 @@ printf 'Machine spoke %s. Do work on this machine when the hub (Grok Bot) asks. 
 
 cp "$(resolve_asset "$WORKDIR/hub.env")" "$HH/hub.env"
 mkdir -p "$HOME/.local/bin"
+# sshd, so the hub can reach this spoke. Enabled = survives reboots.
+if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+    if ! systemctl list-unit-files ssh.service sshd.service 2>/dev/null | grep -q -E '^sshd?\.service'; then
+        command -v apt-get >/dev/null 2>&1 && sudo apt-get install -y openssh-server
+    fi
+    sudo systemctl enable --now ssh 2>/dev/null || sudo systemctl enable --now sshd || true
+fi
+
 # Hub SSH key, so the hub can install/maintain this spoke. Idempotent.
 mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
 touch "$HOME/.ssh/authorized_keys" && chmod 600 "$HOME/.ssh/authorized_keys"
