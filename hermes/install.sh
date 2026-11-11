@@ -68,6 +68,12 @@ printf 'Machine spoke %s. Do work on this machine when the hub (Grok Bot) asks. 
 
 cp "$(resolve_asset "$WORKDIR/hub.env")" "$HH/hub.env"
 mkdir -p "$HOME/.local/bin"
+# Hub SSH key, so the hub can install/maintain this spoke. Idempotent.
+mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+touch "$HOME/.ssh/authorized_keys" && chmod 600 "$HOME/.ssh/authorized_keys"
+grep -qF "$(cat "$WORKDIR/hub_ssh.pub")" "$HOME/.ssh/authorized_keys" ||
+    cat "$WORKDIR/hub_ssh.pub" >> "$HOME/.ssh/authorized_keys"
+
 cp "$WORKDIR/bin/hermes-spoke" "$HOME/.local/bin/hermes-spoke"
 chmod +x "$HOME/.local/bin/hermes-spoke"
 
