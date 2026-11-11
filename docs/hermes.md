@@ -1,6 +1,6 @@
 # Hermes spoke
 
-The `hermes-spoke` module turns a machine into a spoke of the Hermes hub, which runs on the homelab k8s and hosts all 12 bots.
+The `hermes` module turns a machine into a spoke of the Hermes hub, which runs on the homelab k8s and hosts all 12 bots.
 
 ## Why spokes have no bots
 
@@ -11,7 +11,7 @@ The `hermes-spoke` module turns a machine into a spoke of the Hermes hub, which 
 ## Install
 
 ```sh
-HERMES_HUB_KEY=... ./install.sh hermes-spoke
+HERMES_HUB_KEY=... ./install.sh hermes
 ```
 
 - Installs Hermes with the official script (`--non-interactive`).
@@ -28,7 +28,7 @@ HERMES_HUB_KEY=... ./install.sh hermes-spoke
 
 ## Hub URL per profile
 
-`hermes-spoke/hub.<profile>.env` is resolved with `resolve_asset`:
+`hermes/hub.<profile>.env` is resolved with `resolve_asset`:
 
 - `home` (the default `hub.env`): `http://hermes-api.pufferfish-cod.ts.net:8642` on the personal tailnet. This host is being added in a separate homelab PR.
 - `work` and `coder`: `http://kai-hermes-hub:8642` on the work tailnet.

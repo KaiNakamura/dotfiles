@@ -1,10 +1,10 @@
 #!/bin/sh
 # Hermes spoke: default agent only, api_server on :8642 for the hub.
-# Hub key: HERMES_HUB_KEY (never commit). See docs/hermes-spoke.md.
+# Hub key: HERMES_HUB_KEY (never commit). See docs/hermes.md.
 set -e
 
 DOTFILES_ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
-WORKDIR="$DOTFILES_ROOT/hermes-spoke"
+WORKDIR="$DOTFILES_ROOT/hermes"
 # shellcheck source=../lib/profile.sh
 . "$DOTFILES_ROOT/lib/profile.sh"
 # shellcheck source=../lib/asset.sh
@@ -33,7 +33,11 @@ if hermes --version >/dev/null 2>&1; then
 else
     # Non-interactive skips setup (and the Grok importer).
     echo "hermes-spoke: installing hermes via official script"
-    curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --non-interactive
+    # Public PyPI: work boxes point uv/pip at CodeArtifact (401 when creds expire).
+    curl -fsSL https://hermes-agent.nousresearch.com/install.sh |
+        env -u UV_INDEX_URL -u UV_EXTRA_INDEX_URL -u UV_INDEX -u PIP_INDEX_URL -u PIP_EXTRA_INDEX_URL \
+            UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 PIP_CONFIG_FILE=/dev/null \
+            bash -s -- --non-interactive
 fi
 
 mkdir -p "$HH"

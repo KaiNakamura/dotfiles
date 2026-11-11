@@ -1,5 +1,5 @@
 #!/bin/sh
-# Hermes spoke helper. See docs/hermes-spoke.md.
+# Hermes spoke helper. See docs/hermes.md.
 set -e
 
 HH=${HERMES_HOME:-$HOME/.hermes}
