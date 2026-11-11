@@ -3,6 +3,8 @@ Description=Hermes spoke gateway (api_server for the hub)
 After=network-online.target
 
 [Service]
+# Public PyPI for lazy installs (work pip.conf points at CodeArtifact).
+Environment=PIP_CONFIG_FILE=/dev/null UV_NO_CONFIG=1 UV_DEFAULT_INDEX=https://pypi.org/simple
 Type=simple
 ExecStart=%h/.local/bin/hermes gateway run --replace --external-supervisor
 Restart=on-failure
