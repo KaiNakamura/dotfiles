@@ -33,11 +33,12 @@ if hermes --version >/dev/null 2>&1; then
 else
     # Non-interactive skips setup (and the Grok importer).
     echo "hermes-spoke: installing hermes via official script"
+    # Spokes need no browser or computer-use.
     # Public PyPI: work boxes point uv/pip at CodeArtifact (401 when creds expire).
     curl -fsSL https://hermes-agent.nousresearch.com/install.sh |
         env -u UV_INDEX_URL -u UV_EXTRA_INDEX_URL -u UV_INDEX -u PIP_INDEX_URL -u PIP_EXTRA_INDEX_URL \
             UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 PIP_CONFIG_FILE=/dev/null \
-            bash -s -- --non-interactive
+            bash -s -- --non-interactive --skip-computer-use --skip-browser
 fi
 
 mkdir -p "$HH"
@@ -67,6 +68,12 @@ printf 'Machine spoke %s. Do work on this machine when the hub (Grok Bot) asks. 
 
 cp "$(resolve_asset "$WORKDIR/hub.env")" "$HH/hub.env"
 mkdir -p "$HOME/.local/bin"
+# Hub SSH key, so the hub can install/maintain this spoke. Idempotent.
+mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+touch "$HOME/.ssh/authorized_keys" && chmod 600 "$HOME/.ssh/authorized_keys"
+grep -qF "$(cat "$WORKDIR/hub_ssh.pub")" "$HOME/.ssh/authorized_keys" ||
+    cat "$WORKDIR/hub_ssh.pub" >> "$HOME/.ssh/authorized_keys"
+
 cp "$WORKDIR/bin/hermes-spoke" "$HOME/.local/bin/hermes-spoke"
 chmod +x "$HOME/.local/bin/hermes-spoke"
 
@@ -81,6 +88,8 @@ fi
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ] \
     && systemctl --user daemon-reload 2>/dev/null; then
     mkdir -p "$HOME/.config/systemd/user"
+    # Trial unit from `hermes gateway install` holds the same lock.
+    systemctl --user disable --now hermes-gateway.service 2>/dev/null || true
     cp "$WORKDIR/systemd/hermes-spoke.service" "$HOME/.config/systemd/user/"
     systemctl --user daemon-reload
     systemctl --user enable hermes-spoke.service
