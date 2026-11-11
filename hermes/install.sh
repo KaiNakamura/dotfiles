@@ -33,11 +33,12 @@ if hermes --version >/dev/null 2>&1; then
 else
     # Non-interactive skips setup (and the Grok importer).
     echo "hermes-spoke: installing hermes via official script"
+    # Spokes need no browser or computer-use.
     # Public PyPI: work boxes point uv/pip at CodeArtifact (401 when creds expire).
     curl -fsSL https://hermes-agent.nousresearch.com/install.sh |
         env -u UV_INDEX_URL -u UV_EXTRA_INDEX_URL -u UV_INDEX -u PIP_INDEX_URL -u PIP_EXTRA_INDEX_URL \
             UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 PIP_CONFIG_FILE=/dev/null \
-            bash -s -- --non-interactive
+            bash -s -- --non-interactive --skip-computer-use --skip-browser
 fi
 
 mkdir -p "$HH"
