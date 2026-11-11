@@ -82,6 +82,8 @@ fi
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ] \
     && systemctl --user daemon-reload 2>/dev/null; then
     mkdir -p "$HOME/.config/systemd/user"
+    # Trial unit from `hermes gateway install` holds the same lock.
+    systemctl --user disable --now hermes-gateway.service 2>/dev/null || true
     cp "$WORKDIR/systemd/hermes-spoke.service" "$HOME/.config/systemd/user/"
     systemctl --user daemon-reload
     systemctl --user enable hermes-spoke.service
