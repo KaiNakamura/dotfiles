@@ -95,6 +95,10 @@ handles both, then runs:
 ./install.sh --profile homelab
 ```
 
+## WSL
+
+For WSL on the Windows boot, run `./wsl/install.sh` inside WSL. It registers a hidden logon task that keeps WSL running. The hand-done setup (systemd, sshd, tailscale, user-level node) is in [docs/wsl.md](docs/wsl.md).
+
 ## First-time Coder workspace setup
 
 For Coder workspaces that ship with a service-account token wired into `gh` for
