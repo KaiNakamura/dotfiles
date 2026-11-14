@@ -1,9 +1,4 @@
-# Registers a per-user logon task that keeps WSL running with no window.
-# WSL stops the distro soon after the last Windows-side wsl.exe exits, and
-# Linux-side processes (sshd, systemd user units) don't count. A headless
-# `wsl.exe --exec sleep infinity` started at logon keeps it up.
-# No admin needed: the task runs as the current user, non-elevated.
-# Re-run to update. Remove: Unregister-ScheduledTask WSL-Keepalive -Confirm:$false
+# Per-user logon task (no admin) that keeps WSL running with no window. See docs/wsl.md.
 param(
     [string]$TaskName = 'WSL-Keepalive',
     [string]$Distro = '',     # empty = default distro

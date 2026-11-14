@@ -97,7 +97,7 @@ handles both, then runs:
 
 ## WSL
 
-For WSL on the Windows boot, run `./wsl/install.sh` inside WSL. It registers a hidden logon task that keeps WSL running. The hand-done setup (systemd, sshd, tailscale, user-level node) is in [docs/wsl.md](docs/wsl.md).
+Inside WSL, run `./wsl/install.sh` to keep WSL running after login. Details: [docs/wsl.md](docs/wsl.md).
 
 ## First-time Coder workspace setup
 

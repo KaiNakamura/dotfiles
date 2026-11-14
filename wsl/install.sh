@@ -1,7 +1,5 @@
 #!/bin/sh
-# Run inside WSL. Registers the Windows logon task from keepalive.ps1 (no admin)
-# and starts it now, so WSL keeps running without an open Ubuntu window.
-# Not in any profile's module list; run it directly. See docs/wsl.md.
+# Run inside WSL: registers and starts the keepalive task from keepalive.ps1. See docs/wsl.md.
 set -e
 
 if ! grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then
