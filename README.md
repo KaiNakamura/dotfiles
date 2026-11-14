@@ -95,6 +95,10 @@ handles both, then runs:
 ./install.sh --profile homelab
 ```
 
+## WSL
+
+Inside WSL, run `./wsl/install.sh` to keep WSL running after login. Details: [docs/wsl.md](docs/wsl.md).
+
 ## First-time Coder workspace setup
 
 For Coder workspaces that ship with a service-account token wired into `gh` for
