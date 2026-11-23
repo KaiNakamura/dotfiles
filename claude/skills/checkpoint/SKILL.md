@@ -10,3 +10,5 @@ Your progress summary will onboard the next agent instance providing it with all
 Preserve anything the user said in their own words. Their wording is the first thing a summary destroys and the last thing that should go.
 
 Focus on precision and brevity, ensuring all essential information is present without unnecessary verbosity. This gets read cold by something with no memory of the conversation, so every sentence has to survive without the surrounding context.
+
+The checkpoint only counts once other machines can read it. Pull the thoughts vault before writing, then commit and push it after. Never force-push; on a conflict, keep both sides.
