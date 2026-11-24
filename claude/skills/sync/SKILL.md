@@ -7,7 +7,7 @@ Sync this machine with the other machines the user names, so each has the same c
 
 ## What to sync
 
-- The thoughts vault.
+- The vaults: run `vault-sync` here and on each machine you can reach (`ssh <host> vault-sync`).
 - The repos the work in progress depends on.
 
 ## Rules
