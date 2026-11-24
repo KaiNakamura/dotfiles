@@ -11,4 +11,4 @@ Preserve anything the user said in their own words. Their wording is the first t
 
 Focus on precision and brevity, ensuring all essential information is present without unnecessary verbosity. This gets read cold by something with no memory of the conversation, so every sentence has to survive without the surrounding context.
 
-The checkpoint only counts once other machines can read it. Pull the thoughts vault before writing, then commit and push it after. Never force-push; on a conflict, keep both sides.
+The checkpoint only counts once other machines can read it. Run `vault-sync` before writing and again after; it is the one way the vaults sync, conflicts included. Not on `PATH`? It's `~/repos/agents/tools/vault-sync/vault-sync`.

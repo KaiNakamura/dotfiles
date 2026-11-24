@@ -7,10 +7,12 @@ Sync this machine with the other machines the user names, so each has the same c
 
 ## What to sync
 
-- The thoughts vault.
+- The vaults: run `vault-sync` here and on each machine you can reach. It is the one way the vaults sync, conflicts included, so don't hand-roll git for them.
+  - Not on `PATH`? It's `~/repos/agents/tools/vault-sync/vault-sync`.
+  - On another machine: `ssh <host> vault-sync`, or `ssh <host> bash -s < "$(command -v vault-sync)"` if it isn't installed there.
 - The repos the work in progress depends on.
 
-## Rules
+## Rules for repos
 
 - Sync only the machines this one can reach. Push this machine's work so an unreachable machine can pull it later.
 - Never force-push, and never discard uncommitted work.
